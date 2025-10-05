@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CTrace GUI - Documentation Overview</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #e9ecef;
+        }
+        .card h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .card a {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 8px 12px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .card a:hover {
+            background: #5a67d8;
+        }
+        .overview {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .quick-links {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .quick-links a {
+            display: inline-block;
+            margin: 0 10px;
+            padding: 12px 24px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .quick-links a:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔧 CTrace GUI Documentation</h1>
+        <p>Complete API documentation for the CTrace GUI Electron application</p>
+    </div>
+
+    <div class="quick-links">
+        <a href="index.html">📖 Full API Documentation</a>
+        <a href="global.html">🌐 Global Functions</a>
+        <a href="../README.md">📋 Project README</a>
+    </div>
+
+    <div class="section">
+        <h2>📁 Project Overview</h2>
+        <div class="overview">
+            <p><strong>CTrace GUI</strong> is an Electron-based desktop application that provides a modern, VS Code-like interface for running CTrace static analysis on C/C++ code.</p>
+            
+            <h3>🏗️ Architecture</h3>
+            <ul>
+                <li><strong>Main Process:</strong> Handles file system operations, IPC communication, and system dialogs</li>
+                <li><strong>Renderer Process:</strong> Manages the UI, editor, and user interactions</li>
+                <li><strong>Manager Pattern:</strong> Modular architecture with specialized managers for different concerns</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Core Managers</h2>
+        <div class="grid">
+            <div class="card">
+                <h3>🎛️ UIController</h3>
+                <p>Central coordinator for all UI components and managers. Handles global state and manager interconnections.</p>
+                <a href="UIController.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>📁 FileOperationsManager</h3>
+                <p>Manages all file and workspace operations including opening, saving, and file tree management.</p>
+                <a href="FileOperationsManager.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>📝 EditorManager</h3>
+                <p>Controls the code editor functionality including syntax highlighting, line numbers, and content management.</p>
+                <a href="EditorManager.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>📑 TabManager</h3>
+                <p>Handles tab operations, creation, switching, and closing. Manages multiple file editing sessions.</p>
+                <a href="TabManager.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>🔍 SearchManager</h3>
+                <p>Provides search functionality both within files and across the entire workspace.</p>
+                <a href="SearchManager.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>🔔 NotificationManager</h3>
+                <p>Manages user notifications, alerts, and feedback messages throughout the application.</p>
+                <a href="NotificationManager.html">View Documentation</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>⚙️ Main Process Modules</h2>
+        <div class="grid">
+            <div class="card">
+                <h3>🗂️ File Handlers</h3>
+                <p>IPC handlers for file system operations, dialogs, and file watching.</p>
+                <a href="main_ipc_fileHandlers.js.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>✏️ Editor Handlers</h3>
+                <p>IPC handlers for editor-related operations and functionality.</p>
+                <a href="main_ipc_editorHandlers.js.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>🔧 CTrace Handlers</h3>
+                <p>IPC handlers for running CTrace analysis and managing binary execution.</p>
+                <a href="main_ipc_ctraceHandlers.js.html">View Documentation</a>
+            </div>
+            
+            <div class="card">
+                <h3>🛠️ File Utils</h3>
+                <p>Utility functions for file operations, encoding detection, and file tree building.</p>
+                <a href="main_utils_fileUtils.js.html">View Documentation</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🚀 Getting Started</h2>
+        <div class="overview">
+            <h3>📋 Prerequisites</h3>
+            <ul>
+                <li>Node.js (v18+)</li>
+                <li>npm</li>
+                <li>Electron</li>
+                <li>CTrace binary</li>
+            </ul>
+            
+            <h3>⚡ Quick Commands</h3>
+            <ul>
+                <li><code>npm install</code> - Install dependencies</li>
+                <li><code>npm start</code> - Run the application</li>
+                <li><code>npm run dist</code> - Build for distribution</li>
+                <li><code>npm run docs</code> - Generate documentation</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎨 Key Features</h2>
+        <div class="overview">
+            <ul>
+                <li>📁 <strong>File Management:</strong> Open individual files or entire workspaces</li>
+                <li>🌳 <strong>File Tree Explorer:</strong> Navigate project structure with refresh and auto-watch</li>
+                <li>💻 <strong>Code Editor:</strong> Syntax-highlighted editor with line numbers</li>
+                <li>📑 <strong>Tab Management:</strong> Multi-file editing with tab interface</li>
+                <li>🔧 <strong>CTrace Integration:</strong> Run static analysis directly from GUI</li>
+                <li>🔍 <strong>Global Search:</strong> Search across workspace files</li>
+                <li>🔔 <strong>Notifications:</strong> User-friendly notification system</li>
+                <li>⚡ <strong>File Watching:</strong> Automatic file tree updates on changes</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer style="text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #e9ecef; color: #6c757d;">
+        <p>Generated with JSDoc | CTrace GUI v1.0.0</p>
+    </footer>
+</body>
+</html>

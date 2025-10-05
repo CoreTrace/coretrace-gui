@@ -106,28 +106,40 @@ async function buildFileTree(dirPath, maxDepth = 3, currentDepth = 0) {
     const tree = [];
     
     for (const item of items) {
-      // Skip hidden files and common build directories
-      if (item.startsWith('.') || ['node_modules', 'dist', 'build', '.git'].includes(item)) {
+      // Skip hidden files, common build directories, and Windows system folders
+      if (item.startsWith('.') || 
+          ['node_modules', 'dist', 'build', '.git', 'My Music', 'My Pictures', 'My Videos', '$RECYCLE.BIN', 'System Volume Information'].includes(item)) {
         continue;
       }
       
       const itemPath = path.join(dirPath, item);
-      const stats = await fs.stat(itemPath);
       
-      if (stats.isDirectory()) {
-        const children = await buildFileTree(itemPath, maxDepth, currentDepth + 1);
-        tree.push({
-          name: item,
-          path: itemPath,
-          type: 'directory',
-          children: children || []
-        });
-      } else {
-        tree.push({
-          name: item,
-          path: itemPath,
-          type: 'file'
-        });
+      try {
+        const stats = await fs.stat(itemPath);
+        
+        if (stats.isDirectory()) {
+          const children = await buildFileTree(itemPath, maxDepth, currentDepth + 1);
+          tree.push({
+            name: item,
+            path: itemPath,
+            type: 'directory',
+            children: children || []
+          });
+        } else {
+          tree.push({
+            name: item,
+            path: itemPath,
+            type: 'file'
+          });
+        }
+      } catch (itemError) {
+        // Skip items that cause permission errors or other access issues
+        if (itemError.code === 'EPERM' || itemError.code === 'EACCES' || itemError.code === 'ENOENT') {
+          console.warn(`Skipping inaccessible item: ${itemPath} (${itemError.code})`);
+          continue;
+        }
+        // Re-throw unexpected errors
+        throw itemError;
       }
     }
     
@@ -138,6 +150,11 @@ async function buildFileTree(dirPath, maxDepth = 3, currentDepth = 0) {
       return a.name.localeCompare(b.name);
     });
   } catch (error) {
+    // Handle directory-level permission errors
+    if (error.code === 'EPERM' || error.code === 'EACCES') {
+      console.warn(`Permission denied accessing directory: ${dirPath}`);
+      return [];
+    }
     console.error('Error building file tree:', error);
     return [];
   }

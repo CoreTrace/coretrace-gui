@@ -1,15 +1,81 @@
 /**
- * Tab Manager - Handles tab operations, creation, switching, closing
+ * Tab Manager - Handles all tab operations including creation, switching, and closing.
+ * 
+ * This manager provides a complete tab interface similar to modern code editors,
+ * allowing users to work with multiple files simultaneously. It manages tab state,
+ * coordinates with the editor manager, and handles file modifications tracking.
+ * 
+ * @class TabManager
+ * @author CTrace GUI Team
+ * @version 1.0.0
+ * 
+ * @example
+ * const tabManager = new TabManager(editorManager, notificationManager);
+ * const tabId = tabManager.createTab('example.js', '/path/to/example.js', 'console.log("Hello")');
  */
 class TabManager {
+  /**
+   * Creates an instance of TabManager.
+   * 
+   * @constructor
+   * @memberof TabManager
+   * @param {EditorManager} editorManager - Editor manager instance for content management
+   * @param {NotificationManager} notificationManager - Notification manager for user feedback
+   */
   constructor(editorManager, notificationManager) {
+    /**
+     * Editor manager instance
+     * @type {EditorManager}
+     * @private
+     */
     this.editorManager = editorManager;
+    
+    /**
+     * Notification manager instance
+     * @type {NotificationManager}
+     * @private
+     */
     this.notificationManager = notificationManager;
+    
+    /**
+     * Counter for generating unique tab IDs
+     * @type {number}
+     * @private
+     */
     this.tabIdCounter = 0;
+    
+    /**
+     * Currently active tab ID
+     * @type {string|null}
+     */
     this.activeTabId = null;
-    this.openTabs = new Map(); // Store tab data: id -> {filePath, content, modified, fileName, fileInfo}
+    
+    /**
+     * Map of open tabs with their data
+     * @type {Map<string, Object>}
+     * @private
+     */
+    this.openTabs = new Map();
+    
+    /**
+     * DOM element containing the tabs
+     * @type {HTMLElement}
+     * @private
+     */
     this.tabsContainer = document.getElementById('tabs-container');
+    
+    /**
+     * Welcome screen DOM element
+     * @type {HTMLElement}
+     * @private
+     */
     this.welcomeScreen = document.getElementById('welcome-screen');
+    
+    /**
+     * Editor area DOM element
+     * @type {HTMLElement}
+     * @private
+     */
     this.editorArea = document.getElementById('editor-area');
   }
 

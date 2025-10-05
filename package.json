@@ -1,24 +1,42 @@
 {
   "name": "ctrace-gui",
   "version": "1.0.0",
-  "description": "",
+  "description": "A modern Electron-based GUI for CTrace static analysis tool",
   "main": "src/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "build:verify": "./scripts/build-verify.sh",
+    "docs": "jsdoc -c jsdoc.conf.json",
+    "docs:watch": "jsdoc -c jsdoc.conf.json --watch"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["ctrace", "static-analysis", "cpp", "c", "development", "gui", "electron"],
+  "author": "CTrace GUI Team",
   "license": "ISC",
+  "dependencies": {
+    "chokidar": "^3.6.0"
+  },
   "devDependencies": {
     "electron": "^38.0.0",
     "electron-builder": "^26.0.12",
-    "electron-reload": "^2.0.0-alpha.1"
+    "electron-reload": "^2.0.0-alpha.1",
+    "jsdoc": "^4.0.4"
   },
   "build": {
     "asar": true,
-    "extraResources": [],
+    "extraResources": [
+      {
+        "from": "bin/",
+        "to": "bin/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "asarUnpack": [],
     "afterPack": "./scripts/remove-locales.js",
     "appId": "com.coretrace.ctracegui",
@@ -34,7 +52,10 @@
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/ctrace.png"
+      "icon": "assets/ctrace.png",
+      "category": "Development",
+      "synopsis": "Static analysis tool for C/C++ code",
+      "description": "A modern Electron-based GUI application that provides an intuitive interface for running CTrace static analysis on C/C++ code."
     }
   }
 }

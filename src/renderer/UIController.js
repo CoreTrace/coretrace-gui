@@ -10,24 +10,100 @@ const fileTypeUtils = require('./utils/fileTypeUtils');
 
 /**
  * Main UI Controller - Coordinates all managers and components
+ * 
+ * This is the central coordinator for the entire application UI. It manages
+ * the interaction between different managers and handles global UI state.
+ * 
+ * @class UIController
+ * @author CTrace GUI Team
+ * @version 1.0.0
+ * 
+ * @example
+ * // UIController is automatically instantiated in the HTML
+ * const uiController = new UIController();
  */
 class UIController {
+  /**
+   * Creates an instance of UIController and initializes all managers.
+   * 
+   * @constructor
+   * @memberof UIController
+   */
   constructor() {
-    // Initialize managers
+    /**
+     * Notification manager instance
+     * @type {NotificationManager}
+     * @private
+     */
     this.notificationManager = new NotificationManager();
+    
+    /**
+     * Editor manager instance
+     * @type {EditorManager}
+     * @private
+     */
     this.editorManager = new EditorManager();
+    
+    /**
+     * Tab manager instance
+     * @type {TabManager}
+     * @private
+     */
     this.tabManager = new TabManager(this.editorManager, this.notificationManager);
+    
+    /**
+     * Search manager instance
+     * @type {SearchManager}
+     * @private
+     */
     this.searchManager = new SearchManager(this.editorManager, this.notificationManager);
+    
+    /**
+     * File operations manager instance
+     * @type {FileOperationsManager}
+     * @private
+     */
     this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
 
-    // State
+    /**
+     * Flag indicating if UI is being resized
+     * @type {boolean}
+     * @private
+     */
     this.isResizing = false;
+    
+    /**
+     * Type of resize operation (sidebar, toolsPanel)
+     * @type {string|null}
+     * @private
+     */
     this.resizeType = null;
+    
+    /**
+     * Currently active menu
+     * @type {string|null}
+     * @private
+     */
     this.activeMenu = null;
 
     this.init();
   }
 
+  /**
+   * Initializes the UI Controller and sets up all necessary components.
+   * 
+   * This method is called automatically by the constructor and sets up:
+   * - Event listeners for UI interactions
+   * - Keyboard shortcuts
+   * - Resizing functionality
+   * - Menu systems
+   * - UI components
+   * - Manager interconnections
+   * - File tree watcher
+   * 
+   * @memberof UIController
+   * @private
+   */
   init() {
     this.setupEventListeners();
     this.setupKeyboardShortcuts();
@@ -41,6 +117,173 @@ class UIController {
     // Initialize with explorer view and welcome screen
     this.showExplorer();
     this.tabManager.showWelcomeScreen();
+
+    // Add refresh button event listener
+    const refreshBtn = document.getElementById('refresh-file-tree');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.refreshFileTree();
+      });
+    }
+
+    // Set up file system watcher for auto-refresh
+    this.setupFileTreeWatcher();
+    
+    // Set up custom title bar controls
+    this.setupTitleBarControls();
+  }
+  /**
+   * Set up file system watcher to auto-refresh file tree
+   */
+  setupFileTreeWatcher() {
+    const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+    if (!workspacePath) return;
+    // Listen for file system change events from main process
+    window.ipcRenderer.on('workspace-changed', (event, changedPath) => {
+      // Only refresh if the change is in the current workspace
+      if (changedPath && changedPath.startsWith(workspacePath)) {
+        this.refreshFileTree();
+      }
+    });
+    // Request main process to start watching
+    window.ipcRenderer.invoke('watch-workspace', workspacePath);
+  }
+  /**
+   * Refreshes the file tree in the explorer view.
+   * 
+   * This method manually triggers a refresh of the file tree to show any
+   * new files or folders that may have been added to the workspace. It
+   * communicates with the main process to get an updated file tree structure.
+   * 
+   * @async
+   * @memberof UIController
+   * @throws {Error} When file tree refresh fails
+   * 
+   * @example
+   * // Refresh is typically triggered by the refresh button
+   * await uiController.refreshFileTree();
+   */
+  async refreshFileTree() {
+    // Only refresh if workspace is open
+    const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+    if (!workspacePath) {
+      this.notificationManager.showWarning('No workspace open to refresh');
+      return;
+    }
+    // Request updated file tree from main process
+    try {
+      const result = await window.ipcRenderer.invoke('get-file-tree', workspacePath);
+      if (result.success) {
+        const folderName = workspacePath.split(/[/\\]/).pop();
+        this.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
+        this.notificationManager.showSuccess('File tree refreshed');
+      } else {
+        this.notificationManager.showError('Failed to refresh file tree: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error refreshing file tree: ' + error.message);
+    }
+  }
+
+  /**
+   * Setup file tree watcher to listen for automatic updates
+   */
+  setupFileTreeWatcher() {
+    // Listen for workspace changes from file watcher in main process
+    window.ipcRenderer.on('workspace-changed', (event, data) => {
+      if (data.success) {
+        const folderName = data.folderPath.split(/[/\\]/).pop();
+        this.fileOpsManager.updateWorkspaceUI(folderName, data.fileTree);
+        console.log('File tree auto-refreshed due to file system changes');
+      } else {
+        console.error('Error in workspace change notification:', data.error);
+      }
+    });
+  }
+
+  /**
+   * Setup custom title bar controls for frameless window.
+   * 
+   * This method handles the custom window controls (minimize, maximize, close)
+   * and window state management for the frameless window.
+   * 
+   * @memberof UIController
+   * @private
+   */
+  setupTitleBarControls() {
+    const { remote } = require('electron');
+    const currentWindow = remote ? remote.getCurrentWindow() : require('electron').remote?.getCurrentWindow();
+    
+    // If remote is not available, use IPC
+    if (!currentWindow) {
+      // Setup IPC-based window controls
+      const minimizeBtn = document.getElementById('minimize-btn');
+      const maximizeBtn = document.getElementById('maximize-btn');
+      const closeBtn = document.getElementById('close-btn');
+      
+      if (minimizeBtn) {
+        minimizeBtn.addEventListener('click', () => {
+          window.ipcRenderer.send('window-minimize');
+        });
+      }
+      
+      if (maximizeBtn) {
+        maximizeBtn.addEventListener('click', () => {
+          window.ipcRenderer.send('window-maximize-toggle');
+        });
+      }
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          window.ipcRenderer.send('window-close');
+        });
+      }
+      
+      // Listen for window state changes
+      window.ipcRenderer.on('window-maximized', (event, isMaximized) => {
+        document.body.classList.toggle('window-maximized', isMaximized);
+      });
+      
+      return;
+    }
+    
+    // Direct window control (if remote is available)
+    const minimizeBtn = document.getElementById('minimize-btn');
+    const maximizeBtn = document.getElementById('maximize-btn');
+    const closeBtn = document.getElementById('close-btn');
+    
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener('click', () => {
+        currentWindow.minimize();
+      });
+    }
+    
+    if (maximizeBtn) {
+      maximizeBtn.addEventListener('click', () => {
+        if (currentWindow.isMaximized()) {
+          currentWindow.unmaximize();
+        } else {
+          currentWindow.maximize();
+        }
+      });
+    }
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        currentWindow.close();
+      });
+    }
+    
+    // Update maximize button icon based on window state
+    const updateMaximizeButton = () => {
+      document.body.classList.toggle('window-maximized', currentWindow.isMaximized());
+    };
+    
+    currentWindow.on('maximize', updateMaximizeButton);
+    currentWindow.on('unmaximize', updateMaximizeButton);
+    
+    // Initial state
+    updateMaximizeButton();
   }
 
   /**

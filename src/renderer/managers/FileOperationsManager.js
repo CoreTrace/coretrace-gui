@@ -1,15 +1,66 @@
 /**
- * File Operations Manager - Handles file operations via IPC
+ * File Operations Manager - Handles all file operations via IPC communication.
+ * 
+ * This manager provides a high-level interface for file and workspace operations,
+ * including opening files/workspaces, saving files, and managing the file tree.
+ * It communicates with the main process through IPC to perform actual file system operations.
+ * 
+ * @class FileOperationsManager
+ * @author CTrace GUI Team
+ * @version 1.0.0
+ * 
+ * @example
+ * const fileOpsManager = new FileOperationsManager(tabManager, notificationManager);
+ * await fileOpsManager.openWorkspace();
  */
 class FileOperationsManager {
+  /**
+   * Creates an instance of FileOperationsManager.
+   * 
+   * @constructor
+   * @memberof FileOperationsManager
+   * @param {TabManager} tabManager - Tab manager instance for handling file tabs
+   * @param {NotificationManager} notificationManager - Notification manager for user feedback
+   */
   constructor(tabManager, notificationManager) {
+    /**
+     * Tab manager instance
+     * @type {TabManager}
+     * @private
+     */
     this.tabManager = tabManager;
+    
+    /**
+     * Notification manager instance
+     * @type {NotificationManager}
+     * @private
+     */
     this.notificationManager = notificationManager;
+    
+    /**
+     * Currently opened workspace path
+     * @type {string|null}
+     * @private
+     */
     this.currentWorkspacePath = null;
   }
 
   /**
-   * Open workspace folder
+   * Opens a workspace folder dialog and loads the selected folder.
+   * 
+   * This method displays a folder selection dialog to the user, and if a folder
+   * is selected, it loads the folder structure and updates the UI to display
+   * the file tree. It also starts watching the workspace for file changes.
+   * 
+   * @async
+   * @memberof FileOperationsManager
+   * @returns {Promise<Object|undefined>} Result object with folder info, or undefined if canceled
+   * 
+   * @example
+   * const result = await fileOpsManager.openWorkspace();
+   * if (result && result.success) {
+   *   console.log('Workspace opened:', result.folderPath);
+   * }
    */
   async openWorkspace() {
     try {

@@ -4,7 +4,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji', 'Twemoji Mozilla';
   margin: 0;
   padding: 0;
   background: #0d1117;
@@ -12,11 +12,14 @@ body {
   height: 100vh;
   overflow: hidden;
   font-size: 13px;
+  font-feature-settings: "liga" 1, "calt" 1; /* Enable ligatures */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .ide-container {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - 30px); /* Account for custom title bar */
   background: #0d1117;
   flex-direction: row; /* Main content on left, tools panel on right */
 }

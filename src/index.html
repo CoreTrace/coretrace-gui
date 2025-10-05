@@ -20,6 +20,24 @@
   <link rel="stylesheet" href="styles/statusbar.css">
   <link rel="stylesheet" href="styles/tools-panel.css">
   <link rel="stylesheet" href="styles/resizers.css">
+  <link rel="stylesheet" href="styles/titlebar.css">
+  
+  <!-- Font loading for cross-platform emoji support -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI+Emoji&display=swap');
+    
+    /* Fallback emoji font stack for cross-platform support */
+    .emoji-font {
+      font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji', 'Twemoji Mozilla', system-ui, sans-serif;
+    }
+    
+    /* Apply emoji fonts globally */
+    body, * {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji';
+    }
+  </style>
+  
   <!-- Make ipcRenderer available globally -->
   <script>
     const { ipcRenderer } = require('electron');
@@ -33,6 +51,33 @@
     const UIController = require('./renderer/UIController');
   </script>
 <body>
+  <!-- Custom Title Bar -->
+  <div class="title-bar">
+    <div class="title-bar-drag-region">
+      <div class="title-bar-title">
+        <img src="../assets/ctrace.png" alt="CTrace" class="title-bar-icon">
+        <span>CTrace GUI</span>
+      </div>
+    </div>
+    <div class="title-bar-controls">
+      <button class="title-bar-control" id="minimize-btn" title="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0,5 L10,5" stroke="currentColor" stroke-width="1"/>
+        </svg>
+      </button>
+      <button class="title-bar-control" id="maximize-btn" title="Maximize">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0,0 L10,0 L10,10 L0,10 Z" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+      </button>
+      <button class="title-bar-control close" id="close-btn" title="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0,0 L10,10 M10,0 L0,10" stroke="currentColor" stroke-width="1"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  
   <div class="ide-container">
     <!-- Main Content Area (Left Side) -->
     <div class="main-content-area">
@@ -68,7 +113,14 @@
       </div>
       <div class="sidebar-content">
         <div id="explorer-view">
-          <div style="color: #7d8590; font-size: 11px; margin-bottom: 12px; font-weight: 600;">WORKSPACE</div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="color: #7d8590; font-size: 11px; font-weight: 600;">WORKSPACE</div>
+            <button id="refresh-file-tree" title="Refresh" style="background: none; border: none; cursor: pointer; padding: 2px;">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 1 .908-.418A4 4 0 1 0 8 4V1.5a.5.5 0 0 1 1 0v3A.5.5 0 0 1 8.5 5h-3a.5.5 0 0 1 0-1H8z"/>
+              </svg>
+            </button>
+          </div>
           <div id="workspace-folder" style="display: none;">
             <div style="color: #7d8590; font-size: 11px; margin-bottom: 8px; font-weight: 600;" id="workspace-name"></div>
             <div id="file-tree" class="file-tree"></div>
@@ -267,12 +319,6 @@
             <button style="background: #1f6feb; border: none; color: white; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.15s ease;" onclick="runCTrace()">
               ▶ Run CTrace
             </button>
-            <button style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.15s ease;" onclick="formatCode()">
-              Format Document
-            </button>
-            <button style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.15s ease;" onclick="toggleWordWrap()">
-              Toggle Word Wrap
-            </button>
           </div>
         </div>
 
@@ -284,29 +330,9 @@
           </div>
           <pre id="ctrace-output" style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.5; height: 320px; max-height: 65vh; overflow: auto; white-space: pre-wrap;">Waiting to run...</pre>
         </div>
-        
-        <div style="margin-bottom: 20px;">
-          <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #f0f6fc;">Settings</h3>
-          <div style="font-size: 12px; color: #7d8590;">
-            <div style="margin-bottom: 8px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="checkbox" id="autoSave" style="accent-color: #1f6feb;"> Auto Save
-              </label>
-            </div>
-            <div style="margin-bottom: 8px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="checkbox" id="lineNumbers" checked style="accent-color: #1f6feb;"> Line Numbers
-              </label>
-            </div>
-          </div>
-        </div>
 
         <div>
           <!-- <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #f0f6fc;">Extensions</h3> -->
-          <div style="font-size: 12px; color: #7d8590;">
-            <p>No extensions installed</p>
-            <button style="background: #1f6feb; border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px;">Browse Extensions</button>
-          </div>
         </div>
       </div>
     </div>

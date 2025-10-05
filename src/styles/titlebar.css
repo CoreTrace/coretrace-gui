@@ -1,0 +1,128 @@
+/* Custom Title Bar Styles for Frameless Window */
+
+.title-bar {
+  display: flex;
+  height: 30px;
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
+  color: #f0f6fc;
+  font-size: 12px;
+  user-select: none;
+  position: relative;
+  z-index: 1000;
+}
+
+.title-bar-drag-region {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  -webkit-app-region: drag; /* Allow dragging the window */
+}
+
+.title-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.title-bar-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.title-bar-controls {
+  display: flex;
+  -webkit-app-region: no-drag; /* Prevent dragging on controls */
+}
+
+.title-bar-control {
+  width: 46px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: #f0f6fc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.title-bar-control:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.title-bar-control.close:hover {
+  background: #e81123;
+  color: white;
+}
+
+.title-bar-control:focus {
+  outline: none;
+}
+
+/* Adjust main container for title bar */
+.ide-container {
+  height: calc(100vh - 30px);
+  display: flex;
+}
+
+/* Platform-specific adjustments */
+@media (platform: windows) {
+  .title-bar-control {
+    width: 46px;
+  }
+}
+
+@media (platform: darwin) {
+  .title-bar {
+    height: 28px;
+  }
+  
+  .title-bar-controls {
+    order: -1;
+    padding-left: 8px;
+  }
+  
+  .title-bar-drag-region {
+    justify-content: center;
+  }
+  
+  .title-bar-control {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin: 0 4px;
+  }
+  
+  .title-bar-control:nth-child(1) {
+    background: #ff5f57;
+  }
+  
+  .title-bar-control:nth-child(2) {
+    background: #ffbd2e;
+  }
+  
+  .title-bar-control:nth-child(3) {
+    background: #28ca42;
+  }
+}
+
+/* Linux styling */
+@media (platform: linux) {
+  .title-bar-control {
+    width: 40px;
+  }
+}
+
+/* Maximized window state */
+.window-maximized .title-bar-control svg {
+  transform: scale(0.9);
+}
+
+.window-maximized #maximize-btn svg {
+  /* Show restore icon when maximized */
+  d: path("M2,2 L8,2 L8,8 L2,8 Z M0,0 L6,0 L6,6");
+}

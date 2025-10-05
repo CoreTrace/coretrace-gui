@@ -24,6 +24,16 @@
   color: #7d8590;
 }
 
+/* Refresh button styles */
+#refresh-file-tree {
+  color: #7d8590 !important;
+  transition: color 0.15s ease;
+}
+
+#refresh-file-tree:hover {
+  color: #f0f6fc !important;
+}
+
 .sidebar-content {
   flex: 1;
   padding: 8px;

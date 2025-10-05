@@ -1,11 +1,46 @@
+/**
+ * @fileoverview IPC handlers for file operations in the main process.
+ * 
+ * This module provides all IPC handlers for file system operations including
+ * opening files/folders, saving files, reading file content, and managing
+ * file system watching for automatic UI updates.
+ * 
+ * @author CTrace GUI Team
+ * @version 1.0.0
+ */
+
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs').promises;
 const path = require('path');
+const chokidar = require('chokidar');
 const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT } = require('../utils/fileUtils');
 
 /**
- * Setup all IPC handlers for file operations
- * @param {BrowserWindow} mainWindow - Main window reference
+ * File watcher instance for monitoring workspace changes
+ * @type {chokidar.FSWatcher|null}
+ * @private
+ */
+let fileWatcher = null;
+
+/**
+ * Currently watched workspace path
+ * @type {string|null}
+ * @private
+ */
+let currentWatchPath = null;
+
+/**
+ * Sets up all IPC handlers for file operations.
+ * 
+ * This function registers all IPC handlers that the renderer process can invoke
+ * for file operations. It handles folder dialogs, file dialogs, saving files,
+ * reading files, and file tree operations.
+ * 
+ * @function setupFileHandlers
+ * @param {BrowserWindow} mainWindow - Main window reference for dialogs
+ * 
+ * @example
+ * setupFileHandlers(mainWindow);
  */
 function setupFileHandlers(mainWindow) {
   // Open folder dialog
@@ -18,6 +53,10 @@ function setupFileHandlers(mainWindow) {
       const folderPath = result.filePaths[0];
       try {
         const fileTree = await buildFileTree(folderPath);
+        
+        // Start watching the workspace for changes
+        startWatchingWorkspace(folderPath, mainWindow);
+        
         return {
           success: true,
           folderPath,
@@ -32,6 +71,22 @@ function setupFileHandlers(mainWindow) {
     }
     
     return { success: false, canceled: true };
+  });
+
+  // Get file tree for refresh
+  ipcMain.handle('get-file-tree', async (event, folderPath) => {
+    try {
+      const fileTree = await buildFileTree(folderPath);
+      return {
+        success: true,
+        fileTree
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   });
 
   // Open file dialog
@@ -272,6 +327,74 @@ function setupFileHandlers(mainWindow) {
       };
     }
   });
+}
+
+/**
+ * Start watching workspace for file changes
+ * @param {string} workspacePath - Path to watch
+ * @param {BrowserWindow} mainWindow - Main window reference
+ */
+function startWatchingWorkspace(workspacePath, mainWindow) {
+  // Stop existing watcher if any
+  stopWatchingWorkspace();
+  
+  currentWatchPath = workspacePath;
+  
+  // Create new watcher
+  fileWatcher = chokidar.watch(workspacePath, {
+    ignoreInitial: true,
+    ignored: [
+      /(^|[\/\\])\../, // ignore hidden files
+      /node_modules/,  // ignore node_modules
+      /My Music/,      // ignore Windows system folders
+      /My Pictures/,
+      /My Videos/,
+      /\$RECYCLE\.BIN/,
+      /System Volume Information/
+    ],
+    depth: 10, // limit recursion depth
+    ignorePermissionErrors: true // ignore permission errors
+  });
+  
+  // Debounce function to avoid too many updates
+  let updateTimeout;
+  const debouncedUpdate = () => {
+    clearTimeout(updateTimeout);
+    updateTimeout = setTimeout(async () => {
+      try {
+        const fileTree = await buildFileTree(workspacePath);
+        mainWindow.webContents.send('workspace-changed', {
+          success: true,
+          fileTree,
+          folderPath: workspacePath
+        });
+      } catch (error) {
+        console.error('Error updating file tree:', error);
+      }
+    }, 300); // 300ms debounce
+  };
+  
+  // Listen for file system events
+  fileWatcher
+    .on('add', debouncedUpdate)
+    .on('unlink', debouncedUpdate)
+    .on('addDir', debouncedUpdate)
+    .on('unlinkDir', debouncedUpdate)
+    .on('error', error => console.error('File watcher error:', error));
+  
+  console.log('Started watching workspace:', workspacePath);
+}
+
+/**
+ * Stop watching current workspace
+ */
+function stopWatchingWorkspace() {
+  if (fileWatcher) {
+    fileWatcher.close();
+    fileWatcher = null;
+    console.log('Stopped watching workspace:', currentWatchPath);
+  }
+  currentWatchPath = null;
 }
 
 module.exports = { setupFileHandlers };
