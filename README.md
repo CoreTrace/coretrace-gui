@@ -66,4 +66,5 @@ Complete API documentation is available in the `docs/` directory after running `
 
 ## License
 
-ISC License
+
+// To determine
