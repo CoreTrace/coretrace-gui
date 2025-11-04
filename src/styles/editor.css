@@ -2,30 +2,32 @@
 .editor-container {
   flex: 1;
   display: flex;
+  flex-direction: column;
   background: #0d1117;
   position: relative;
+  overflow: hidden;
 }
 
 .editor-main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  min-height: 0; /* Allow flex shrinking */
-  overflow: hidden; /* Prevent container overflow issues */
+  min-height: 0;
+  overflow: hidden;
 }
 
 #editor-area {
   flex: 1;
   display: flex;
-  min-height: 0; /* Critical for proper scrolling in flex containers */
-  max-height: 100%; /* Constrain to parent height */
-  overflow: hidden; /* Prevent overflow from editor area */
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .gutter {
   width: 60px;
   min-width: 60px;
+  max-width: 60px;
   background: #0d1117;
   color: #6e7681;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -51,14 +53,13 @@
   outline: none;
   padding: 20px;
   resize: none;
-  overflow-y: scroll; /* Always show scrollbar to ensure proper height calculation */
-  overflow-x: auto; /* Enable horizontal scrolling */
+  overflow-y: auto;
+  overflow-x: auto;
   tab-size: 2;
   white-space: pre;
-  min-height: 0; /* Allow flex shrinking */
-  max-height: 100%; /* Constrain height to container */
-  width: 100%; /* Take full width */
-  box-sizing: border-box; /* Include padding in size calculations */
+  box-sizing: border-box;
+  min-height: 0;
+  min-width: 0;
 }
 
 .editor::placeholder {
