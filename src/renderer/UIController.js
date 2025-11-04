@@ -86,6 +86,20 @@ class UIController {
      */
     this.activeMenu = null;
 
+    /**
+     * WSL availability status
+     * @type {boolean}
+     * @private
+     */
+    this.wslAvailable = true;
+
+    /**
+     * Current platform
+     * @type {string}
+     * @private
+     */
+    this.platform = 'unknown';
+
     this.init();
   }
 
@@ -131,6 +145,9 @@ class UIController {
     
     // Set up custom title bar controls
     this.setupTitleBarControls();
+    
+    // Set up WSL status listener
+    this.setupWSLStatusListener();
   }
   /**
    * Set up file system watcher to auto-refresh file tree
@@ -199,6 +216,243 @@ class UIController {
         console.error('Error in workspace change notification:', data.error);
       }
     });
+  }
+
+  /**
+   * Setup WSL status listener to handle WSL availability updates
+   */
+  setupWSLStatusListener() {
+    // Listen for WSL status updates from main process
+    window.ipcRenderer.on('wsl-status', (event, data) => {
+      this.wslAvailable = data.available && data.hasDistros;
+      
+      if (this.platform === 'win32') {
+        // Update WSL status indicator in UI
+        this.updateWSLStatusIndicator(data);
+        
+        if (!data.available) {
+          this.notificationManager.showWarning(
+            'WSL is not installed. CTrace requires WSL on Windows. Please install WSL to access all functionality.'
+          );
+          console.warn('WSL not detected on Windows platform');
+        } else if (!data.hasDistros) {
+          this.notificationManager.showWarning(
+            'WSL is installed but no Linux distributions are available. Please install a distribution (e.g., Ubuntu) to use CTrace.'
+          );
+          console.warn('WSL detected but no distributions installed');
+        } else {
+          console.log('WSL is available and ready with distributions');
+        }
+      }
+    });
+
+    // Listen for WSL installation dialog responses
+    window.ipcRenderer.on('wsl-install-response', (event, data) => {
+      if (data.action === 'install') {
+        this.notificationManager.showInfo(
+          'WSL installation initiated. Please follow the installation prompts and restart the application when complete.'
+        );
+      } else if (data.action === 'cancel') {
+        this.notificationManager.showWarning(
+          'WSL installation cancelled. Some features may be limited without WSL.'
+        );
+      }
+    });
+
+    // Request initial WSL status check
+    window.ipcRenderer.send('check-wsl-status');
+  }
+
+  /**
+   * Update WSL status indicator in the UI
+   * @param {Object} wslStatus - WSL status object with available, hasDistros, and error properties
+   */
+  updateWSLStatusIndicator(wslStatus) {
+    // Find or create WSL status indicator
+    let statusEl = document.getElementById('wsl-status-indicator');
+    if (!statusEl) {
+      statusEl = document.createElement('div');
+      statusEl.id = 'wsl-status-indicator';
+      statusEl.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        z-index: 1000;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      `;
+      document.body.appendChild(statusEl);
+    }
+
+    // Update status based on WSL state
+    if (!wslStatus.available) {
+      statusEl.textContent = '❌ WSL Not Installed';
+      statusEl.style.backgroundColor = '#ff4757';
+      statusEl.title = 'WSL is not installed. Click for installation instructions.';
+    } else if (!wslStatus.hasDistros) {
+      statusEl.textContent = '⚠️ WSL No Distributions';
+      statusEl.style.backgroundColor = '#ffa502';
+      statusEl.title = 'WSL is installed but no Linux distributions are available. Click for setup instructions.';
+    } else {
+      statusEl.textContent = '✅ WSL Ready';
+      statusEl.style.backgroundColor = '#2ed573';
+      statusEl.title = 'WSL is ready and available for CTrace';
+      
+      // Auto-hide the indicator after 3 seconds if everything is working
+      setTimeout(() => {
+        if (statusEl && statusEl.textContent.includes('✅')) {
+          statusEl.style.opacity = '0.3';
+        }
+      }, 3000);
+    }
+
+    // Add click handler for help
+    statusEl.onclick = () => {
+      if (!wslStatus.available || !wslStatus.hasDistros) {
+        this.showWSLSetupDialog(wslStatus);
+      }
+    };
+  }
+
+  /**
+   * Show WSL setup dialog with detailed instructions
+   * @param {Object} wslStatus - Current WSL status
+   */
+  showWSLSetupDialog(wslStatus) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    `;
+
+    let instructions = '';
+    if (!wslStatus.available) {
+      instructions = `
+        <h3>🔧 Install WSL (Windows Subsystem for Linux)</h3>
+        <p>CTrace requires WSL to run on Windows. Follow these steps:</p>
+        <ol>
+          <li><strong>Open PowerShell as Administrator</strong>
+            <br><small>Right-click Start button → "Windows PowerShell (Admin)"</small>
+          </li>
+          <li><strong>Run the installation command:</strong>
+            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --install</code>
+          </li>
+          <li><strong>Restart your computer</strong> when prompted</li>
+          <li><strong>Follow the Ubuntu setup</strong> (create username/password)</li>
+          <li><strong>Restart this application</strong> to use CTrace</li>
+        </ol>
+      `;
+    } else {
+      instructions = `
+        <h3>📦 Install a Linux Distribution</h3>
+        <p>WSL is installed but you need a Linux distribution to run CTrace:</p>
+        <ol>
+          <li><strong>Open PowerShell</strong> (no need for Admin)</li>
+          <li><strong>List available distributions:</strong>
+            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --list --online</code>
+          </li>
+          <li><strong>Install Ubuntu (recommended):</strong>
+            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --install Ubuntu</code>
+          </li>
+          <li><strong>Follow the setup instructions</strong> (create username/password)</li>
+          <li><strong>Restart this application</strong> to use CTrace</li>
+        </ol>
+      `;
+    }
+
+    dialog.innerHTML = `
+      ${instructions}
+      <div style="margin-top: 20px; text-align: right;">
+        ${!wslStatus.available ? `
+          <button id="auto-install-wsl" style="
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+          ">Install Automatically</button>
+        ` : wslStatus.available && !wslStatus.hasDistros ? `
+          <button id="install-ubuntu" style="
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+          ">Install Ubuntu</button>
+        ` : ''}
+        <button id="close-wsl-dialog" style="
+          padding: 10px 20px;
+          background: #007acc;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 14px;
+        ">Got it!</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    // Close dialog handlers
+    const closeDialog = () => {
+      document.body.removeChild(modal);
+    };
+
+    document.getElementById('close-wsl-dialog').onclick = closeDialog;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeDialog();
+    };
+
+    // Installation button handlers
+    const autoInstallBtn = document.getElementById('auto-install-wsl');
+    if (autoInstallBtn) {
+      autoInstallBtn.onclick = () => {
+        window.ipcRenderer.send('install-wsl');
+        closeDialog();
+        this.notificationManager.showInfo('WSL installation started. Please follow any prompts that appear.');
+      };
+    }
+
+    const installUbuntuBtn = document.getElementById('install-ubuntu');
+    if (installUbuntuBtn) {
+      installUbuntuBtn.onclick = () => {
+        window.ipcRenderer.send('install-wsl-distro', 'Ubuntu');
+        closeDialog();
+        this.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
+      };
+    }
   }
 
   /**
@@ -656,8 +910,27 @@ class UIController {
           this.notificationManager.showSuccess('CTrace completed successfully');
         } else {
           const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
-          outEl.textContent = `Error running ctrace:\n${stripAnsi(details)}`;
-          this.notificationManager.showError('Failed to run CTrace');
+          
+          // Check if this is a WSL setup error and provide helpful UI
+          if (details.includes('WSL') && details.includes('distributions')) {
+            outEl.innerHTML = `
+              <div style="color: #ff6b6b; font-weight: bold; margin-bottom: 10px;">⚠️ WSL Setup Required</div>
+              <div style="white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.4;">${stripAnsi(details)}</div>
+              <div style="margin-top: 15px; padding: 10px; background: #f0f8ff; border: 1px solid #007acc; border-radius: 4px;">
+                <div style="font-weight: bold; color: #007acc; margin-bottom: 5px;">Quick Setup:</div>
+                <div style="font-size: 12px; color: #333;">
+                  1. Open PowerShell as Administrator<br>
+                  2. Run: <code style="background: #e6e6e6; padding: 2px 4px; border-radius: 2px;">wsl --install Ubuntu</code><br>
+                  3. Restart when prompted and follow setup instructions<br>
+                  4. Restart this application
+                </div>
+              </div>
+            `;
+            this.notificationManager.showWarning('WSL setup required - see output panel for instructions');
+          } else {
+            outEl.textContent = `Error running ctrace:\n${stripAnsi(details)}`;
+            this.notificationManager.showError('Failed to run CTrace');
+          }
         }
         // Auto-scroll to bottom
         outEl.scrollTop = outEl.scrollHeight;
