@@ -11,8 +11,16 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100%; /* Ensure full height */
+  min-height: 0; /* Allow flex shrinking */
   overflow: hidden; /* Prevent container overflow issues */
+}
+
+#editor-area {
+  flex: 1;
+  display: flex;
+  min-height: 0; /* Critical for proper scrolling in flex containers */
+  max-height: 100%; /* Constrain to parent height */
+  overflow: hidden; /* Prevent overflow from editor area */
 }
 
 .gutter {
@@ -43,10 +51,12 @@
   outline: none;
   padding: 20px;
   resize: none;
-  overflow: auto; /* Enable scrolling */
+  overflow-y: scroll; /* Always show scrollbar to ensure proper height calculation */
+  overflow-x: auto; /* Enable horizontal scrolling */
   tab-size: 2;
   white-space: pre;
-  height: 100%; /* Take full height */
+  min-height: 0; /* Allow flex shrinking */
+  max-height: 100%; /* Constrain height to container */
   width: 100%; /* Take full width */
   box-sizing: border-box; /* Include padding in size calculations */
 }

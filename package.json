@@ -30,11 +30,8 @@
     "asar": true,
     "extraResources": [
       {
-        "from": "bin/",
-        "to": "bin/",
-        "filter": [
-          "**/*"
-        ]
+        "from": "bin/ctrace",
+        "to": "bin/ctrace"
       }
     ],
     "asarUnpack": [],
