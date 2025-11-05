@@ -1,0 +1,845 @@
+/**
+ * Visualyzer Manager - Interactive Graph Visualization
+ * Uses D3.js for force-directed graph rendering
+ */
+
+class VisualyzerManager {
+  constructor() {
+    this.currentGraph = null;
+    this.parsedData = null;
+    this.svg = null;
+    this.simulation = null;
+    this.selectedNode = null;
+    this.expandedNodes = new Set();
+    this.visibleNodes = new Set();
+    this.visibleEdges = new Set();
+    
+    // Color mapping for node types
+    this.typeColors = {
+      'container': { fill: '#ffa657', stroke: '#f0883e', label: 'Container' },
+      'F': { fill: '#58a6ff', stroke: '#1f6feb', label: 'Function' },
+      'O': { fill: '#56d364', stroke: '#238636', label: 'Object' },
+      'default': { fill: '#8b949e', stroke: '#484f58', label: 'Other' }
+    };
+    
+    this.initializeElements();
+    this.setupEventListeners();
+  }
+
+  /**
+   * Get node color based on type
+   * @param {Object} node - Node data
+   * @returns {Object} Color object with fill and stroke
+   */
+  getNodeColor(node) {
+    if (node.isContainer) {
+      return this.typeColors['container'];
+    }
+    if (node.type && this.typeColors[node.type]) {
+      return this.typeColors[node.type];
+    }
+    return this.typeColors['default'];
+  }
+
+  /**
+   * Initialize DOM elements
+   */
+  initializeElements() {
+    this.dropzone = document.querySelector('.visualyzer-dropzone');
+    this.canvas = document.querySelector('.visualyzer-canvas');
+    this.controls = document.querySelector('.visualyzer-controls');
+    this.info = document.querySelector('.visualyzer-info');
+    this.filename = document.querySelector('.visualyzer-filename');
+    this.stats = document.querySelector('.visualyzer-stats');
+  }
+
+  /**
+   * Setup event listeners
+   */
+  setupEventListeners() {
+    // Drag and drop
+    this.dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      this.dropzone.classList.add('dragover');
+    });
+
+    this.dropzone.addEventListener('dragleave', () => {
+      this.dropzone.classList.remove('dragover');
+    });
+
+    this.dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      this.dropzone.classList.remove('dragover');
+      
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.dot')) {
+        this.handleFile(file);
+      } else {
+        alert('Please drop a .dot file');
+      }
+    });
+
+    // File input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.dot';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        this.handleFile(file);
+      }
+    });
+    document.body.appendChild(fileInput);
+
+    this.dropzone.addEventListener('click', () => {
+      fileInput.click();
+    });
+  }
+
+  /**
+   * Handle dropped or selected file
+   * @param {File} file - DOT file
+   */
+  async handleFile(file) {
+    try {
+      const content = await this.readFile(file);
+      await this.renderGraph(content, file.name);
+    } catch (error) {
+      this.showError(`Error rendering graph: ${error.message}`);
+      console.error('Error:', error);
+    }
+  }
+
+  /**
+   * Read file content
+   * @param {File} file - File to read
+   * @returns {Promise<string>} File content
+   */
+  readFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    });
+  }
+
+  /**
+   * Parse DOT content into graph data
+   * @param {string} dotContent - DOT file content
+   * @returns {Object} Parsed graph data
+   */
+  parseDotContent(dotContent) {
+    const nodes = new Map();
+    const edges = [];
+    
+    // Extract node definitions with labels
+    const nodeRegex = /(\w+)\s*\[label="({[^"]+}|[^"]+)"\]/g;
+    let match;
+    
+    while ((match = nodeRegex.exec(dotContent)) !== null) {
+      const nodeId = match[1];
+      const label = match[2];
+      
+      // Parse label
+      const parsedLabel = this.parseLabel(label);
+      
+      // Create main node
+      nodes.set(nodeId, {
+        id: nodeId,
+        label: parsedLabel.title,
+        isContainer: parsedLabel.items.length > 0,
+        type: null,
+        address: null
+      });
+      
+      // Create child nodes from fields
+      parsedLabel.items.forEach((field, index) => {
+        const childId = `${nodeId}_field_${index}`;
+        nodes.set(childId, {
+          id: childId,
+          label: field.name,
+          isContainer: false,
+          type: field.address,
+          address: field.value
+        });
+        
+        // Create edge from parent to child
+        edges.push({
+          source: nodeId,
+          target: childId
+        });
+      });
+    }
+    
+    // Extract explicit edges (connections)
+    const edgeRegex = /(\w+)\s*->\s*(\w+)/g;
+    while ((match = edgeRegex.exec(dotContent)) !== null) {
+      edges.push({
+        source: match[1],
+        target: match[2]
+      });
+    }
+    
+    return {
+      nodes: Array.from(nodes.values()),
+      edges: edges
+    };
+  }
+
+  /**
+   * Parse label into structured data
+   * @param {string} label - Node label
+   * @returns {Object} Parsed label data
+   */
+  parseLabel(label) {
+    // Check if it's a record-style label
+    if (label.startsWith('{') && label.endsWith('}')) {
+      return this.parseRecordLabel(label);
+    }
+    
+    // Simple label
+    return {
+      title: label,
+      items: []
+    };
+  }
+
+  /**
+   * Parse record-style label into structured data
+   * @param {string} label - Record label like "{Title|{field1|value1}|{field2|value2}}"
+   * @returns {Object} Parsed label data
+   */
+  parseRecordLabel(label) {
+    // Remove outer braces
+    let content = label.slice(1, -1);
+    
+    // Split by top-level pipes (not inside braces)
+    const parts = [];
+    let depth = 0;
+    let current = '';
+    
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i];
+      
+      if (char === '\\' && i + 1 < content.length) {
+        // Skip escaped character
+        current += content[i + 1];
+        i++;
+        continue;
+      }
+      
+      if (char === '{') depth++;
+      else if (char === '}') depth--;
+      else if (char === '|' && depth === 0) {
+        parts.push(current);
+        current = '';
+        continue;
+      }
+      
+      current += char;
+    }
+    if (current) parts.push(current);
+    
+    const title = parts[0] || 'Unknown';
+    const items = [];
+    
+    // Parse remaining parts as field records
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (part.startsWith('{') && part.endsWith('}')) {
+        const fieldContent = part.slice(1, -1);
+        const fieldParts = fieldContent.split('|').map(p => p.trim());
+        
+        items.push({
+          name: fieldParts[0] || '',
+          address: fieldParts[1] || '',
+          value: fieldParts[2] || ''
+        });
+      }
+    }
+    
+    return { title, items };
+  }
+
+  /**
+   * Render interactive graph using D3.js
+   * @param {string} dotContent - DOT file content
+   * @param {string} filename - File name
+   */
+  async renderGraph(dotContent, filename) {
+    try {
+      // Check if D3 is loaded
+      if (typeof d3 === 'undefined') {
+        throw new Error('D3.js library not loaded. Please check your internet connection.');
+      }
+
+      // Basic validation
+      const trimmedContent = dotContent.trim();
+      if (!trimmedContent) {
+        throw new Error('DOT file is empty');
+      }
+
+      // Parse DOT content
+      const graphData = this.parseDotContent(dotContent);
+      
+      if (graphData.nodes.length === 0) {
+        throw new Error('No nodes found in DOT file');
+      }
+      
+      this.parsedData = graphData;
+      this.currentGraph = dotContent;
+      
+      // Create D3 force-directed graph
+      this.createForceGraph(graphData, filename);
+      
+      // Show controls and info
+      this.dropzone.style.display = 'none';
+      this.controls.style.display = 'flex';
+      this.info.style.display = 'flex';
+      
+      // Update info
+      this.filename.textContent = filename;
+      this.stats.textContent = `${graphData.nodes.length} nodes, ${graphData.edges.length} connections`;
+      
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Create force-directed graph with D3.js
+   * @param {Object} data - Graph data
+   * @param {string} filename - File name
+   */
+  createForceGraph(data, filename) {
+    // Clear canvas
+    this.canvas.innerHTML = '';
+    
+    // Store full graph data
+    this.fullGraphData = data;
+    
+    // Find root nodes (nodes with no incoming edges)
+    const childNodeIds = new Set(data.edges.map(e => e.target));
+    const rootNodes = data.nodes.filter(n => !childNodeIds.has(n.id));
+    
+    // If no clear root, use first few nodes
+    if (rootNodes.length === 0) {
+      rootNodes.push(...data.nodes.slice(0, Math.min(3, data.nodes.length)));
+    }
+    
+    // Initialize visible nodes with roots
+    this.visibleNodes.clear();
+    rootNodes.forEach(n => this.visibleNodes.add(n.id));
+    
+    // Get canvas dimensions
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    
+    // Create SVG
+    const svg = d3.select(this.canvas)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', [0, 0, width, height]);
+    
+    // Add zoom behavior
+    const g = svg.append('g');
+    
+    const zoom = d3.zoom()
+      .scaleExtent([0.1, 4])
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform);
+      });
+    
+    svg.call(zoom);
+    
+    // Create arrow markers for edges
+    svg.append('defs').append('marker')
+      .attr('id', 'arrowhead')
+      .attr('viewBox', '-0 -5 10 10')
+      .attr('refX', 25)
+      .attr('refY', 0)
+      .attr('orient', 'auto')
+      .attr('markerWidth', 8)
+      .attr('markerHeight', 8)
+      .append('svg:path')
+      .attr('d', 'M 0,-5 L 10 ,0 L 0,5')
+      .attr('fill', '#848d97');
+    
+    // Store references for updates
+    this.g = g;
+    this.width = width;
+    this.height = height;
+    
+    // Create legend
+    this.createLegend(svg);
+    
+    // Initial render with only visible nodes
+    this.updateGraph();
+  }
+
+  /**
+   * Create legend for node types
+   * @param {Object} svg - SVG element
+   */
+  createLegend(svg) {
+    const legend = svg.append('g')
+      .attr('class', 'legend')
+      .attr('transform', `translate(20, ${this.height - 120})`);
+    
+    // Background
+    legend.append('rect')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', 120)
+      .attr('height', 100)
+      .attr('fill', '#161b22')
+      .attr('stroke', '#30363d')
+      .attr('stroke-width', 1)
+      .attr('rx', 4);
+    
+    // Title
+    legend.append('text')
+      .attr('x', 10)
+      .attr('y', 18)
+      .attr('fill', '#f0f6fc')
+      .attr('font-size', '12px')
+      .attr('font-weight', 'bold')
+      .text('Node Types');
+    
+    // Legend items
+    const items = [
+      { type: 'container', label: 'Container' },
+      { type: 'F', label: 'Function' },
+      { type: 'O', label: 'Object' },
+      { type: 'default', label: 'Other' }
+    ];
+    
+    items.forEach((item, index) => {
+      const yPos = 35 + index * 20;
+      const colors = this.typeColors[item.type];
+      
+      // Circle
+      legend.append('circle')
+        .attr('cx', 15)
+        .attr('cy', yPos)
+        .attr('r', 6)
+        .attr('fill', colors.fill)
+        .attr('stroke', colors.stroke)
+        .attr('stroke-width', 1.5);
+      
+      // Label
+      legend.append('text')
+        .attr('x', 28)
+        .attr('y', yPos + 4)
+        .attr('fill', '#c9d1d9')
+        .attr('font-size', '11px')
+        .text(item.label);
+    });
+  }
+
+  /**
+   * Update graph to show only visible nodes and edges
+   */
+  updateGraph() {
+    const data = this.fullGraphData;
+    
+    // Filter visible nodes
+    const visibleNodesData = data.nodes.filter(n => this.visibleNodes.has(n.id));
+    
+    // Filter visible edges (both source and target must be visible)
+    const visibleEdgesData = data.edges.filter(e => 
+      this.visibleNodes.has(e.source.id || e.source) && 
+      this.visibleNodes.has(e.target.id || e.target)
+    );
+    
+    // Create or update force simulation
+    if (this.simulation) {
+      this.simulation.stop();
+    }
+    
+    this.simulation = d3.forceSimulation(visibleNodesData)
+      .force('link', d3.forceLink(visibleEdgesData)
+        .id(d => d.id)
+        .distance(150))
+      .force('charge', d3.forceManyBody().strength(-400))
+      .force('center', d3.forceCenter(this.width / 2, this.height / 2))
+      .force('collision', d3.forceCollide().radius(40));
+    
+    // Update edges
+    const link = this.g.selectAll('line')
+      .data(visibleEdgesData, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
+    
+    link.exit().remove();
+    
+    const linkEnter = link.enter().append('line')
+      .attr('stroke', '#848d97')
+      .attr('stroke-width', 2)
+      .attr('marker-end', 'url(#arrowhead)')
+      .attr('opacity', 0);
+    
+    const linkAll = linkEnter.merge(link);
+    
+    linkAll.transition()
+      .duration(300)
+      .attr('opacity', 1);
+    
+    // Update nodes
+    const node = this.g.selectAll('g.node')
+      .data(visibleNodesData, d => d.id);
+    
+    node.exit().remove();
+    
+    const nodeEnter = node.enter().append('g')
+      .attr('class', 'node')
+      .call(d3.drag()
+        .on('start', (event, d) => this.dragStarted(event, d, this.simulation))
+        .on('drag', (event, d) => this.dragged(event, d))
+        .on('end', (event, d) => this.dragEnded(event, d, this.simulation)));
+    
+    // Add circles to new nodes
+    nodeEnter.append('circle')
+      .attr('r', 0)
+      .attr('fill', d => this.getNodeColor(d).fill)
+      .attr('stroke', d => this.getNodeColor(d).stroke)
+      .attr('stroke-width', 2);
+    
+    // Add labels to new nodes
+    nodeEnter.append('text')
+      .text(d => d.label.length > 20 ? d.label.substring(0, 17) + '...' : d.label)
+      .attr('x', 0)
+      .attr('y', 35)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#f0f6fc')
+      .attr('font-size', '12px')
+      .style('pointer-events', 'none')
+      .attr('opacity', 0);
+    
+    // Add expand indicator for nodes with children
+    nodeEnter.each((d, i, nodes) => {
+      const hasChildren = this.hasUnexpandedChildren(d);
+      
+      if (hasChildren) {
+        // Green + for expandable nodes
+        d3.select(nodes[i]).append('circle')
+          .attr('class', 'expand-indicator')
+          .attr('r', 6)
+          .attr('cx', 18)
+          .attr('cy', -18)
+          .attr('fill', '#238636')
+          .attr('stroke', '#2ea043')
+          .attr('stroke-width', 1)
+          .attr('opacity', 0);
+        
+        d3.select(nodes[i]).append('text')
+          .attr('class', 'expand-icon')
+          .attr('x', 18)
+          .attr('y', -14)
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'white')
+          .attr('font-size', '10px')
+          .attr('font-weight', 'bold')
+          .style('pointer-events', 'none')
+          .text('+')
+          .attr('opacity', 0);
+      }
+    });
+    
+    const nodeAll = nodeEnter.merge(node);
+    
+    // Animate circles
+    nodeAll.select('circle:not(.expand-indicator)')
+      .transition()
+      .duration(300)
+      .attr('r', d => this.expandedNodes.has(d.id) ? 24 : 20)
+      .attr('fill', d => {
+        if (this.expandedNodes.has(d.id)) return '#a371f7'; // Purple when expanded
+        return this.getNodeColor(d).fill;
+      })
+      .attr('stroke', d => {
+        if (this.expandedNodes.has(d.id)) return '#8957e5';
+        return this.getNodeColor(d).stroke;
+      });
+    
+    // Animate labels
+    nodeAll.select('text:not(.expand-icon)')
+      .transition()
+      .duration(300)
+      .attr('opacity', 1);
+    
+    // Update expand indicators
+    nodeAll.each((d, i, nodes) => {
+      const hasChildren = this.hasUnexpandedChildren(d);
+      const nodeGroup = d3.select(nodes[i]);
+      
+      if (hasChildren) {
+        nodeGroup.select('.expand-indicator')
+          .transition()
+          .duration(300)
+          .attr('opacity', 1);
+        
+        nodeGroup.select('.expand-icon')
+          .transition()
+          .duration(300)
+          .attr('opacity', 1);
+      } else {
+        // No children, remove indicators
+        nodeGroup.select('.expand-indicator').remove();
+        nodeGroup.select('.expand-icon').remove();
+      }
+    });
+    
+    // Add click handler to nodes
+    nodeAll.on('click', (event, d) => {
+      event.stopPropagation();
+      this.toggleNodeExpansion(d);
+    });
+    
+    // Add hover effects
+    nodeAll.on('mouseenter', function(event, d) {
+      if (!d._expanded) {
+        const baseColor = d3.select(this).select('circle:not(.expand-indicator)').attr('fill');
+        d3.select(this).select('circle:not(.expand-indicator)')
+          .attr('r', 24);
+      }
+    });
+    
+    nodeAll.on('mouseleave', function(event, d) {
+      if (!d._expanded) {
+        d3.select(this).select('circle:not(.expand-indicator)')
+          .attr('r', 20);
+      }
+    });
+    
+    // Update positions on simulation tick
+    this.simulation.on('tick', () => {
+      linkAll
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+      
+      nodeAll.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+  }
+
+  /**
+   * Check if node has unexpanded children
+   * @param {Object} node - Node to check
+   * @returns {boolean} Has unexpanded children
+   */
+  hasUnexpandedChildren(node) {
+    const children = this.fullGraphData.edges
+      .filter(e => (e.source.id || e.source) === node.id)
+      .map(e => e.target.id || e.target);
+    
+    return children.some(childId => !this.visibleNodes.has(childId));
+  }
+
+  /**
+   * Toggle node expansion
+   * @param {Object} node - Node to toggle
+   */
+  toggleNodeExpansion(node) {
+    const hasChildren = this.hasUnexpandedChildren(node);
+    
+    // If node has children, expand/collapse
+    if (hasChildren || this.expandedNodes.has(node.id)) {
+      if (this.expandedNodes.has(node.id)) {
+        // Collapse: remove children
+        this.collapseNode(node);
+      } else {
+        // Expand: show children
+        this.expandNode(node);
+      }
+      
+      // Update the graph
+      this.updateGraph();
+    } 
+    // If node is a leaf (no children), show its metadata
+    else if (node.type || node.address) {
+      this.showNodeMetadata(node);
+    }
+    
+    // Update stats
+    const visibleCount = this.visibleNodes.size;
+    const totalCount = this.fullGraphData.nodes.length;
+    this.stats.textContent = `Showing ${visibleCount} of ${totalCount} nodes`;
+  }
+
+  /**
+   * Expand node to show its children
+   * @param {Object} node - Node to expand
+   */
+  expandNode(node) {
+    this.expandedNodes.add(node.id);
+    node._expanded = true;
+    
+    // Find all children
+    const children = this.fullGraphData.edges
+      .filter(e => (e.source.id || e.source) === node.id)
+      .map(e => e.target.id || e.target);
+    
+    // Add children to visible nodes
+    children.forEach(childId => this.visibleNodes.add(childId));
+  }
+
+  /**
+   * Collapse node to hide its children
+   * @param {Object} node - Node to collapse
+   */
+  collapseNode(node) {
+    this.expandedNodes.delete(node.id);
+    node._expanded = false;
+    
+    // Find all descendants (recursive)
+    const toRemove = new Set();
+    const findDescendants = (nodeId) => {
+      const children = this.fullGraphData.edges
+        .filter(e => (e.source.id || e.source) === nodeId)
+        .map(e => e.target.id || e.target);
+      
+      children.forEach(childId => {
+        toRemove.add(childId);
+        if (this.expandedNodes.has(childId)) {
+          findDescendants(childId);
+        }
+      });
+    };
+    
+    findDescendants(node.id);
+    
+    // Remove descendants from visible nodes
+    toRemove.forEach(nodeId => {
+      this.visibleNodes.delete(nodeId);
+      this.expandedNodes.delete(nodeId);
+    });
+  }
+
+  /**
+   * Show node metadata (type and address) as overlay
+   * @param {Object} node - Node data
+   */
+  showNodeMetadata(node) {
+    // Remove existing tooltip
+    const existingTooltip = this.canvas.querySelector('.node-metadata-tooltip');
+    if (existingTooltip) {
+      existingTooltip.remove();
+    }
+    
+    // Create tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'node-metadata-tooltip';
+    
+    const title = document.createElement('div');
+    title.className = 'tooltip-title';
+    title.textContent = node.label;
+    tooltip.appendChild(title);
+    
+    if (node.type) {
+      const typeDiv = document.createElement('div');
+      typeDiv.className = 'tooltip-field';
+      typeDiv.innerHTML = `<span class="tooltip-label">Type:</span> <span class="tooltip-value">${node.type}</span>`;
+      tooltip.appendChild(typeDiv);
+    }
+    
+    if (node.address) {
+      const addrDiv = document.createElement('div');
+      addrDiv.className = 'tooltip-field';
+      addrDiv.innerHTML = `<span class="tooltip-label">Address:</span> <span class="tooltip-value">${node.address}</span>`;
+      tooltip.appendChild(addrDiv);
+    }
+    
+    this.canvas.appendChild(tooltip);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      if (tooltip.parentNode) {
+        tooltip.remove();
+      }
+    }, 5000);
+  }
+
+  /**
+   * Drag event handlers for D3
+   */
+  dragStarted(event, d, simulation) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+
+  dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+  }
+
+  dragEnded(event, d, simulation) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  }
+
+  /**
+   * Zoom controls
+   */
+  zoomIn() {
+    if (!this.svg) return;
+    this.svg.transition().call(
+      d3.zoom().scaleBy,
+      1.3
+    );
+  }
+
+  zoomOut() {
+    if (!this.svg) return;
+    this.svg.transition().call(
+      d3.zoom().scaleBy,
+      0.7
+    );
+  }
+
+  resetZoom() {
+    if (!this.svg) return;
+    this.svg.transition().call(
+      d3.zoom().transform,
+      d3.zoomIdentity
+    );
+  }
+
+  /**
+   * Clear current visualization
+   */
+  clear() {
+    this.canvas.innerHTML = '';
+    this.currentGraph = null;
+    this.parsedData = null;
+    this.fullGraphData = null;
+    this.svg = null;
+    this.expandedNodes.clear();
+    this.visibleNodes.clear();
+    this.visibleEdges.clear();
+    
+    if (this.simulation) {
+      this.simulation.stop();
+      this.simulation = null;
+    }
+    
+    this.dropzone.style.display = 'flex';
+    this.controls.style.display = 'none';
+    this.info.style.display = 'none';
+  }
+
+  /**
+   * Show error message
+   * @param {string} message - Error message
+   */
+  showError(message) {
+    this.info.classList.add('error');
+    this.stats.textContent = message;
+  }
+}
+
+module.exports = VisualyzerManager;
