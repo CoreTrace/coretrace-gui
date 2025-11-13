@@ -17,6 +17,7 @@ const { spawn } = require('child_process');
 const { setupFileHandlers } = require('./main/ipc/fileHandlers');
 const { setupEditorHandlers } = require('./main/ipc/editorHandlers');
 const { setupCtraceHandlers } = require('./main/ipc/ctraceHandlers');
+const { setupAssistantHandlers } = require('./main/ipc/assistantHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -504,6 +505,7 @@ app.whenReady().then(async () => {
   setupFileHandlers(mainWindow);
   setupEditorHandlers();
   setupCtraceHandlers();
+  setupAssistantHandlers(mainWindow);
   setupWindowControls(mainWindow);
   
   // Check WSL status on Windows after window is ready
