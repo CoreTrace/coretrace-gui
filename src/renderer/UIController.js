@@ -1046,9 +1046,7 @@ class UIController {
       sidebar.style.display = 'flex';
     } else {
       sidebar.style.width = '0px';
-      setTimeout(() => {
-        sidebar.style.display = 'none';
-      }, 200);
+      sidebar.style.display = 'none';
     }
   }
 
@@ -1094,9 +1092,26 @@ class UIController {
   toggleToolsPanel() {
     const toolsPanel = document.getElementById('toolsPanel');
     if (toolsPanel) {
+      // If assistant is currently showing, restore original ctrace tools content
+      if (this._toolsPanelOriginal && toolsPanel.classList.contains('active')) {
+        const header = toolsPanel.querySelector('.tools-panel-header');
+        const content = toolsPanel.querySelector('.tools-panel-content');
+        if (header && content) {
+          header.innerHTML = this._toolsPanelOriginal.headerHTML;
+          content.innerHTML = this._toolsPanelOriginal.contentHTML;
+          this._toolsPanelOriginal = null;
+        }
+        return; // Keep panel open with restored content
+      }
+
       if (toolsPanel.classList.contains('active')) {
         this.hideToolsPanel();
       } else {
+        // Close visualyzer if it's open
+        const visualyzerArea = document.getElementById('visualyzer-area');
+        if (visualyzerArea && visualyzerArea.style.display !== 'none') {
+          this.hideVisualyzer();
+        }
         this.showToolsPanel();
       }
     }
@@ -1111,6 +1126,11 @@ class UIController {
       if (visualyzerArea.style.display !== 'none') {
         this.hideVisualyzer();
       } else {
+        // Close tools panel if it's open
+        const toolsPanel = document.getElementById('toolsPanel');
+        if (toolsPanel && toolsPanel.classList.contains('active')) {
+          this.hideToolsPanel();
+        }
         this.showVisualyzer();
       }
     }
@@ -1174,6 +1194,11 @@ class UIController {
       if (visualyzerArea.style.display !== 'none') {
         this.hideVisualyzer();
       } else {
+        // Close tools panel if it's open
+        const toolsPanel = document.getElementById('toolsPanel');
+        if (toolsPanel && toolsPanel.classList.contains('active')) {
+          this.hideToolsPanel();
+        }
         this.showVisualyzer();
       }
     }
@@ -1230,6 +1255,18 @@ class UIController {
 
   openAssistantPanel() {
     const toolsPanel = document.getElementById('toolsPanel');
+    
+    // If assistant is currently showing, close it
+    if (this._toolsPanelOriginal && toolsPanel && toolsPanel.classList.contains('active')) {
+      this.hideToolsPanel();
+      return;
+    }
+    
+    // Close visualyzer if it's open
+    const visualyzerArea = document.getElementById('visualyzer-area');
+    if (visualyzerArea && visualyzerArea.style.display !== 'none') {
+      this.hideVisualyzer();
+    }
     // Ensure assistant is configured at least once before opening
     const ensure = this.ensureAssistantConfigured();
     Promise.resolve(ensure).then(() => {

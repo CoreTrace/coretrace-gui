@@ -22,6 +22,8 @@
   flex-direction: row;
   min-height: 0;
   overflow: hidden;
+  background: #0d1117;
+  position: relative;
 }
 
 .gutter {
@@ -69,4 +71,15 @@
 
 .editor:focus {
   box-shadow: inset 0 0 0 1px #1f6feb;
+}
+
+/* Active selection (when editor is focused) - use VS Code blue */
+.editor:focus::selection {
+  background: #264f78;
+  color: #f0f6fc;
+}
+
+.editor:focus::-moz-selection {
+  background: #264f78;
+  color: #f0f6fc;
 }
