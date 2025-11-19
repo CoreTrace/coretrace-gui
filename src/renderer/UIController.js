@@ -4,6 +4,7 @@ const EditorManager = require('./managers/EditorManager');
 const TabManager = require('./managers/TabManager');
 const SearchManager = require('./managers/SearchManager');
 const FileOperationsManager = require('./managers/FileOperationsManager');
+const VisualyzerManager = require('./managers/VisualyzerManager');
 
 // Import utilities
 const fileTypeUtils = require('./utils/fileTypeUtils');
@@ -64,6 +65,13 @@ class UIController {
      * @private
      */
     this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
+
+    /**
+     * Visualyzer manager instance
+     * @type {VisualyzerManager}
+     * @private
+     */
+    this.visualyzerManager = new VisualyzerManager();
 
     /**
      * Flag indicating if UI is being resized
@@ -874,6 +882,16 @@ class UIController {
     window.toggleToolsPanel = () => this.toggleToolsPanel();
     window.showToolsPanel = () => this.showToolsPanel();
     window.hideToolsPanel = () => this.hideToolsPanel();
+    window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
+    window.showVisualyzerPanel = () => this.showVisualyzerPanel();
+    window.hideVisualyzerPanel = () => this.hideVisualyzerPanel();
+    window.closeVisualyzer = () => this.hideVisualyzer();
+    
+    // Visualyzer controls
+    window.visualyzerZoomIn = () => this.visualyzerManager.zoomIn();
+    window.visualyzerZoomOut = () => this.visualyzerManager.zoomOut();
+    window.visualyzerResetZoom = () => this.visualyzerManager.resetZoom();
+    window.visualyzerClear = () => this.visualyzerManager.clear();
 
     // CTrace helpers
     const stripAnsi = (input) => {
@@ -1066,6 +1084,69 @@ class UIController {
         this.showToolsPanel();
       }
     }
+  }
+
+  /**
+   * Toggle Visualyzer panel visibility
+   */
+  toggleVisualyzerPanel() {
+    const visualyzerArea = document.getElementById('visualyzer-area');
+    if (visualyzerArea) {
+      if (visualyzerArea.style.display !== 'none') {
+        this.hideVisualyzer();
+      } else {
+        this.showVisualyzer();
+      }
+    }
+  }
+
+  /**
+   * Show Visualyzer in main area
+   */
+  showVisualyzer() {
+    const visualyzerArea = document.getElementById('visualyzer-area');
+    const welcomeScreen = document.getElementById('welcome-screen');
+    const editorArea = document.getElementById('editor-area');
+    
+    if (visualyzerArea) {
+      // Hide other main area views
+      if (welcomeScreen) welcomeScreen.style.display = 'none';
+      if (editorArea) editorArea.style.display = 'none';
+      
+      // Show visualyzer
+      visualyzerArea.style.display = 'flex';
+    }
+  }
+
+  /**
+   * Hide Visualyzer and show welcome screen
+   */
+  hideVisualyzer() {
+    const visualyzerArea = document.getElementById('visualyzer-area');
+    const welcomeScreen = document.getElementById('welcome-screen');
+    
+    if (visualyzerArea) {
+      visualyzerArea.style.display = 'none';
+    }
+    
+    // Show welcome screen if no tabs are open
+    if (this.tabManager.tabs.length === 0 && welcomeScreen) {
+      welcomeScreen.style.display = 'flex';
+    }
+  }
+
+  /**
+   * Show Visualyzer panel
+   */
+  showVisualyzerPanel() {
+    this.showVisualyzer();
+  }
+
+  /**
+   * Hide Visualyzer panel
+   */
+  hideVisualyzerPanel() {
+    this.hideVisualyzer();
   }
 
   /**
