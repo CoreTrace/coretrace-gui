@@ -4,7 +4,6 @@ const EditorManager = require('./managers/EditorManager');
 const TabManager = require('./managers/TabManager');
 const SearchManager = require('./managers/SearchManager');
 const FileOperationsManager = require('./managers/FileOperationsManager');
-const VisualyzerManager = require('./managers/VisualyzerManager');
 
 // Import utilities
 const fileTypeUtils = require('./utils/fileTypeUtils');
@@ -65,13 +64,6 @@ class UIController {
      * @private
      */
     this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
-
-    /**
-     * Visualyzer manager instance
-     * @type {VisualyzerManager}
-     * @private
-     */
-    this.visualyzerManager = new VisualyzerManager();
 
     /**
      * Flag indicating if UI is being resized
@@ -883,16 +875,6 @@ class UIController {
     window.showToolsPanel = () => this.showToolsPanel();
     window.hideToolsPanel = () => this.hideToolsPanel();
   window.openAssistantPanel = () => this.openAssistantPanel();
-    window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
-    window.showVisualyzerPanel = () => this.showVisualyzerPanel();
-    window.hideVisualyzerPanel = () => this.hideVisualyzerPanel();
-    window.closeVisualyzer = () => this.hideVisualyzer();
-    
-    // Visualyzer controls
-    window.visualyzerZoomIn = () => this.visualyzerManager.zoomIn();
-    window.visualyzerZoomOut = () => this.visualyzerManager.zoomOut();
-    window.visualyzerResetZoom = () => this.visualyzerManager.resetZoom();
-    window.visualyzerClear = () => this.visualyzerManager.clear();
 
     // CTrace helpers
     const stripAnsi = (input) => {
@@ -1046,7 +1028,9 @@ class UIController {
       sidebar.style.display = 'flex';
     } else {
       sidebar.style.width = '0px';
-      sidebar.style.display = 'none';
+      setTimeout(() => {
+        sidebar.style.display = 'none';
+      }, 200);
     }
   }
 
@@ -1092,181 +1076,16 @@ class UIController {
   toggleToolsPanel() {
     const toolsPanel = document.getElementById('toolsPanel');
     if (toolsPanel) {
-      // If assistant is currently showing, restore original ctrace tools content
-      if (this._toolsPanelOriginal && toolsPanel.classList.contains('active')) {
-        const header = toolsPanel.querySelector('.tools-panel-header');
-        const content = toolsPanel.querySelector('.tools-panel-content');
-        if (header && content) {
-          header.innerHTML = this._toolsPanelOriginal.headerHTML;
-          content.innerHTML = this._toolsPanelOriginal.contentHTML;
-          this._toolsPanelOriginal = null;
-        }
-        return; // Keep panel open with restored content
-      }
-
       if (toolsPanel.classList.contains('active')) {
         this.hideToolsPanel();
       } else {
-        // Close visualyzer if it's open
-        const visualyzerArea = document.getElementById('visualyzer-area');
-        if (visualyzerArea && visualyzerArea.style.display !== 'none') {
-          this.hideVisualyzer();
-        }
         this.showToolsPanel();
       }
     }
   }
 
-  /**
-   * Toggle Visualyzer panel visibility
-   */
-  toggleVisualyzerPanel() {
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    if (visualyzerArea) {
-      if (visualyzerArea.style.display !== 'none') {
-        this.hideVisualyzer();
-      } else {
-        // Close tools panel if it's open
-        const toolsPanel = document.getElementById('toolsPanel');
-        if (toolsPanel && toolsPanel.classList.contains('active')) {
-          this.hideToolsPanel();
-        }
-        this.showVisualyzer();
-      }
-    }
-  }
-
-  /**
-   * Show Visualyzer in main area
-   */
-  showVisualyzer() {
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    const editorArea = document.getElementById('editor-area');
-    
-    if (visualyzerArea) {
-      // Hide other main area views
-      if (welcomeScreen) welcomeScreen.style.display = 'none';
-      if (editorArea) editorArea.style.display = 'none';
-      
-      // Show visualyzer
-      visualyzerArea.style.display = 'flex';
-    }
-  }
-
-  /**
-   * Hide Visualyzer and show welcome screen
-   */
-  hideVisualyzer() {
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    
-    if (visualyzerArea) {
-      visualyzerArea.style.display = 'none';
-    }
-    
-    // Show welcome screen if no tabs are open
-    if (this.tabManager.tabs.length === 0 && welcomeScreen) {
-      welcomeScreen.style.display = 'flex';
-    }
-  }
-
-  /**
-   * Show Visualyzer panel
-   */
-  showVisualyzerPanel() {
-    this.showVisualyzer();
-  }
-
-  /**
-   * Hide Visualyzer panel
-   */
-  hideVisualyzerPanel() {
-    this.hideVisualyzer();
-  }
-
-  /**
-   * Toggle Visualyzer panel visibility
-   */
-  toggleVisualyzerPanel() {
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    if (visualyzerArea) {
-      if (visualyzerArea.style.display !== 'none') {
-        this.hideVisualyzer();
-      } else {
-        // Close tools panel if it's open
-        const toolsPanel = document.getElementById('toolsPanel');
-        if (toolsPanel && toolsPanel.classList.contains('active')) {
-          this.hideToolsPanel();
-        }
-        this.showVisualyzer();
-      }
-    }
-  }
-
-  /**
-   * Show Visualyzer in main area
-   */
-  showVisualyzer() {
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    const editorArea = document.getElementById('editor-area');
-    
-    if (visualyzerArea) {
-      // Hide other main area views
-      if (welcomeScreen) welcomeScreen.style.display = 'none';
-      if (editorArea) editorArea.style.display = 'none';
-      
-      // Show visualyzer
-      visualyzerArea.style.display = 'flex';
-    }
-  }
-
-  /**
-   * Hide Visualyzer and show welcome screen
-   */
-  hideVisualyzer() {
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    
-    if (visualyzerArea) {
-      visualyzerArea.style.display = 'none';
-    }
-    
-    // Show welcome screen if no tabs are open
-    if (this.tabManager.tabs.length === 0 && welcomeScreen) {
-      welcomeScreen.style.display = 'flex';
-    }
-  }
-
-  /**
-   * Show Visualyzer panel
-   */
-  showVisualyzerPanel() {
-    this.showVisualyzer();
-  }
-
-  /**
-   * Hide Visualyzer panel
-   */
-  hideVisualyzerPanel() {
-    this.hideVisualyzer();
-  }
-
   openAssistantPanel() {
     const toolsPanel = document.getElementById('toolsPanel');
-    
-    // If assistant is currently showing, close it
-    if (this._toolsPanelOriginal && toolsPanel && toolsPanel.classList.contains('active')) {
-      this.hideToolsPanel();
-      return;
-    }
-    
-    // Close visualyzer if it's open
-    const visualyzerArea = document.getElementById('visualyzer-area');
-    if (visualyzerArea && visualyzerArea.style.display !== 'none') {
-      this.hideVisualyzer();
-    }
     // Ensure assistant is configured at least once before opening
     const ensure = this.ensureAssistantConfigured();
     Promise.resolve(ensure).then(() => {

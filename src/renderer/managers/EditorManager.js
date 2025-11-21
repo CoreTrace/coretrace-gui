@@ -1,11 +1,18 @@
 /**
  * Editor Manager - Handles editor functionality like gutter, status bar, formatting
  */
+
+// Import syntax highlighter
+const { highlightCppSyntax, applySyntaxHighlight } = require('../utils/syntaxHighlighter');
+const { detectFileType } = require('../utils/fileTypeUtils');
+
 class EditorManager {
   constructor() {
     this.editor = document.getElementById('editor');
     this.gutter = document.getElementById('gutter');
     this.lineCounter = document.getElementById('lineCounter');
+    this.currentFileType = 'Plain Text';
+    this.highlightOverlay = null;
     this.init();
   }
 
@@ -217,6 +224,15 @@ class EditorManager {
       this.editor.value = content;
       this.updateAll();
     }
+  }
+
+  /**
+   * Set file type (placeholder for future use)
+   * @param {string} filename - The filename to detect type from
+   */
+  setFileType(filename) {
+    this.currentFileType = detectFileType(filename);
+    // Syntax highlighting disabled in editor (only works in assistant for now)
   }
 
   /**

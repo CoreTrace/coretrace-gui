@@ -2,7 +2,7 @@
  * @fileoverview IPC handlers for AI assistant (Ollama, External API, Local GGUF)
  * 
  * This module provides IPC handlers for chatting with various LLM providers.
- * Note: Local GGUF models are handled directly in the renderer via window.electronAi
+ * Now uses a modular provider system for easy extensibility.
  * 
  * @author CTrace GUI Team
  * @version 1.0.0
@@ -11,6 +11,7 @@
 const { ipcMain } = require('electron');
 const https = require('https');
 const http = require('http');
+const providerRegistry = require('../external_llm/ProviderRegistry');
 
 // Local GGUF state
 let localLLM = null;
@@ -25,14 +26,15 @@ function setupAssistantHandlers(mainWindow) {
   /**
    * Handle assistant chat request
    * Input: { provider, message, config }
-   * config contains: ollamaHost, apiKey, externalProvider, localModelPath
+   * config contains: provider-specific configuration
    */
   ipcMain.handle('assistant-chat', async (event, { provider, message, config }) => {
     try {
       if (provider === 'ollama') {
         return await handleOllamaChat(message, config);
       } else if (provider === 'external') {
-        return await handleExternalChat(message, config);
+        // Use modular provider system for external APIs
+        return await handleModularProvider(message, config);
       } else if (provider === 'local') {
         return await handleLocalChat(message, config);
       } else {
@@ -46,6 +48,40 @@ function setupAssistantHandlers(mainWindow) {
       return {
         success: false,
         error: error.message || 'Unknown error'
+      };
+    }
+  });
+
+  /**
+   * Get list of available providers
+   */
+  ipcMain.handle('assistant-get-providers', async () => {
+    try {
+      return {
+        success: true,
+        providers: providerRegistry.getAllProviders()
+      };
+    } catch (error) {
+      console.error('Error getting providers:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  /**
+   * Test a provider connection
+   */
+  ipcMain.handle('assistant-test-provider', async (event, { providerId, config }) => {
+    try {
+      const provider = providerRegistry.createProvider(providerId, config);
+      return await provider.testConnection();
+    } catch (error) {
+      console.error('Error testing provider:', error);
+      return {
+        success: false,
+        error: error.message
       };
     }
   });
@@ -142,91 +178,40 @@ async function handleOllamaChat(message, config) {
 }
 
 /**
- * Handle external API chat (OpenAI-compatible, Deepseek, etc.)
+ * Handle external API chat using modular provider system
  * @param {string} message - User message
- * @param {Object} config - Config with apiKey, externalProvider
+ * @param {Object} config - Config with providerId and provider-specific settings
  * @returns {Promise<Object>}
  */
-async function handleExternalChat(message, config) {
-  const provider = config.externalProvider || 'ChatGPT5';
-  const apiKey = config.apiKey;
-
-  if (!apiKey) {
-    return { success: false, error: 'API key is required for external providers' };
-  }
-
-  // Map provider to endpoint
-  let endpoint = 'https://api.openai.com/v1/chat/completions';
-  let model = 'gpt-4';
-
-  if (provider === 'Deepseek') {
-    endpoint = 'https://api.deepseek.com/v1/chat/completions';
-    model = 'deepseek-chat';
-  } else if (provider === 'ChatGPT5') {
-    endpoint = 'https://api.openai.com/v1/chat/completions';
-    model = 'gpt-4';
-  }
-  // 'Other' uses OpenAI endpoint by default
-
-  const messages = [];
+async function handleModularProvider(message, config) {
+  const providerId = config.providerId || 'openai';
   
-  // Add system prompt (use custom if provided, otherwise default)
-  const systemPrompt = config.systemPrompt || 'You are a helpful coding assistant.';
-  messages.push({ role: 'system', content: systemPrompt });
-  messages.push({ role: 'user', content: message });
-
-  const body = JSON.stringify({
-    model: model,
-    messages: messages,
-    temperature: 0.7
-  });
-
-  return new Promise((resolve) => {
-    const url = new URL(endpoint);
-    const options = {
-      hostname: url.hostname,
-      port: 443,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Length': Buffer.byteLength(body)
-      },
-      timeout: 60000
+  try {
+    // Create provider instance
+    const provider = providerRegistry.createProvider(providerId, config);
+    
+    // Validate configuration
+    const validation = provider.validateConfig(config);
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: 'Configuration error: ' + validation.errors.join(', ')
+      };
+    }
+    
+    // Send chat message
+    return await provider.chat(message, {
+      systemPrompt: config.systemPrompt,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens
+    });
+  } catch (error) {
+    console.error('Error with modular provider:', error);
+    return {
+      success: false,
+      error: error.message || 'Provider error'
     };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.choices && parsed.choices[0] && parsed.choices[0].message) {
-            resolve({ success: true, reply: parsed.choices[0].message.content });
-          } else if (parsed.error) {
-            resolve({ success: false, error: parsed.error.message || 'API error' });
-          } else {
-            resolve({ success: false, error: 'Invalid API response' });
-          }
-        } catch (err) {
-          resolve({ success: false, error: 'Failed to parse API response: ' + err.message });
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      resolve({ success: false, error: 'API request failed: ' + err.message });
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      resolve({ success: false, error: 'API request timed out' });
-    });
-
-    req.write(body);
-    req.end();
-  });
+  }
 }
 
 /**
