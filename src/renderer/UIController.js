@@ -876,6 +876,9 @@ class UIController {
     window.hideToolsPanel = () => this.hideToolsPanel();
   window.openAssistantPanel = () => this.openAssistantPanel();
 
+    // Visualyzer operations
+    window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
+
     // CTrace helpers
     const stripAnsi = (input) => {
       if (!input || typeof input !== 'string') return input;
@@ -1050,27 +1053,34 @@ class UIController {
     const toolsPanel = document.getElementById('toolsPanel');
     if (toolsPanel) {
       toolsPanel.classList.remove('active');
-      // Restore original tools panel content when hiding assistant
       setTimeout(() => {
-        if (!toolsPanel.classList.contains('active')) {
-          toolsPanel.style.display = 'none';
-          // If we injected assistant UI, restore original content
-          if (this._toolsPanelOriginal) {
-            try {
-              const header = toolsPanel.querySelector('.tools-panel-header');
-              const content = toolsPanel.querySelector('.tools-panel-content');
-              if (header && content) {
-                header.innerHTML = this._toolsPanelOriginal.headerHTML;
-                content.innerHTML = this._toolsPanelOriginal.contentHTML;
-              }
-            } catch (e) {
-              console.error('Failed to restore tools panel original content', e);
-            }
-            this._toolsPanelOriginal = null;
-          }
-        }
-      }, 300);
+        toolsPanel.style.display = 'none';
+      }, 200);
     }
+  }
+
+  toggleToolsPanel() {
+    const toolsPanel = document.getElementById('toolsPanel');
+    if (toolsPanel) {
+      if (toolsPanel.style.display === 'none' || !toolsPanel.classList.contains('active')) {
+        this.showToolsPanel();
+      } else {
+        this.hideToolsPanel();
+      }
+    }
+  }
+
+  /**
+   * Visualyzer panel management
+   */
+  toggleVisualyzerPanel() {
+    // Open visualyzer in a separate window
+    window.ipcRenderer.send('open-visualyzer');
+  }
+
+  closeVisualyzer() {
+    // This method is no longer needed since visualyzer is in separate window
+    // Kept for backward compatibility
   }
 
   toggleToolsPanel() {

@@ -71,6 +71,39 @@ function createWindow () {
 }
 
 /**
+ * Creates the Visualyzer window as a separate, movable window
+ * @returns {BrowserWindow} The created visualyzer window instance
+ */
+function createVisualizerWindow() {
+  const iconPath = path.join(__dirname, '../assets/ctrace.png');
+  const iconApp = nativeImage.createFromPath(iconPath);
+
+  const vizWin = new BrowserWindow({
+    width: 1000,
+    height: 700,
+    minWidth: 600,
+    minHeight: 500,
+    icon: iconApp,
+    title: 'CTrace Visualyzer',
+    backgroundColor: '#0d1117',
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      webSecurity: false
+    }
+  });
+
+  vizWin.loadFile('src/visualyzer.html');
+  vizWin.setMenuBarVisibility(false);
+  
+  // Open DevTools in development (optional)
+  // vizWin.webContents.openDevTools();
+  
+  return vizWin;
+}
+
+/**
  * Detects if WSL (Windows Subsystem for Linux) is available on Windows.
  * 
  * @async
@@ -455,6 +488,11 @@ function setupWindowControls(window) {
   // Window close
   ipcMain.on('window-close', () => {
     window.close();
+  });
+
+  // Open Visualyzer window
+  ipcMain.on('open-visualyzer', () => {
+    createVisualizerWindow();
   });
 
   // WSL status check handler

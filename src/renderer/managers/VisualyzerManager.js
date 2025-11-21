@@ -355,6 +355,10 @@ class VisualyzerManager {
     
     svg.call(zoom);
     
+    // Store zoom and svg references
+    this.zoom = zoom;
+    this.svg = svg;
+    
     // Create arrow markers for edges
     svg.append('defs').append('marker')
       .attr('id', 'arrowhead')
@@ -786,25 +790,25 @@ class VisualyzerManager {
    * Zoom controls
    */
   zoomIn() {
-    if (!this.svg) return;
-    this.svg.transition().call(
-      d3.zoom().scaleBy,
+    if (!this.svg || !this.zoom) return;
+    this.svg.transition().duration(300).call(
+      this.zoom.scaleBy,
       1.3
     );
   }
 
   zoomOut() {
-    if (!this.svg) return;
-    this.svg.transition().call(
-      d3.zoom().scaleBy,
+    if (!this.svg || !this.zoom) return;
+    this.svg.transition().duration(300).call(
+      this.zoom.scaleBy,
       0.7
     );
   }
 
   resetZoom() {
-    if (!this.svg) return;
-    this.svg.transition().call(
-      d3.zoom().transform,
+    if (!this.svg || !this.zoom) return;
+    this.svg.transition().duration(300).call(
+      this.zoom.transform,
       d3.zoomIdentity
     );
   }
@@ -818,6 +822,7 @@ class VisualyzerManager {
     this.parsedData = null;
     this.fullGraphData = null;
     this.svg = null;
+    this.zoom = null;
     this.expandedNodes.clear();
     this.visibleNodes.clear();
     this.visibleEdges.clear();
@@ -827,9 +832,16 @@ class VisualyzerManager {
       this.simulation = null;
     }
     
-    this.dropzone.style.display = 'flex';
-    this.controls.style.display = 'none';
-    this.info.style.display = 'none';
+    // Show dropzone again
+    if (this.dropzone) {
+      this.dropzone.style.display = 'flex';
+    }
+    
+    // Hide info panel
+    if (this.info) {
+      this.info.style.display = 'none';
+      this.info.classList.remove('error');
+    }
   }
 
   /**
