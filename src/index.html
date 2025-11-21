@@ -50,6 +50,10 @@
     // Since we're in a renderer process, we need to handle module loading differently
     // We'll load the UIController which will handle everything
     const UIController = require('./renderer/UIController');
+    
+    // Load syntax highlighter utility
+    const syntaxHighlighter = require('./renderer/utils/syntaxHighlighter');
+    window.syntaxHighlighter = syntaxHighlighter;
   </script>
   
   <!-- D3.js for interactive graph visualization -->
@@ -232,12 +236,16 @@
         <div class="menu-item" onclick="toggleToolsPanel()">
           Ctrace Tools
         </div>
+
+        <div class="menu-item" onclick="openAssistantPanel()">
+          Assistant
+        </div>
         
         <div class="menu-item" onclick="toggleVisualyzerPanel()">
           Visualyzer
         </div>
       </div>
-
+        
       <!-- Tabs -->
       <div class="tabs-container" id="tabs-container" style="display: none;">
         <!-- Tabs will be added dynamically -->

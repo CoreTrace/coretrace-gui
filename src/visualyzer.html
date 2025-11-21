@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CTrace Visualyzer</title>
+  <link rel="stylesheet" href="styles/visualyzer.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .visualyzer-header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .visualyzer-header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #c9d1d9;
+    }
+
+    .visualyzer-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .viz-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      padding: 8px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .viz-btn:hover {
+      background: #30363d;
+      border-color: #58a6ff;
+    }
+
+    .viz-btn:active {
+      transform: scale(0.95);
+    }
+
+    .visualyzer-main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .visualyzer-dropzone {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      cursor: pointer;
+      transition: all 0.2s;
+      z-index: 1;
+    }
+
+    .visualyzer-dropzone.dragover {
+      background: #161b22;
+      border: 2px dashed #58a6ff;
+    }
+
+    .visualyzer-dropzone svg {
+      color: #58a6ff;
+      margin-bottom: 16px;
+    }
+
+    .visualyzer-dropzone p {
+      font-size: 16px;
+      color: #c9d1d9;
+      margin: 4px 0;
+    }
+
+    .visualyzer-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #0d1117;
+      display: block;
+    }
+
+    .visualyzer-info {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(22, 27, 34, 0.95);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px 16px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+      max-width: 400px;
+    }
+
+    .visualyzer-info.active {
+      display: flex;
+    }
+
+    .visualyzer-filename {
+      font-weight: 600;
+      color: #58a6ff;
+      font-size: 14px;
+    }
+
+    .visualyzer-stats {
+      font-size: 12px;
+      color: #7d8590;
+    }
+
+    .visualyzer-info.error {
+      border-color: #f85149;
+    }
+
+    .visualyzer-info.error .visualyzer-stats {
+      color: #f85149;
+    }
+  </style>
+</head>
+<body>
+  <div class="visualyzer-header">
+    <h1>🔍 CTrace Visualyzer</h1>
+    <div class="visualyzer-controls" id="visualyzer-controls">
+      <button class="viz-btn" id="zoom-in-btn" title="Zoom In" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+        </svg>
+      </button>
+      <button class="viz-btn" id="zoom-out-btn" title="Zoom Out" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8z"/>
+        </svg>
+      </button>
+      <button class="viz-btn" id="reset-zoom-btn" title="Reset View" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 1 .908-.418A4 4 0 1 0 8 4v3.5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 .5-.5z"/>
+        </svg>
+      </button>
+      <button class="viz-btn" id="clear-btn" title="Clear Graph" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+        </svg>
+      </button>
+      <button class="viz-btn" id="open-file-btn" title="Open File">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+          <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="visualyzer-main">
+    <div class="visualyzer-dropzone" id="visualyzer-dropzone">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <p>Drag & Drop .dot file here</p>
+      <p style="font-size: 12px; color: #7d8590;">or click to browse</p>
+    </div>
+
+    <div class="visualyzer-canvas" id="visualyzer-canvas">
+      <!-- D3.js SVG graph will be rendered here -->
+    </div>
+
+    <div class="visualyzer-info" id="visualyzer-info">
+      <span class="visualyzer-filename" id="visualyzer-filename"></span>
+      <span class="visualyzer-stats" id="visualyzer-stats"></span>
+    </div>
+  </div>
+
+  <input type="file" id="visualyzer-file-input" accept=".dot,.gv" style="display: none;">
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    // Wait for D3 to load before initializing VisualyzerManager
+    window.addEventListener('load', () => {
+      const VisualyzerManager = require('./renderer/managers/VisualyzerManager');
+      
+      let visualyzerManager;
+
+      // Initialize after a short delay to ensure D3 is fully loaded
+      setTimeout(() => {
+        try {
+          visualyzerManager = new VisualyzerManager();
+
+          // Override the control visibility behavior since controls are in header
+          const originalRenderGraph = visualyzerManager.renderGraph.bind(visualyzerManager);
+          visualyzerManager.renderGraph = async function(dotContent, filename) {
+            await originalRenderGraph(dotContent, filename);
+            
+            // Show control buttons
+            showControlButtons();
+            
+            // Make sure canvas is visible
+            const canvas = document.getElementById('visualyzer-canvas');
+            if (canvas) {
+              canvas.style.display = 'block';
+              canvas.style.zIndex = '2';
+            }
+            
+            // Update info display
+            const info = document.getElementById('visualyzer-info');
+            if (info) {
+              info.style.display = 'flex';
+            }
+          };
+
+          // Setup button handlers
+          document.getElementById('zoom-in-btn').addEventListener('click', () => {
+            if (visualyzerManager) visualyzerManager.zoomIn();
+          });
+
+          document.getElementById('zoom-out-btn').addEventListener('click', () => {
+            if (visualyzerManager) visualyzerManager.zoomOut();
+          });
+
+          document.getElementById('reset-zoom-btn').addEventListener('click', () => {
+            if (visualyzerManager) visualyzerManager.resetZoom();
+          });
+
+          document.getElementById('clear-btn').addEventListener('click', () => {
+            if (visualyzerManager) {
+              visualyzerManager.clear();
+              hideControlButtons();
+            }
+          });
+
+          document.getElementById('open-file-btn').addEventListener('click', () => {
+            document.getElementById('visualyzer-file-input').click();
+          });
+
+          document.getElementById('visualyzer-file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              handleFile(file);
+            }
+          });
+
+          console.log('VisualyzerManager initialized successfully');
+        } catch (error) {
+          console.error('Error initializing VisualyzerManager:', error);
+        }
+      }, 100);
+
+      function showControlButtons() {
+        document.getElementById('zoom-in-btn').style.display = 'flex';
+        document.getElementById('zoom-out-btn').style.display = 'flex';
+        document.getElementById('reset-zoom-btn').style.display = 'flex';
+        document.getElementById('clear-btn').style.display = 'flex';
+      }
+
+      function hideControlButtons() {
+        document.getElementById('zoom-in-btn').style.display = 'none';
+        document.getElementById('zoom-out-btn').style.display = 'none';
+        document.getElementById('reset-zoom-btn').style.display = 'none';
+        document.getElementById('clear-btn').style.display = 'none';
+      }
+
+      async function handleFile(file) {
+        try {
+          const content = await readFile(file);
+          await visualyzerManager.renderGraph(content, file.name);
+        } catch (error) {
+          console.error('Error rendering graph:', error);
+          alert('Error rendering graph: ' + error.message);
+        }
+      }
+
+      function readFile(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(new Error('Failed to read file'));
+          reader.readAsText(file);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

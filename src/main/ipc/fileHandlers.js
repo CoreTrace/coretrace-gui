@@ -148,6 +148,23 @@ function setupFileHandlers(mainWindow) {
     return { success: false, canceled: true };
   });
 
+  // Select local LLM (GGUF) model file
+  ipcMain.handle('select-llm-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'GGUF / Model Files', extensions: ['gguf', 'bin', 'pt', 'ggml', 'onnx'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] };
+    }
+
+    return { success: false, canceled: true };
+  });
+
   // Save file
   ipcMain.handle('save-file', async (event, filePath, content) => {
     try {

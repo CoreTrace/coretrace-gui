@@ -148,6 +148,11 @@ class TabManager {
       // Update editor
       this.editorManager.setContent(newTab.content);
       
+      // Set file type for syntax highlighting
+      if (newTab.fileName) {
+        this.editorManager.setFileType(newTab.fileName);
+      }
+      
       // Update tab appearance
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');

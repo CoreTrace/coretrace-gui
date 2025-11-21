@@ -29,13 +29,13 @@ class NotificationManager {
     
     const notification = document.createElement('div');
     notification.innerHTML = `
-      <div style="position: fixed; top: 20px; right: 20px; background: ${colors[type]}; color: white; padding: 12px 16px; border-radius: 6px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease; max-width: 400px;">
+      <div style="position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: ${colors[type]}; color: white; padding: 10px 14px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: fadeIn 0.3s ease; max-width: 300px; font-size: 13px; text-align: center;">
         ${icons[type]} ${message}
       </div>
       <style>
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
       </style>
     `;

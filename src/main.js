@@ -17,6 +17,7 @@ const { spawn } = require('child_process');
 const { setupFileHandlers } = require('./main/ipc/fileHandlers');
 const { setupEditorHandlers } = require('./main/ipc/editorHandlers');
 const { setupCtraceHandlers } = require('./main/ipc/ctraceHandlers');
+const { setupAssistantHandlers } = require('./main/ipc/assistantHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -67,6 +68,39 @@ function createWindow () {
   });
   
   return win;
+}
+
+/**
+ * Creates the Visualyzer window as a separate, movable window
+ * @returns {BrowserWindow} The created visualyzer window instance
+ */
+function createVisualizerWindow() {
+  const iconPath = path.join(__dirname, '../assets/ctrace.png');
+  const iconApp = nativeImage.createFromPath(iconPath);
+
+  const vizWin = new BrowserWindow({
+    width: 1000,
+    height: 700,
+    minWidth: 600,
+    minHeight: 500,
+    icon: iconApp,
+    title: 'CTrace Visualyzer',
+    backgroundColor: '#0d1117',
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      webSecurity: false
+    }
+  });
+
+  vizWin.loadFile('src/visualyzer.html');
+  vizWin.setMenuBarVisibility(false);
+  
+  // Open DevTools in development (optional)
+  // vizWin.webContents.openDevTools();
+  
+  return vizWin;
 }
 
 /**
@@ -456,6 +490,11 @@ function setupWindowControls(window) {
     window.close();
   });
 
+  // Open Visualyzer window
+  ipcMain.on('open-visualyzer', () => {
+    createVisualizerWindow();
+  });
+
   // WSL status check handler
   ipcMain.on('check-wsl-status', async (event) => {
     if (os.platform() === 'win32') {
@@ -504,6 +543,7 @@ app.whenReady().then(async () => {
   setupFileHandlers(mainWindow);
   setupEditorHandlers();
   setupCtraceHandlers();
+  setupAssistantHandlers(mainWindow);
   setupWindowControls(mainWindow);
   
   // Check WSL status on Windows after window is ready

@@ -1,16 +1,26 @@
 /**
  * Editor Manager - Handles editor functionality like gutter, status bar, formatting
  */
+
+// Import syntax highlighter
+const { highlightCppSyntax, applySyntaxHighlight } = require('../utils/syntaxHighlighter');
+const { detectFileType } = require('../utils/fileTypeUtils');
+
 class EditorManager {
   constructor() {
     this.editor = document.getElementById('editor');
     this.gutter = document.getElementById('gutter');
     this.lineCounter = document.getElementById('lineCounter');
+    this.currentFileType = 'Plain Text';
+    this.highlightOverlay = null;
     this.init();
   }
 
   init() {
     if (!this.editor || !this.gutter || !this.lineCounter) return;
+
+    // Maintain visual selection when editor loses focus
+    this.setupPersistentSelection();
 
     // Make TAB key insert tab character in editor
     this.editor.addEventListener('keydown', (e) => {
@@ -214,6 +224,174 @@ class EditorManager {
       this.editor.value = content;
       this.updateAll();
     }
+  }
+
+  /**
+   * Set file type (placeholder for future use)
+   * @param {string} filename - The filename to detect type from
+   */
+  setFileType(filename) {
+    this.currentFileType = detectFileType(filename);
+    // Syntax highlighting disabled in editor (only works in assistant for now)
+  }
+
+  /**
+   * Setup persistent selection highlighting (like VS Code)
+   * Keeps selection visually highlighted even when editor loses focus
+   */
+  setupPersistentSelection() {
+    // Create a canvas to measure text and draw highlights
+    const editorArea = document.getElementById('editor-area');
+    if (!editorArea) return;
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = '12px JetBrains Mono, monospace';
+    
+    // Create highlight overlay that will contain absolute positioned divs
+    const highlightOverlay = document.createElement('div');
+    highlightOverlay.id = 'selection-highlight-overlay';
+    highlightOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    `;
+    
+    // Insert overlay after gutter but before editor
+    const gutter = document.getElementById('gutter');
+    if (gutter && gutter.nextSibling) {
+      editorArea.insertBefore(highlightOverlay, gutter.nextSibling);
+    } else {
+      editorArea.appendChild(highlightOverlay);
+    }
+    
+    // Make editor background transparent so overlay shows through
+    this.editor.style.position = 'relative';
+    this.editor.style.zIndex = '1';
+    this.editor.style.background = 'transparent';
+    
+    let savedSelection = null;
+    
+    const updateHighlight = () => {
+      highlightOverlay.innerHTML = '';
+      
+      if (!savedSelection || !this.editor.value) {
+        return;
+      }
+      
+      const { start, end } = savedSelection;
+      const text = this.editor.value;
+      const lines = text.split('\n');
+      
+      // Get editor dimensions and position
+      const editorRect = this.editor.getBoundingClientRect();
+      const editorAreaRect = editorArea.getBoundingClientRect();
+      const gutterWidth = 61; // gutter width + border
+      const lineHeight = 20;
+      const paddingLeft = 20;
+      const paddingTop = 20;
+      
+      // Calculate which lines contain the selection
+      let charCount = 0;
+      let startLine = -1, startCol = -1;
+      let endLine = -1, endCol = -1;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const lineLength = lines[i].length;
+        
+        if (startLine === -1 && charCount + lineLength >= start) {
+          startLine = i;
+          startCol = start - charCount;
+        }
+        
+        if (endLine === -1 && charCount + lineLength >= end) {
+          endLine = i;
+          endCol = end - charCount;
+          break;
+        }
+        
+        charCount += lineLength + 1; // +1 for newline
+      }
+      
+      if (startLine === -1 || endLine === -1) return;
+      
+      // Draw highlight rectangles for each line in selection
+      for (let line = startLine; line <= endLine; line++) {
+        const lineText = lines[line];
+        let colStart = (line === startLine) ? startCol : 0;
+        let colEnd = (line === endLine) ? endCol : lineText.length;
+        
+        // Measure text width to get exact position
+        const beforeText = lineText.substring(0, colStart);
+        const selectedText = lineText.substring(colStart, colEnd);
+        
+        const startX = ctx.measureText(beforeText).width;
+        const width = ctx.measureText(selectedText).width;
+        
+        // Create highlight div for this line
+        const highlight = document.createElement('div');
+        highlight.style.cssText = `
+          position: absolute;
+          left: ${gutterWidth + paddingLeft + startX}px;
+          top: ${paddingTop + (line * lineHeight) - this.editor.scrollTop}px;
+          width: ${width + 2}px;
+          height: ${lineHeight}px;
+          background: #3a3d41;
+          pointer-events: none;
+        `;
+        
+        highlightOverlay.appendChild(highlight);
+      }
+    };
+    
+    // Save selection when editor loses focus
+    this.editor.addEventListener('blur', () => {
+      const start = this.editor.selectionStart;
+      const end = this.editor.selectionEnd;
+      if (start !== end) {
+        savedSelection = { start, end };
+        updateHighlight();
+      }
+    });
+    
+    // Clear highlight when editor gains focus
+    this.editor.addEventListener('focus', () => {
+      if (savedSelection) {
+        // Restore the selection
+        this.editor.setSelectionRange(savedSelection.start, savedSelection.end);
+      }
+      savedSelection = null;
+      highlightOverlay.innerHTML = '';
+    });
+    
+    // Update highlight position on scroll
+    this.editor.addEventListener('scroll', () => {
+      if (savedSelection) {
+        updateHighlight();
+      }
+    });
+    
+    // Clear on text change
+    this.editor.addEventListener('input', () => {
+      if (savedSelection) {
+        savedSelection = null;
+        highlightOverlay.innerHTML = '';
+      }
+    });
+  }
+  
+  escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   /**
