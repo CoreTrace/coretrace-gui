@@ -3,7 +3,7 @@
  */
 
 // Import syntax highlighter
-const { highlightCppSyntax, applySyntaxHighlight } = require('../utils/syntaxHighlighter');
+const { highlightCppSyntax, applySyntaxHighlight, shouldHighlight } = require('../utils/syntaxHighlighter');
 const { detectFileType } = require('../utils/fileTypeUtils');
 
 class EditorManager {
@@ -12,7 +12,9 @@ class EditorManager {
     this.gutter = document.getElementById('gutter');
     this.lineCounter = document.getElementById('lineCounter');
     this.currentFileType = 'Plain Text';
-    this.highlightOverlay = null;
+    this.highlightEnabled = false;
+    this.updateTimer = null;
+    this.isUpdating = false;
     this.init();
   }
 
@@ -26,80 +28,129 @@ class EditorManager {
     this.editor.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
-        const start = this.editor.selectionStart;
-        const end = this.editor.selectionEnd;
-        // Insert tab character at cursor
-        this.editor.setRangeText('\t', start, end, 'end');
-        // Update gutter and status bar
-        this.updateGutter();
-        this.updateStatusBar();
+        document.execCommand('insertText', false, '\t');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        document.execCommand('insertLineBreak');
       }
     });
 
-    // Enhanced input handler
-    this.editor.addEventListener('input', () => {
-      this.updateAll();
+    // Enhanced input handler with debounced syntax highlighting
+    this.editor.addEventListener('input', (e) => {
+      if (!this.isUpdating) {
+        this.updateGutter();
+        this.updateStatusBar();
+        this.debouncedHighlightUpdate();
+      }
     });
 
-    this.editor.addEventListener('scroll', () => this.syncScroll());
-    this.editor.addEventListener('click', () => this.updateStatusBar());
-    this.editor.addEventListener('keyup', () => this.updateStatusBar());
-    this.editor.addEventListener('select', () => this.updateStatusBar());
-    
-    // Handle cursor movement with arrow keys, page up/down, etc.
-    this.editor.addEventListener('selectionchange', () => this.updateStatusBar());
+    this.editor.addEventListener('scroll', () => {
+      this.syncScroll();
+    });
+    this.editor.addEventListener('click', () => {
+      this.updateStatusBar();
+      this.updateGutter();
+    });
+    this.editor.addEventListener('keyup', () => {
+      this.updateStatusBar();
+      this.updateGutter();
+    });
     
     // Initialize
-    this.updateAll();
+    this.updateGutter();
+    this.updateStatusBar();
   }
 
   /**
-   * Enhanced gutter line numbers with proper formatting (like VS Code)
+   * Save current cursor position
    */
-  updateGutter() {
-    if (!this.editor || !this.gutter) return;
+  saveCursorPosition() {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return null;
     
-    const lines = this.editor.value.split('\n').length;
-    const maxDigits = Math.max(2, lines.toString().length);
-    let gutterContent = '';
+    const range = selection.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(this.editor);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
     
-    // Create line numbers vertically (one per line)
-    for (let i = 1; i <= lines; i++) {
-      gutterContent += i.toString().padStart(maxDigits, ' ') + '\n';
+    return preCaretRange.toString().length;
+  }
+
+  /**
+   * Restore cursor position
+   */
+  restoreCursorPosition(offset) {
+    if (offset === null || offset === undefined) return;
+    
+    const selection = window.getSelection();
+    const range = document.createRange();
+    
+    let currentOffset = 0;
+    const walker = document.createTreeWalker(
+      this.editor,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const nodeLength = node.textContent.length;
+      if (currentOffset + nodeLength >= offset) {
+        const targetOffset = offset - currentOffset;
+        range.setStart(node, Math.min(targetOffset, node.textContent.length));
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      currentOffset += nodeLength;
     }
     
-    // Remove the last newline and set content
-    this.gutter.textContent = gutterContent.slice(0, -1);
-    
-    // Update gutter width based on content
-    const charWidth = 8; // Approximate character width in monospace font
-    this.gutter.style.width = Math.max(60, (maxDigits + 2) * charWidth) + 'px';
+    // If we didn't find the position, place cursor at end
+    if (this.editor.lastChild) {
+      range.selectNodeContents(this.editor);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
   }
 
   /**
-   * Enhanced status bar with cursor position tracking
+   * Update syntax highlighting with debouncing
    */
-  updateStatusBar() {
-    if (!this.editor || !this.lineCounter) return;
+  debouncedHighlightUpdate() {
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+    }
+    this.updateTimer = setTimeout(() => {
+      this.updateSyntaxHighlight();
+    }, 150);
+  }
+
+  /**
+   * Update syntax highlighting directly in editor
+   */
+  updateSyntaxHighlight() {
+    if (!this.editor || this.isUpdating) return;
+
+    this.isUpdating = true;
+    const savedOffset = this.saveCursorPosition();
     
-    const value = this.editor.value;
-    const selectionStart = this.editor.selectionStart;
-    const selectionEnd = this.editor.selectionEnd;
+    // Get plain text content
+    const text = this.getContent();
     
-    // Calculate line and column correctly
-    const beforeCursor = value.substring(0, selectionStart);
-    const lines = beforeCursor.split('\n');
-    const line = lines.length;
-    const col = lines[lines.length - 1].length + 1;
-    
-    if (selectionStart !== selectionEnd) {
-      const selectedLength = Math.abs(selectionEnd - selectionStart);
-      const selectedText = value.substring(Math.min(selectionStart, selectionEnd), Math.max(selectionStart, selectionEnd));
-      const selectedLines = selectedText.split('\n').length - 1;
-      this.lineCounter.textContent = `Ln ${line}, Col ${col} (${selectedLength} chars, ${selectedLines + 1} lines selected)`;
+    // Apply syntax highlighting if enabled
+    if (this.highlightEnabled && shouldHighlight(this.currentFileType)) {
+      const highlighted = applySyntaxHighlight(text, this.currentFileType);
+      this.editor.innerHTML = highlighted;
     } else {
-      this.lineCounter.textContent = `Ln ${line}, Col ${col}`;
+      this.editor.textContent = text;
     }
+    
+    // Restore cursor position
+    this.restoreCursorPosition(savedOffset);
+    this.isUpdating = false;
   }
 
   /**
@@ -112,11 +163,99 @@ class EditorManager {
   }
 
   /**
-   * Update all editor components
+   * Enhanced gutter line numbers with proper formatting (like VS Code)
    */
-  updateAll() {
-    this.updateGutter();
-    this.updateStatusBar();
+  updateGutter() {
+    if (!this.editor || !this.gutter) return;
+    
+    const text = this.getContent();
+    // Count lines properly - if text ends with newline, don't count it as extra line
+    let lines = 1;
+    if (text) {
+      const splitLines = text.split('\n');
+      lines = splitLines.length;
+      // If last element is empty string (trailing newline), don't count it
+      if (splitLines[splitLines.length - 1] === '') {
+        lines = Math.max(1, lines - 1);
+      }
+    }
+    
+    // Get current line number for highlighting
+    const currentLine = this.getCurrentLineNumber();
+    
+    const maxDigits = Math.max(2, lines.toString().length);
+    
+    // Clear gutter and rebuild with styled line numbers
+    this.gutter.innerHTML = '';
+    
+    // Create line numbers with current line highlighted
+    for (let i = 1; i <= lines; i++) {
+      const lineSpan = document.createElement('div');
+      lineSpan.textContent = i.toString().padStart(maxDigits, ' ');
+      lineSpan.style.lineHeight = '20px';
+      
+      if (i === currentLine) {
+        lineSpan.style.color = '#f0f6fc';
+        lineSpan.style.fontWeight = 'bold';
+        lineSpan.style.fontSize = '13px';
+      } else {
+        lineSpan.style.color = '#6e7681';
+        lineSpan.style.fontSize = '12px';
+      }
+      
+      this.gutter.appendChild(lineSpan);
+    }
+    
+    // Update gutter width based on content
+    const charWidth = 8; // Approximate character width in monospace font
+    this.gutter.style.width = Math.max(60, (maxDigits + 2) * charWidth) + 'px';
+  }
+  
+  /**
+   * Get current line number where cursor is
+   */
+  getCurrentLineNumber() {
+    if (!this.editor) return 1;
+    
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return 1;
+    
+    const range = selection.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(this.editor);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    
+    const textBeforeCursor = preCaretRange.toString();
+    const lines = textBeforeCursor.split('\n');
+    return lines.length;
+  }
+
+  /**
+   * Enhanced status bar with cursor position tracking
+   */
+  updateStatusBar() {
+    if (!this.editor || !this.lineCounter) return;
+    
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    
+    const range = selection.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(this.editor);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    
+    const textBeforeCursor = preCaretRange.toString();
+    const lines = textBeforeCursor.split('\n');
+    const line = lines.length;
+    const col = lines[lines.length - 1].length + 1;
+    
+    if (range.toString().length > 0) {
+      const selectedText = range.toString();
+      const selectedLines = selectedText.split('\n').length;
+      this.lineCounter.textContent = `Ln ${line}, Col ${col} (${selectedText.length} chars, ${selectedLines} lines selected)`;
+    } else {
+      this.lineCounter.textContent = `Ln ${line}, Col ${col}`;
+    }
   }
 
   /**
@@ -131,7 +270,8 @@ class EditorManager {
       return;
     }
     
-    const lines = this.editor.value.split('\n');
+    const text = this.getContent();
+    const lines = text.split('\n');
     console.log('Total lines in editor:', lines.length);
     
     if (lineNumber > lines.length) {
@@ -139,33 +279,55 @@ class EditorManager {
       return;
     }
     
+    // Calculate character position
     let position = 0;
-    
-    // Calculate character position of the target line
     for (let i = 0; i < lineNumber - 1 && i < lines.length; i++) {
-      position += lines[i].length + 1; // +1 for newline character
+      position += lines[i].length + 1; // +1 for newline
     }
     
     console.log('Calculated position:', position);
     
-    // Set cursor position
+    // Create range and set cursor
+    const range = document.createRange();
+    const sel = window.getSelection();
+    
+    let currentPos = 0;
+    let targetNode = null;
+    let targetOffset = 0;
+    
+    // Find the text node and offset
+    const walker = document.createTreeWalker(
+      this.editor,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const nodeLength = node.textContent.length;
+      if (currentPos + nodeLength >= position) {
+        targetNode = node;
+        targetOffset = position - currentPos;
+        break;
+      }
+      currentPos += nodeLength;
+    }
+    
+    if (targetNode) {
+      range.setStart(targetNode, targetOffset);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      
+      // Scroll into view
+      const lineHeight = 20;
+      const targetScrollTop = Math.max(0, (lineNumber - 10) * lineHeight);
+      this.editor.scrollTop = targetScrollTop;
+    }
+    
     this.editor.focus();
-    this.editor.setSelectionRange(position, position);
-    
-    // Calculate and set scroll position
-    const lineHeight = 20; // Approximate line height
-    const targetScrollTop = Math.max(0, (lineNumber - 10) * lineHeight);
-    
-    this.editor.scrollTop = targetScrollTop;
-    
-    // Update status bar
     this.updateStatusBar();
-    
-    // Highlight the line temporarily
-    const endOfLinePosition = position + (lines[lineNumber - 1] ? lines[lineNumber - 1].length : 0);
-    setTimeout(() => {
-      this.editor.setSelectionRange(position, endOfLinePosition);
-    }, 50);
     
     console.log('Successfully jumped to line:', lineNumber);
   }
@@ -176,7 +338,8 @@ class EditorManager {
   formatCode() {
     if (!this.editor) return;
     
-    const lines = this.editor.value.split('\n');
+    const text = this.getContent();
+    const lines = text.split('\n');
     let indentLevel = 0;
     const formatted = lines.map(line => {
       const trimmed = line.trim();
@@ -192,8 +355,7 @@ class EditorManager {
       }
     }).join('\n');
     
-    this.editor.value = formatted;
-    this.updateAll();
+    this.setContent(formatted);
     
     return formatted;
   }
@@ -212,7 +374,9 @@ class EditorManager {
    * @returns {string} - Current editor content
    */
   getContent() {
-    return this.editor ? this.editor.value : '';
+    if (!this.editor) return '';
+    // Replace <br> tags with newlines and get text content
+    return this.editor.textContent || '';
   }
 
   /**
@@ -221,8 +385,10 @@ class EditorManager {
    */
   setContent(content) {
     if (this.editor) {
-      this.editor.value = content;
-      this.updateAll();
+      this.editor.textContent = content;
+      this.updateGutter();
+      this.updateStatusBar();
+      this.updateSyntaxHighlight();
     }
   }
 
@@ -232,7 +398,12 @@ class EditorManager {
    */
   setFileType(filename) {
     this.currentFileType = detectFileType(filename);
-    // Syntax highlighting disabled in editor (only works in assistant for now)
+    
+    // Enable syntax highlighting for C/C++ files
+    this.highlightEnabled = shouldHighlight(this.currentFileType);
+    
+    // Update highlighting immediately
+    this.updateSyntaxHighlight();
   }
 
   /**

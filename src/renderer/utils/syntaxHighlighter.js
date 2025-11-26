@@ -1,6 +1,6 @@
 /**
- * Syntax Highlighter for C/C++ code
- * Provides syntax highlighting with proper color coding for different token types
+ * Scalable Syntax Highlighter for C/C++ code
+ * Provides real-time syntax highlighting with optimized performance for large files
  */
 
 /**
@@ -53,14 +53,12 @@ function escapeHtml(text) {
 }
 
 /**
- * Highlight C/C++ syntax
- * @param {string} code - The code to highlight
- * @returns {string} - HTML with syntax highlighting
+ * Tokenize C/C++ code for highlighting
+ * @param {string} code - The code to tokenize
+ * @returns {Array} - Array of tokens with type and value
  */
-function highlightCppSyntax(code) {
-  if (!code) return '';
-  
-  let result = '';
+function tokenizeCpp(code) {
+  const tokens = [];
   let i = 0;
   
   while (i < code.length) {
@@ -74,7 +72,7 @@ function highlightCppSyntax(code) {
         comment += code[i];
         i++;
       }
-      result += `<span style="color:#6a9955">${escapeHtml(comment)}</span>`;
+      tokens.push({ type: 'comment', value: comment });
       continue;
     }
     
@@ -90,7 +88,7 @@ function highlightCppSyntax(code) {
         comment += '*/';
         i += 2;
       }
-      result += `<span style="color:#6a9955">${escapeHtml(comment)}</span>`;
+      tokens.push({ type: 'comment', value: comment });
       continue;
     }
     
@@ -112,7 +110,7 @@ function highlightCppSyntax(code) {
           i++;
         }
       }
-      result += `<span style="color:#ce9178">${escapeHtml(str)}</span>`;
+      tokens.push({ type: 'string', value: str });
       continue;
     }
     
@@ -120,17 +118,16 @@ function highlightCppSyntax(code) {
     if (char === '#') {
       let directive = '#';
       i++;
-      // Get the directive name
       while (i < code.length && /[a-zA-Z_]/.test(code[i])) {
         directive += code[i];
         i++;
       }
-      result += `<span style="color:#c586c0">${escapeHtml(directive)}</span>`;
+      tokens.push({ type: 'preprocessor', value: directive });
       
-      // For #include, highlight the file path
+      // For #include, capture the file path
       if (directive.includes('include')) {
         while (i < code.length && /\s/.test(code[i])) {
-          result += code[i];
+          tokens.push({ type: 'whitespace', value: code[i] });
           i++;
         }
         if (i < code.length && (code[i] === '<' || code[i] === '"')) {
@@ -145,7 +142,7 @@ function highlightCppSyntax(code) {
             path += code[i];
             i++;
           }
-          result += `<span style="color:#ce9178">${escapeHtml(path)}</span>`;
+          tokens.push({ type: 'string', value: path });
         }
       }
       continue;
@@ -159,19 +156,18 @@ function highlightCppSyntax(code) {
         num += code[i];
         i++;
       }
-      // Check for number suffixes (f, L, u, etc.)
+      // Check for number suffixes
       if (i < code.length && /[fFlLuU]/.test(code[i])) {
         num += code[i];
         i++;
       }
-      result += `<span style="color:#b5cea8">${escapeHtml(num)}</span>`;
+      tokens.push({ type: 'number', value: num });
       continue;
     }
     
-    // Identifiers, keywords, types, and function names
+    // Identifiers, keywords, types
     if (/[a-zA-Z_]/.test(char)) {
       let word = '';
-      let startIdx = i;
       while (i < code.length && /[a-zA-Z0-9_]/.test(code[i])) {
         word += code[i];
         i++;
@@ -184,34 +180,73 @@ function highlightCppSyntax(code) {
       const isFunction = code[j] === '(';
       
       if (C_CPP_KEYWORDS.has(word)) {
-        result += `<span style="color:#569cd6">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'keyword', value: word });
       } else if (C_CPP_TYPES.has(word)) {
-        result += `<span style="color:#4ec9b0">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'type', value: word });
       } else if (isFunction) {
-        result += `<span style="color:#dcdcaa">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'function', value: word });
       } else if (/^[A-Z_][A-Z0-9_]*$/.test(word)) {
-        // MACRO/CONSTANT (all caps)
-        result += `<span style="color:#4fc1ff">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'constant', value: word });
       } else {
-        // Regular identifier/variable
-        result += `<span style="color:#9cdcfe">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'identifier', value: word });
       }
       continue;
     }
     
-    // Operators and special characters
+    // Operators
     if ('+-*/%=<>!&|^~?:'.includes(char)) {
-      result += `<span style="color:#d4d4d4">${escapeHtml(char)}</span>`;
+      tokens.push({ type: 'operator', value: char });
       i++;
       continue;
     }
     
-    // Everything else (whitespace, brackets, etc.)
-    result += escapeHtml(char);
+    // Everything else
+    tokens.push({ type: 'plain', value: char });
     i++;
   }
   
-  return result;
+  return tokens;
+}
+
+/**
+ * Convert tokens to HTML
+ * @param {Array} tokens - Array of tokens
+ * @returns {string} - HTML string
+ */
+function tokensToHtml(tokens) {
+  const colorMap = {
+    comment: '#6a9955',
+    string: '#ce9178',
+    preprocessor: '#c586c0',
+    number: '#b5cea8',
+    keyword: '#569cd6',
+    type: '#4ec9b0',
+    function: '#dcdcaa',
+    constant: '#4fc1ff',
+    identifier: '#9cdcfe',
+    operator: '#d4d4d4',
+    plain: '#d4d4d4'
+  };
+  
+  return tokens.map(token => {
+    const color = colorMap[token.type] || colorMap.plain;
+    if (token.type === 'whitespace' || token.type === 'plain') {
+      return escapeHtml(token.value);
+    }
+    return `<span style="color:${color}">${escapeHtml(token.value)}</span>`;
+  }).join('');
+}
+
+/**
+ * Highlight C/C++ syntax (optimized version)
+ * @param {string} code - The code to highlight
+ * @returns {string} - HTML with syntax highlighting
+ */
+function highlightCppSyntax(code) {
+  if (!code) return '';
+  
+  const tokens = tokenizeCpp(code);
+  return tokensToHtml(tokens);
 }
 
 /**
@@ -232,12 +267,24 @@ function applySyntaxHighlight(code, fileType) {
   return escapeHtml(code);
 }
 
+/**
+ * Check if file type should have syntax highlighting
+ * @param {string} fileType - The file type to check
+ * @returns {boolean} - True if highlighting should be applied
+ */
+function shouldHighlight(fileType) {
+  return fileType === 'C' || fileType === 'C++' || fileType === 'C/C++ Header';
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     highlightCppSyntax,
     applySyntaxHighlight,
-    escapeHtml
+    shouldHighlight,
+    escapeHtml,
+    tokenizeCpp,
+    tokensToHtml
   };
 }
 
@@ -246,6 +293,9 @@ if (typeof window !== 'undefined') {
   window.syntaxHighlighter = {
     highlightCppSyntax,
     applySyntaxHighlight,
-    escapeHtml
+    shouldHighlight,
+    escapeHtml,
+    tokenizeCpp,
+    tokensToHtml
   };
 }
