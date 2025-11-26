@@ -1,47 +1,47 @@
 /**
- * Syntax Highlighter for C/C++ code
- * Provides syntax highlighting with proper color coding for different token types
+ * Scalable Syntax Highlighter for C/C++ code
+ * Provides real-time syntax highlighting with optimized performance for large files
  */
 
-/**
- * C/C++ Keywords
- */
-const C_CPP_KEYWORDS = new Set([
-  // C keywords
-  'auto', 'break', 'case', 'char', 'const', 'continue', 'default', 'do',
-  'double', 'else', 'enum', 'extern', 'float', 'for', 'goto', 'if',
-  'int', 'long', 'register', 'return', 'short', 'signed', 'sizeof', 'static',
-  'struct', 'switch', 'typedef', 'union', 'unsigned', 'void', 'volatile', 'while',
-  // C++ keywords
-  'alignas', 'alignof', 'and', 'and_eq', 'asm', 'atomic_cancel', 'atomic_commit',
-  'atomic_noexcept', 'bitand', 'bitor', 'bool', 'catch', 'char8_t', 'char16_t',
-  'char32_t', 'class', 'compl', 'concept', 'const_cast', 'consteval', 'constexpr',
-  'constinit', 'co_await', 'co_return', 'co_yield', 'decltype', 'delete', 'dynamic_cast',
-  'explicit', 'export', 'false', 'friend', 'inline', 'mutable', 'namespace', 'new',
-  'noexcept', 'not', 'not_eq', 'nullptr', 'operator', 'or', 'or_eq', 'private',
-  'protected', 'public', 'reflexpr', 'reinterpret_cast', 'requires', 'static_assert',
-  'static_cast', 'synchronized', 'template', 'this', 'thread_local', 'throw', 'true',
-  'try', 'typeid', 'typename', 'using', 'virtual', 'wchar_t', 'xor', 'xor_eq',
-  // Common preprocessor
-  'define', 'undef', 'include', 'ifdef', 'ifndef', 'if', 'elif', 'else', 'endif',
-  'error', 'pragma', 'line'
-]);
+// Load syntax configuration
+const syntaxConfig = require('./syntax-config.json');
+
+// Cache for language configurations
+let languageCache = {};
 
 /**
- * C/C++ Types (commonly used standard library types)
+ * Get language configuration
+ * @param {string} fileType - The file type
+ * @returns {Object} - Language configuration
  */
-const C_CPP_TYPES = new Set([
-  'int8_t', 'int16_t', 'int32_t', 'int64_t',
-  'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t',
-  'size_t', 'ssize_t', 'ptrdiff_t', 'intptr_t', 'uintptr_t',
-  'string', 'vector', 'map', 'set', 'list', 'deque', 'queue',
-  'stack', 'array', 'unordered_map', 'unordered_set',
-  'shared_ptr', 'unique_ptr', 'weak_ptr', 'optional', 'variant',
-  'FILE', 'nullptr_t', 'std', 'iostream', 'fstream'
-]);
+function getLanguageConfig(fileType) {
+  // Check cache first
+  if (languageCache[fileType]) {
+    return languageCache[fileType];
+  }
+  
+  // Find matching language config
+  for (const [langKey, config] of Object.entries(syntaxConfig)) {
+    if (config.fileTypes.includes(fileType)) {
+      // Convert arrays to Sets for faster lookup
+      const processedConfig = {
+        ...config,
+        keywords: new Set(config.keywords),
+        types: new Set(config.types),
+        preprocessor: new Set(config.preprocessor)
+      };
+      languageCache[fileType] = processedConfig;
+      return processedConfig;
+    }
+  }
+  
+  return null;
+}
 
 /**
  * Escape HTML special characters
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML string
  */
 function escapeHtml(text) {
   return text
@@ -53,14 +53,13 @@ function escapeHtml(text) {
 }
 
 /**
- * Highlight C/C++ syntax
- * @param {string} code - The code to highlight
- * @returns {string} - HTML with syntax highlighting
+ * Tokenize C/C++ code for highlighting
+ * @param {string} code - The code to tokenize
+ * @param {Object} langConfig - Language configuration
+ * @returns {Array} - Array of tokens with type and value
  */
-function highlightCppSyntax(code) {
-  if (!code) return '';
-  
-  let result = '';
+function tokenizeCpp(code, langConfig) {
+  const tokens = [];
   let i = 0;
   
   while (i < code.length) {
@@ -74,7 +73,7 @@ function highlightCppSyntax(code) {
         comment += code[i];
         i++;
       }
-      result += `<span style="color:#6a9955">${escapeHtml(comment)}</span>`;
+      tokens.push({ type: 'comment', value: comment });
       continue;
     }
     
@@ -90,7 +89,7 @@ function highlightCppSyntax(code) {
         comment += '*/';
         i += 2;
       }
-      result += `<span style="color:#6a9955">${escapeHtml(comment)}</span>`;
+      tokens.push({ type: 'comment', value: comment });
       continue;
     }
     
@@ -112,7 +111,7 @@ function highlightCppSyntax(code) {
           i++;
         }
       }
-      result += `<span style="color:#ce9178">${escapeHtml(str)}</span>`;
+      tokens.push({ type: 'string', value: str });
       continue;
     }
     
@@ -120,17 +119,16 @@ function highlightCppSyntax(code) {
     if (char === '#') {
       let directive = '#';
       i++;
-      // Get the directive name
       while (i < code.length && /[a-zA-Z_]/.test(code[i])) {
         directive += code[i];
         i++;
       }
-      result += `<span style="color:#c586c0">${escapeHtml(directive)}</span>`;
+      tokens.push({ type: 'preprocessor', value: directive });
       
-      // For #include, highlight the file path
+      // For #include, capture the file path
       if (directive.includes('include')) {
         while (i < code.length && /\s/.test(code[i])) {
-          result += code[i];
+          tokens.push({ type: 'whitespace', value: code[i] });
           i++;
         }
         if (i < code.length && (code[i] === '<' || code[i] === '"')) {
@@ -145,7 +143,7 @@ function highlightCppSyntax(code) {
             path += code[i];
             i++;
           }
-          result += `<span style="color:#ce9178">${escapeHtml(path)}</span>`;
+          tokens.push({ type: 'string', value: path });
         }
       }
       continue;
@@ -159,19 +157,18 @@ function highlightCppSyntax(code) {
         num += code[i];
         i++;
       }
-      // Check for number suffixes (f, L, u, etc.)
+      // Check for number suffixes
       if (i < code.length && /[fFlLuU]/.test(code[i])) {
         num += code[i];
         i++;
       }
-      result += `<span style="color:#b5cea8">${escapeHtml(num)}</span>`;
+      tokens.push({ type: 'number', value: num });
       continue;
     }
     
-    // Identifiers, keywords, types, and function names
+    // Identifiers, keywords, types
     if (/[a-zA-Z_]/.test(char)) {
       let word = '';
-      let startIdx = i;
       while (i < code.length && /[a-zA-Z0-9_]/.test(code[i])) {
         word += code[i];
         i++;
@@ -183,35 +180,67 @@ function highlightCppSyntax(code) {
       
       const isFunction = code[j] === '(';
       
-      if (C_CPP_KEYWORDS.has(word)) {
-        result += `<span style="color:#569cd6">${escapeHtml(word)}</span>`;
-      } else if (C_CPP_TYPES.has(word)) {
-        result += `<span style="color:#4ec9b0">${escapeHtml(word)}</span>`;
+      if (langConfig.keywords.has(word)) {
+        tokens.push({ type: 'keyword', value: word });
+      } else if (langConfig.types.has(word)) {
+        tokens.push({ type: 'type', value: word });
       } else if (isFunction) {
-        result += `<span style="color:#dcdcaa">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'function', value: word });
       } else if (/^[A-Z_][A-Z0-9_]*$/.test(word)) {
-        // MACRO/CONSTANT (all caps)
-        result += `<span style="color:#4fc1ff">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'constant', value: word });
       } else {
-        // Regular identifier/variable
-        result += `<span style="color:#9cdcfe">${escapeHtml(word)}</span>`;
+        tokens.push({ type: 'identifier', value: word });
       }
       continue;
     }
     
-    // Operators and special characters
+    // Operators
     if ('+-*/%=<>!&|^~?:'.includes(char)) {
-      result += `<span style="color:#d4d4d4">${escapeHtml(char)}</span>`;
+      tokens.push({ type: 'operator', value: char });
       i++;
       continue;
     }
     
-    // Everything else (whitespace, brackets, etc.)
-    result += escapeHtml(char);
+    // Everything else
+    tokens.push({ type: 'plain', value: char });
     i++;
   }
   
-  return result;
+  return tokens;
+}
+
+/**
+ * Convert tokens to HTML
+ * @param {Array} tokens - Array of tokens
+ * @param {Object} langConfig - Language configuration
+ * @returns {string} - HTML string
+ */
+function tokensToHtml(tokens, langConfig) {
+  const colorMap = langConfig.colors;
+  
+  return tokens.map(token => {
+    const color = colorMap[token.type] || colorMap.plain;
+    if (token.type === 'whitespace' || token.type === 'plain') {
+      return escapeHtml(token.value);
+    }
+    return `<span style="color:${color}">${escapeHtml(token.value)}</span>`;
+  }).join('');
+}
+
+/**
+ * Highlight C/C++ syntax (optimized version)
+ * @param {string} code - The code to highlight
+ * @param {string} fileType - The file type
+ * @returns {string} - HTML with syntax highlighting
+ */
+function highlightCppSyntax(code, fileType) {
+  if (!code) return '';
+  
+  const langConfig = getLanguageConfig(fileType);
+  if (!langConfig) return escapeHtml(code);
+  
+  const tokens = tokenizeCpp(code, langConfig);
+  return tokensToHtml(tokens, langConfig);
 }
 
 /**
@@ -223,13 +252,24 @@ function highlightCppSyntax(code) {
 function applySyntaxHighlight(code, fileType) {
   if (!code) return '';
   
-  // Only apply highlighting for C/C++ files
-  if (fileType === 'C' || fileType === 'C++' || fileType === 'C/C++ Header') {
-    return highlightCppSyntax(code);
+  const langConfig = getLanguageConfig(fileType);
+  
+  // Apply highlighting if language config found
+  if (langConfig) {
+    return highlightCppSyntax(code, fileType);
   }
   
   // For other file types, return escaped HTML
   return escapeHtml(code);
+}
+
+/**
+ * Check if file type should have syntax highlighting
+ * @param {string} fileType - The file type to check
+ * @returns {boolean} - True if highlighting should be applied
+ */
+function shouldHighlight(fileType) {
+  return getLanguageConfig(fileType) !== null;
 }
 
 // Export for use in other modules
@@ -237,7 +277,10 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     highlightCppSyntax,
     applySyntaxHighlight,
-    escapeHtml
+    shouldHighlight,
+    escapeHtml,
+    tokenizeCpp,
+    tokensToHtml
   };
 }
 
@@ -246,6 +289,9 @@ if (typeof window !== 'undefined') {
   window.syntaxHighlighter = {
     highlightCppSyntax,
     applySyntaxHighlight,
-    escapeHtml
+    shouldHighlight,
+    escapeHtml,
+    tokenizeCpp,
+    tokensToHtml
   };
 }

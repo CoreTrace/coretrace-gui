@@ -1,0 +1,80 @@
+{
+  "c": {
+    "name": "C",
+    "fileTypes": ["C", "C/C++ Header"],
+    "keywords": [
+      "auto", "break", "case", "char", "const", "continue", "default", "do",
+      "double", "else", "enum", "extern", "float", "for", "goto", "if",
+      "int", "long", "register", "return", "short", "signed", "sizeof", "static",
+      "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"
+    ],
+    "types": [
+      "int8_t", "int16_t", "int32_t", "int64_t",
+      "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+      "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t",
+      "FILE", "nullptr_t"
+    ],
+    "preprocessor": [
+      "define", "undef", "include", "ifdef", "ifndef", "if", "elif", "else", "endif",
+      "error", "pragma", "line"
+    ],
+    "colors": {
+      "comment": "#6a9955",
+      "string": "#ce9178",
+      "preprocessor": "#c586c0",
+      "number": "#b5cea8",
+      "keyword": "#569cd6",
+      "type": "#4ec9b0",
+      "function": "#dcdcaa",
+      "constant": "#4fc1ff",
+      "identifier": "#9cdcfe",
+      "operator": "#d4d4d4",
+      "plain": "#d4d4d4"
+    }
+  },
+  "cpp": {
+    "name": "C++",
+    "fileTypes": ["C++", "C/C++ Header"],
+    "keywords": [
+      "auto", "break", "case", "char", "const", "continue", "default", "do",
+      "double", "else", "enum", "extern", "float", "for", "goto", "if",
+      "int", "long", "register", "return", "short", "signed", "sizeof", "static",
+      "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while",
+      "alignas", "alignof", "and", "and_eq", "asm", "atomic_cancel", "atomic_commit",
+      "atomic_noexcept", "bitand", "bitor", "bool", "catch", "char8_t", "char16_t",
+      "char32_t", "class", "compl", "concept", "const_cast", "consteval", "constexpr",
+      "constinit", "co_await", "co_return", "co_yield", "decltype", "delete", "dynamic_cast",
+      "explicit", "export", "false", "friend", "inline", "mutable", "namespace", "new",
+      "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private",
+      "protected", "public", "reflexpr", "reinterpret_cast", "requires", "static_assert",
+      "static_cast", "synchronized", "template", "this", "thread_local", "throw", "true",
+      "try", "typeid", "typename", "using", "virtual", "wchar_t", "xor", "xor_eq"
+    ],
+    "types": [
+      "int8_t", "int16_t", "int32_t", "int64_t",
+      "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+      "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t",
+      "string", "vector", "map", "set", "list", "deque", "queue",
+      "stack", "array", "unordered_map", "unordered_set",
+      "shared_ptr", "unique_ptr", "weak_ptr", "optional", "variant",
+      "FILE", "nullptr_t", "std", "iostream", "fstream"
+    ],
+    "preprocessor": [
+      "define", "undef", "include", "ifdef", "ifndef", "if", "elif", "else", "endif",
+      "error", "pragma", "line"
+    ],
+    "colors": {
+      "comment": "#6a9955",
+      "string": "#ce9178",
+      "preprocessor": "#c586c0",
+      "number": "#b5cea8",
+      "keyword": "#569cd6",
+      "type": "#4ec9b0",
+      "function": "#dcdcaa",
+      "constant": "#4fc1ff",
+      "identifier": "#9cdcfe",
+      "operator": "#d4d4d4",
+      "plain": "#d4d4d4"
+    }
+  }
+}

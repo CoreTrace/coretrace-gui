@@ -819,6 +819,14 @@ class UIController {
     };
 
     window.hideAllMenus = () => this.hideAllMenus();
+    
+    // Add click handlers to all dropdown items to stop propagation
+    document.querySelectorAll('.dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // hideAllMenus will be called by the onclick handler in HTML
+      });
+    });
   }
 
   hideAllMenus() {
@@ -1265,10 +1273,10 @@ class UIController {
       const codeBlocks = [];
       let codeIndex = 0;
       
-      // Extract and store original code blocks
+      // Extract and store original code blocks with language info
       const textWithPlaceholders = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
         const trimmedCode = code.trim();
-        codeBlocks.push(trimmedCode);
+        codeBlocks.push({ code: trimmedCode, lang: lang || '' });
         return `__CODE_BLOCK_${codeIndex++}__`;
       });
       
@@ -1280,18 +1288,36 @@ class UIController {
       // Replace code block placeholders with rendered HTML
       codeIndex = 0;
       html = html.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
-        const originalCode = codeBlocks[parseInt(index)];
+        const blockData = codeBlocks[parseInt(index)];
+        const originalCode = blockData.code;
+        const lang = blockData.lang.toLowerCase();
+        
         // Store original code in base64 to avoid any escaping issues
         const base64Code = btoa(unescape(encodeURIComponent(originalCode)));
-        const escapedForDisplay = originalCode.replace(/&/g, '&amp;')
-                                               .replace(/</g, '&lt;')
-                                               .replace(/>/g, '&gt;');
+        
+        // Apply syntax highlighting for C/C++ code
+        let displayCode;
+        if (lang === 'c' || lang === 'cpp' || lang === 'c++') {
+          // Use syntax highlighter
+          const { applySyntaxHighlight } = window.syntaxHighlighter;
+          const fileType = lang === 'c' ? 'C' : 'C++';
+          displayCode = applySyntaxHighlight(originalCode, fileType);
+        } else {
+          // No highlighting - just escape HTML
+          displayCode = originalCode.replace(/&/g, '&amp;')
+                                     .replace(/</g, '&lt;')
+                                     .replace(/>/g, '&gt;');
+        }
+        
+        const langLabel = lang ? `<span style="position:absolute; top:8px; left:12px; font-size:10px; color:#7d8590; text-transform:uppercase; font-weight:600;">${lang}</span>` : '';
+        
         return `<div style="position:relative; margin:8px 0;">
+          ${langLabel}
           <div style="position:absolute; top:8px; right:8px; display:flex; gap:6px;">
             <button class="code-copy-btn" data-code-b64="${base64Code}" style="padding:4px 8px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:4px; cursor:pointer; font-size:11px;">Copy</button>
             <button class="code-replace-btn" data-code-b64="${base64Code}" style="padding:4px 8px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:4px; cursor:pointer; font-size:11px;">Replace</button>
           </div>
-          <pre style="background:#0d1117; padding:12px; border-radius:6px; overflow-x:auto;"><code style="font-family:Consolas,Monaco,'Courier New',monospace; font-size:13px; color:#c9d1d9;">${escapedForDisplay}</code></pre>
+          <pre style="background:#0d1117; padding:12px; border-radius:6px; overflow-x:auto; padding-top:${lang ? '28px' : '12px'};"><code style="font-family:Consolas,Monaco,'Courier New',monospace; font-size:13px; color:#c9d1d9;">${displayCode}</code></pre>
         </div>`;
       });
       

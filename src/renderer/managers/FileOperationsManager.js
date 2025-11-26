@@ -191,8 +191,10 @@ class FileOperationsManager {
           this.notificationManager.showError('Failed to save file: ' + result.error);
         }
       } else {
-        // Save as new file
-        return await this.saveAsFile();
+        // Save as new file (untitled -> actual file)
+        const result = await this.saveAsFile();
+        // Syntax highlighting is already updated in saveAsFile
+        return result;
       }
     } catch (error) {
       this.notificationManager.showError('Error saving file: ' + error.message);
@@ -216,6 +218,10 @@ class FileOperationsManager {
       if (result.success) {
         this.tabManager.updateTabFile(this.tabManager.activeTabId, result.filePath, result.fileName);
         this.tabManager.markTabClean(this.tabManager.activeTabId);
+        
+        // Update file type and trigger syntax highlighting
+        this.tabManager.editorManager.setFileType(result.fileName);
+        
         this.notificationManager.showSuccess(`File saved as "${result.fileName}"`);
         return result;
       } else if (!result.canceled) {

@@ -36,13 +36,16 @@
  * @version 1.0.0
  */
 
-const { app, BrowserWindow, nativeImage } = require('electron');
+const { app, BrowserWindow, nativeImage, dialog, shell } = require('electron');
 const path = require('path');
+const os = require('os');
+const { spawn } = require('child_process');
 
 // Import IPC handlers
 const { setupFileHandlers } = require('./main/ipc/fileHandlers');
 const { setupEditorHandlers } = require('./main/ipc/editorHandlers');
 const { setupCtraceHandlers } = require('./main/ipc/ctraceHandlers');
+const { setupAssistantHandlers } = require('./main/ipc/assistantHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -64,19 +67,414 @@ function createWindow () {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 800,
+    minHeight: 600,
     icon: iconApp,
+    frame: false,               // Custom frame for consistency across platforms
+    titleBarStyle: 'hidden',    // Hide native title bar
+    titleBarOverlay: {
+      color: '#0d1117',         // Match VS Code dark theme
+      symbolColor: '#ffffff',
+      height: 30
+    },
     webPreferences: {
       nodeIntegration: true,      // allows require() in renderer
-      contextIsolation: false     // disables security isolation
+      contextIsolation: false,    // disables security isolation
+      webSecurity: false          // For loading local fonts
     }
   });
 
   win.loadFile('src/index.html');
-  // Remove default menu bar
-  win.setMenuBarVisibility(false);
-  win.removeMenu();
+  
+  // Custom window controls for frameless window
+  win.on('maximize', () => {
+    win.webContents.send('window-maximized', true);
+  });
+  
+  win.on('unmaximize', () => {
+    win.webContents.send('window-maximized', false);
+  });
   
   return win;
+}
+
+/**
+ * Creates the Visualyzer window as a separate, movable window
+ * @returns {BrowserWindow} The created visualyzer window instance
+ */
+function createVisualizerWindow() {
+  const iconPath = path.join(__dirname, '../assets/ctrace.png');
+  const iconApp = nativeImage.createFromPath(iconPath);
+
+  const vizWin = new BrowserWindow({
+    width: 1000,
+    height: 700,
+    minWidth: 600,
+    minHeight: 500,
+    icon: iconApp,
+    title: 'CTrace Visualyzer',
+    backgroundColor: '#0d1117',
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      webSecurity: false
+    }
+  });
+
+  vizWin.loadFile('src/visualyzer.html');
+  vizWin.setMenuBarVisibility(false);
+  
+  // Open DevTools in development (optional)
+  // vizWin.webContents.openDevTools();
+  
+  return vizWin;
+}
+
+/**
+ * Detects if WSL (Windows Subsystem for Linux) is available on Windows.
+ * 
+ * @async
+ * @function detectWSL
+ * @returns {Promise&lt;boolean>} True if WSL is available, false otherwise
+ */
+/**
+ * Comprehensive WSL status detection
+ * @returns {Promise&lt;Object>} Object with available, hasDistros, error, and distributions properties
+ */
+async function detectWSLStatus() {
+  return new Promise((resolve) => {
+    if (os.platform() !== 'win32') {
+      resolve({ available: true, hasDistros: true, distributions: ['linux'] });
+      return;
+    }
+
+    // First check if WSL command exists
+    const statusChild = spawn('wsl', ['--status'], { stdio: 'pipe', windowsHide: true });
+    
+    let statusOutput = '';
+    let statusError = '';
+    
+    statusChild.stdout.on('data', (data) => {
+      statusOutput += data.toString();
+    });
+    
+    statusChild.stderr.on('data', (data) => {
+      statusError += data.toString();
+    });
+    
+    statusChild.on('error', () => {
+      resolve({ available: false, hasDistros: false, error: 'WSL is not installed' });
+    });
+    
+    statusChild.on('close', (statusCode) => {
+      if (statusCode !== 0) {
+        resolve({ available: false, hasDistros: false, error: 'WSL is not available' });
+        return;
+      }
+      
+      // WSL exists, now check for installed distributions
+      const listChild = spawn('wsl', ['--list', '--quiet'], { stdio: 'pipe', windowsHide: true });
+      
+      let listOutput = '';
+      
+      listChild.stdout.on('data', (data) => {
+        listOutput += data.toString();
+      });
+      
+      listChild.on('error', () => {
+        resolve({ available: true, hasDistros: false, error: 'Cannot check WSL distributions' });
+      });
+      
+      listChild.on('close', (listCode) => {
+        const distributions = listOutput.trim().split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0 &amp;&amp; !line.includes('Windows Subsystem'))
+          .filter(line => !line.toLowerCase().includes('docker'));
+        
+        const hasDistros = distributions.length > 0 &amp;&amp; !statusError.includes('no installed distributions');
+        
+        if (!hasDistros) {
+          const errorMsg = statusError.includes('no installed distributions') || listOutput.includes('no installed distributions')
+            ? 'WSL is installed but no Linux distributions are available'
+            : 'No WSL distributions found';
+          resolve({ available: true, hasDistros: false, error: errorMsg, distributions: [] });
+        } else {
+          resolve({ available: true, hasDistros: true, distributions });
+        }
+      });
+      
+      // Timeout for list command
+      setTimeout(() => {
+        listChild.kill();
+        resolve({ available: true, hasDistros: false, error: 'Timeout checking WSL distributions', distributions: [] });
+      }, 10000);
+    });
+    
+    // Timeout for status command
+    setTimeout(() => {
+      statusChild.kill();
+      resolve({ available: false, hasDistros: false, error: 'Timeout checking WSL status' });
+    }, 10000);
+  });
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @returns {Promise&lt;boolean>}
+ */
+async function detectWSL() {
+  const status = await detectWSLStatus();
+  return status.available &amp;&amp; status.hasDistros;
+}
+
+/**
+ * Shows enhanced WSL installation dialog based on WSL status
+ * @param {Object} wslStatus - Current WSL status
+ * @returns {Promise&lt;boolean>} True if user wants to proceed, false otherwise
+ */
+async function showWSLSetupDialog(wslStatus) {
+  if (!wslStatus.available) {
+    // WSL not installed at all
+    const result = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'WSL Required for CTrace',
+      message: 'Windows Subsystem for Linux (WSL) is required for CTrace functionality.',
+      detail: 'CTrace uses a Linux binary that requires WSL to run on Windows.\n\nWould you like to install WSL now? This requires administrator privileges and a system restart.',
+      buttons: ['Install WSL Automatically', 'Install Manually', 'Continue Without WSL', 'Exit Application'],
+      defaultId: 0,
+      cancelId: 3,
+      icon: nativeImage.createFromPath(path.join(__dirname, '../assets/ctrace.png'))
+    });
+    
+    if (result.response === 0) {
+      // Automatic installation
+      await installWSLAutomatically();
+      return true;
+    } else if (result.response === 1) {
+      // Manual installation
+      showManualInstallationInstructions();
+      return true;
+    } else if (result.response === 2) {
+      // Continue without WSL
+      await showLimitedFunctionalityDialog();
+      return true;
+    } else {
+      // Exit application
+      return false;
+    }
+    
+  } else if (!wslStatus.hasDistros) {
+    // WSL installed but no distributions
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: 'WSL Distribution Required',
+      message: 'WSL is installed but no Linux distributions are available.',
+      detail: 'CTrace requires a Linux distribution to run. Ubuntu is recommended.\n\nWould you like to install Ubuntu now?',
+      buttons: ['Install Ubuntu', 'Choose Different Distribution', 'Continue Without CTrace', 'Exit Application'],
+      defaultId: 0,
+      cancelId: 3,
+      icon: nativeImage.createFromPath(path.join(__dirname, '../assets/ctrace.png'))
+    });
+    
+    if (result.response === 0) {
+      // Install Ubuntu
+      await installWSLDistribution('Ubuntu');
+      return true;
+    } else if (result.response === 1) {
+      // Show distribution options
+      await showDistributionOptions();
+      return true;
+    } else if (result.response === 2) {
+      // Continue without CTrace
+      await showLimitedFunctionalityDialog();
+      return true;
+    } else {
+      // Exit application
+      return false;
+    }
+  }
+  
+  return true; // WSL is fully available
+}
+
+/**
+ * Install WSL automatically using PowerShell
+ */
+async function installWSLAutomatically() {
+  try {
+    console.log('Attempting to install WSL automatically...');
+    
+    // Show progress dialog
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Installing WSL',
+      message: 'Installing Windows Subsystem for Linux...',
+      detail: 'This may take a few minutes. Please wait and follow any prompts that appear.',
+      buttons: ['OK']
+    });
+    
+    // Run WSL installation command with Ubuntu
+    const child = spawn('powershell', [
+      '-Command',
+      'Start-Process',
+      'powershell',
+      '-ArgumentList', '"wsl --install Ubuntu"',
+      '-Verb', 'RunAs'
+    ], { stdio: 'pipe', windowsHide: true });
+    
+    child.on('error', (err) => {
+      console.error('Failed to start WSL installation:', err);
+      dialog.showErrorBox(
+        'Installation Failed',
+        `Failed to start WSL installation: ${err.message}\n\nPlease try manual installation instead.`
+      );
+    });
+    
+    child.on('close', (code) => {
+      console.log(`WSL installation completed with code: ${code}`);
+      
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'WSL Installation Started',
+        message: 'WSL and Ubuntu installation has been initiated!',
+        detail: 'Please follow any prompts that appear. You may need to:\n\n1. Allow administrator access\n2. Restart your computer when prompted\n3. Complete Ubuntu setup (username/password)\n4. Restart this application\n\nThe installation will continue in the background.',
+        buttons: ['Got it!']
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error during WSL installation:', error);
+    dialog.showErrorBox(
+      'Installation Error',
+      `Failed to install WSL: ${error.message}\n\nPlease try manual installation instead.`
+    );
+  }
+}
+
+/**
+ * Show manual installation instructions
+ */
+function showManualInstallationInstructions() {
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Manual WSL Installation',
+    message: 'Manual Installation Instructions',
+    detail: `To install WSL manually:\n\n` +
+           `1. Open PowerShell as Administrator\n` +
+           `   (Right-click Start → "Windows PowerShell (Admin)")\n\n` +
+           `2. Run: wsl --install Ubuntu\n\n` +
+           `3. Restart your computer when prompted\n\n` +
+           `4. Complete Ubuntu setup (create username/password)\n\n` +
+           `5. Restart this application\n\n` +
+           `For more details, the Microsoft documentation will open next.`,
+    buttons: ['Open Documentation', 'Got it']
+  }).then((result) => {
+    if (result.response === 0) {
+      shell.openExternal('https://docs.microsoft.com/en-us/windows/wsl/install');
+    }
+  });
+}
+
+/**
+ * Install a specific WSL distribution
+ */
+async function installWSLDistribution(distroName) {
+  try {
+    console.log(`Installing WSL distribution: ${distroName}`);
+    
+    const child = spawn('powershell', [
+      '-Command',
+      'Start-Process',
+      'powershell',
+      '-ArgumentList', `"wsl --install ${distroName}"`,
+      '-Verb', 'RunAs'
+    ], { stdio: 'ignore', windowsHide: true });
+    
+    child.on('error', (err) => {
+      console.error(`Failed to install ${distroName}:`, err);
+      dialog.showErrorBox(
+        'Installation Failed',
+        `Failed to install ${distroName}. Please try installing manually:\n\n1. Open PowerShell as Administrator\n2. Run: wsl --install ${distroName}`
+      );
+    });
+    
+    child.on('close', (code) => {
+      console.log(`${distroName} installation completed with code: ${code}`);
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Distribution Installation',
+        message: `${distroName} installation has been initiated.`,
+        detail: 'Please follow the setup instructions when they appear. After setup is complete, restart this application to use CTrace.'
+      });
+    });
+    
+  } catch (error) {
+    console.error(`Error installing ${distroName}:`, error);
+    dialog.showErrorBox(
+      'Installation Error',
+      `Failed to install ${distroName}: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Show available WSL distributions for installation
+ */
+async function showDistributionOptions() {
+  try {
+    // Get list of available distributions
+    const child = spawn('wsl', ['--list', '--online'], { stdio: 'pipe', windowsHide: true });
+    
+    let output = '';
+    
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    child.on('close', (code) => {
+      if (code === 0 &amp;&amp; output) {
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Available WSL Distributions',
+          message: 'Available Linux Distributions',
+          detail: `${output}\n\nRecommended: Ubuntu\n\nTo install a distribution:\n1. Open PowerShell\n2. Run: wsl --install &lt;DistributionName>\n3. Follow setup instructions`,
+          buttons: ['Install Ubuntu', 'Install Manually', 'Cancel']
+        }).then((result) => {
+          if (result.response === 0) {
+            installWSLDistribution('Ubuntu');
+          } else if (result.response === 1) {
+            showManualInstallationInstructions();
+          }
+        });
+      } else {
+        dialog.showErrorBox(
+          'Cannot List Distributions',
+          'Unable to get list of available distributions. Please install Ubuntu manually with:\n\nwsl --install Ubuntu'
+        );
+      }
+    });
+    
+  } catch (error) {
+    dialog.showErrorBox(
+      'Error',
+      `Failed to get distribution list: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Show limited functionality dialog
+ */
+async function showLimitedFunctionalityDialog() {
+  await dialog.showMessageBox({
+    type: 'info',
+    title: 'Limited Functionality - CTrace GUI',
+    message: 'Running without WSL',
+    detail: 'CTrace GUI will run with limited functionality:\n\n✅ File editing and management\n✅ Syntax highlighting\n✅ Project navigation\n❌ CTrace static analysis\n❌ Code analysis reports\n\nTo enable full functionality, install WSL and restart the application.',
+    buttons: ['Continue'],
+    defaultId: 0
+  });
 }
 
 //hot reload
@@ -89,16 +487,124 @@ try {
   console.log("electron-reload not active");
 }
 
+/**
+ * Sets up IPC handlers for custom window controls.
+ * 
+ * This function handles window minimize, maximize, and close operations
+ * for the custom frameless window title bar.
+ * 
+ * @function setupWindowControls
+ * @param {BrowserWindow} window - The main window instance
+ */
+function setupWindowControls(window) {
+  const { ipcMain } = require('electron');
+  
+  // Window minimize
+  ipcMain.on('window-minimize', () => {
+    window.minimize();
+  });
+  
+  // Window maximize/restore toggle
+  ipcMain.on('window-maximize-toggle', () => {
+    if (window.isMaximized()) {
+      window.unmaximize();
+    } else {
+      window.maximize();
+    }
+  });
+  
+  // Window close
+  ipcMain.on('window-close', () => {
+    window.close();
+  });
+
+  // Open Visualyzer window
+  ipcMain.on('open-visualyzer', () => {
+    createVisualizerWindow();
+  });
+
+  // WSL status check handler
+  ipcMain.on('check-wsl-status', async (event) => {
+    if (os.platform() === 'win32') {
+      const wslStatus = await detectWSLStatus();
+      event.sender.send('wsl-status', wslStatus);
+    } else {
+      event.sender.send('wsl-status', {
+        available: true,
+        hasDistros: true,
+        platform: os.platform()
+      });
+    }
+  });
+  
+  // Handle manual WSL installation request from renderer
+  ipcMain.on('install-wsl', async () => {
+    if (os.platform() === 'win32') {
+      await installWSLAutomatically();
+    }
+  });
+  
+  // Handle WSL distribution installation request
+  ipcMain.on('install-wsl-distro', async (event, distroName) => {
+    if (os.platform() === 'win32') {
+      await installWSLDistribution(distroName || 'Ubuntu');
+    }
+  });
+  
+  // Handle WSL setup dialog request
+  ipcMain.on('show-wsl-setup', async () => {
+    if (os.platform() === 'win32') {
+      const wslStatus = await detectWSLStatus();
+      await showWSLSetupDialog(wslStatus);
+    }
+  });
+}
+
 // Global reference to main window
 let mainWindow;
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Create window first
   mainWindow = createWindow();
   
   // Setup IPC handlers
   setupFileHandlers(mainWindow);
   setupEditorHandlers();
   setupCtraceHandlers();
+  setupAssistantHandlers(mainWindow);
+  setupWindowControls(mainWindow);
+  
+  // Check WSL status on Windows after window is ready
+  if (os.platform() === 'win32') {
+    // Give the window time to load, then check WSL
+    setTimeout(async () => {
+      const wslStatus = await detectWSLStatus();
+      console.log('WSL Status detected:', wslStatus);
+      
+      // Send status to renderer
+      if (mainWindow &amp;&amp; mainWindow.webContents) {
+        mainWindow.webContents.send('wsl-status', wslStatus);
+      }
+      
+      // Show setup dialog if WSL is not fully ready
+      if (!wslStatus.available || !wslStatus.hasDistros) {
+        const shouldContinue = await showWSLSetupDialog(wslStatus);
+        if (!shouldContinue) {
+          app.quit();
+          return;
+        }
+      }
+    }, 2000);
+  } else {
+    // On non-Windows platforms, send ready status
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.send('wsl-status', {
+        available: true,
+        hasDistros: true,
+        platform: os.platform()
+      });
+    });
+  }
 });
 </code></pre>
         </article>
@@ -110,13 +616,13 @@ app.whenReady().then(() => {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="EditorManager.html">EditorManager</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li></ul><h3>Global</h3><ul><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AnthropicProvider.html">AnthropicProvider</a></li><li><a href="BaseProvider.html">BaseProvider</a></li><li><a href="DeepseekProvider.html">DeepseekProvider</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="GenericOpenAIProvider.html">GenericOpenAIProvider</a></li><li><a href="GroqProvider.html">GroqProvider</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="OpenAIProvider.html">OpenAIProvider</a></li><li><a href="PerplexityProvider.html">PerplexityProvider</a></li><li><a href="ProviderRegistry.html">ProviderRegistry</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li><li><a href="VisualyzerManager.html">VisualyzerManager</a></li></ul><h3>Global</h3><ul><li><a href="global.html#applySyntaxHighlight">applySyntaxHighlight</a></li><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#checkWSLAvailability">checkWSLAvailability</a></li><li><a href="global.html#createVisualizerWindow">createVisualizerWindow</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#detectWSL">detectWSL</a></li><li><a href="global.html#detectWSLStatus">detectWSLStatus</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#getLanguageConfig">getLanguageConfig</a></li><li><a href="global.html#handleLocalChat">handleLocalChat</a></li><li><a href="global.html#handleModularProvider">handleModularProvider</a></li><li><a href="global.html#handleOllamaChat">handleOllamaChat</a></li><li><a href="global.html#highlightCppSyntax">highlightCppSyntax</a></li><li><a href="global.html#installWSLAutomatically">installWSLAutomatically</a></li><li><a href="global.html#installWSLDistribution">installWSLDistribution</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupAssistantHandlers">setupAssistantHandlers</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#setupWindowControls">setupWindowControls</a></li><li><a href="global.html#shouldHighlight">shouldHighlight</a></li><li><a href="global.html#showDistributionOptions">showDistributionOptions</a></li><li><a href="global.html#showLimitedFunctionalityDialog">showLimitedFunctionalityDialog</a></li><li><a href="global.html#showManualInstallationInstructions">showManualInstallationInstructions</a></li><li><a href="global.html#showWSLSetupDialog">showWSLSetupDialog</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#testEmojiSupport">testEmojiSupport</a></li><li><a href="global.html#testWSLAndCTrace">testWSLAndCTrace</a></li><li><a href="global.html#tokenizeCpp">tokenizeCpp</a></li><li><a href="global.html#tokensToHtml">tokensToHtml</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Sun Oct 05 2025 07:55:41 GMT+0200 (Central European Summer Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Wed Nov 26 2025 15:15:41 GMT+0900 (Korean Standard Time)
 </footer>
 
 <script> prettyPrint(); </script>

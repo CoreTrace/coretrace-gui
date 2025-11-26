@@ -225,7 +225,7 @@ the interaction between different managers and handles global UI state.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line204">line 204</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line546">line 546</a>
     </li></ul></dd>
     
 
@@ -250,6 +250,203 @@ the interaction between different managers and handles global UI state.</p>
 
 
 
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="ensureAssistantConfigured"><span class="type-signature">(async) </span>ensureAssistantConfigured<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Ensure assistant is configured; if not, show guided setup modal</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1635">line 1635</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="getAssistantConfig"><span class="type-signature"></span>getAssistantConfig<span class="signature">()</span><span class="type-signature"> &rarr; {Object|null}</span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Retrieve assistant configuration from localStorage</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1607">line 1607</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+
+
+<dl>
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+|
+
+<span class="param-type">null</span>
+
+
+    </dd>
+</dl>
+
+    
 
 
 
@@ -385,7 +582,7 @@ the interaction between different managers and handles global UI state.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line725">line 725</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1941">line 1941</a>
     </li></ul></dd>
     
 
@@ -473,7 +670,7 @@ the interaction between different managers and handles global UI state.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line713">line 713</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1929">line 1929</a>
     </li></ul></dd>
     
 
@@ -564,7 +761,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line163">line 163</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line183">line 183</a>
     </li></ul></dd>
     
 
@@ -634,6 +831,231 @@ communicates with the main process to get an updated file tree structure.</p>
     
 
     
+    <h4 class="name" id="renderAssistantUI"><span class="type-signature"></span>renderAssistantUI<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Inject a simple chat UI into the tools panel (like VSCode Copilot sidebar)</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1121">line 1121</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="saveAssistantConfig"><span class="type-signature"></span>saveAssistantConfig<span class="signature">(cfg)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Save assistant configuration to localStorage</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>cfg</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1622">line 1622</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="setActiveActivity"><span class="type-signature"></span>setActiveActivity<span class="signature">()</span><span class="type-signature"></span></h4>
     
 
@@ -686,7 +1108,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line615">line 615</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line988">line 988</a>
     </li></ul></dd>
     
 
@@ -774,7 +1196,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line230">line 230</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line572">line 572</a>
     </li></ul></dd>
     
 
@@ -862,7 +1284,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line135">line 135</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line155">line 155</a>
     </li></ul></dd>
     
 
@@ -950,7 +1372,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line188">line 188</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line208">line 208</a>
     </li></ul></dd>
     
 
@@ -1038,7 +1460,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line258">line 258</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line600">line 600</a>
     </li></ul></dd>
     
 
@@ -1126,7 +1548,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line461">line 461</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line803">line 803</a>
     </li></ul></dd>
     
 
@@ -1214,7 +1636,7 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line384">line 384</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line726">line 726</a>
     </li></ul></dd>
     
 
@@ -1302,7 +1724,184 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line495">line 495</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line845">line 845</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="setupWSLStatusListener"><span class="type-signature"></span>setupWSLStatusListener<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Setup WSL status listener to handle WSL availability updates</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line224">line 224</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="showAssistantSetupGuide"><span class="type-signature"></span>showAssistantSetupGuide<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Render a first-time setup modal for Assistant configuration.
+Calls the done callback with saved config or null if cancelled.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1648">line 1648</a>
     </li></ul></dd>
     
 
@@ -1390,7 +1989,144 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line678">line 678</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1051">line 1051</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="showWSLSetupDialog"><span class="type-signature"></span>showWSLSetupDialog<span class="signature">(wslStatus)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Show WSL setup dialog with detailed instructions</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>wslStatus</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>Current WSL status</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line326">line 326</a>
     </li></ul></dd>
     
 
@@ -1478,7 +2214,232 @@ communicates with the main process to get an updated file tree structure.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line660">line 660</a>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1033">line 1033</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="toggleVisualyzerPanel"><span class="type-signature"></span>toggleVisualyzerPanel<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Visualyzer panel management</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line1084">line 1084</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="updateWSLStatusIndicator"><span class="type-signature"></span>updateWSLStatusIndicator<span class="signature">(wslStatus)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Update WSL status indicator in the UI</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>wslStatus</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>WSL status object with available, hasDistros, and error properties</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="renderer_UIController.js.html">renderer/UIController.js</a>, <a href="renderer_UIController.js.html#line270">line 270</a>
     </li></ul></dd>
     
 
@@ -1524,13 +2485,13 @@ communicates with the main process to get an updated file tree structure.</p>
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="EditorManager.html">EditorManager</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li></ul><h3>Global</h3><ul><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AnthropicProvider.html">AnthropicProvider</a></li><li><a href="BaseProvider.html">BaseProvider</a></li><li><a href="DeepseekProvider.html">DeepseekProvider</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="GenericOpenAIProvider.html">GenericOpenAIProvider</a></li><li><a href="GroqProvider.html">GroqProvider</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="OpenAIProvider.html">OpenAIProvider</a></li><li><a href="PerplexityProvider.html">PerplexityProvider</a></li><li><a href="ProviderRegistry.html">ProviderRegistry</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li><li><a href="VisualyzerManager.html">VisualyzerManager</a></li></ul><h3>Global</h3><ul><li><a href="global.html#applySyntaxHighlight">applySyntaxHighlight</a></li><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#checkWSLAvailability">checkWSLAvailability</a></li><li><a href="global.html#createVisualizerWindow">createVisualizerWindow</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#detectWSL">detectWSL</a></li><li><a href="global.html#detectWSLStatus">detectWSLStatus</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#getLanguageConfig">getLanguageConfig</a></li><li><a href="global.html#handleLocalChat">handleLocalChat</a></li><li><a href="global.html#handleModularProvider">handleModularProvider</a></li><li><a href="global.html#handleOllamaChat">handleOllamaChat</a></li><li><a href="global.html#highlightCppSyntax">highlightCppSyntax</a></li><li><a href="global.html#installWSLAutomatically">installWSLAutomatically</a></li><li><a href="global.html#installWSLDistribution">installWSLDistribution</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupAssistantHandlers">setupAssistantHandlers</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#setupWindowControls">setupWindowControls</a></li><li><a href="global.html#shouldHighlight">shouldHighlight</a></li><li><a href="global.html#showDistributionOptions">showDistributionOptions</a></li><li><a href="global.html#showLimitedFunctionalityDialog">showLimitedFunctionalityDialog</a></li><li><a href="global.html#showManualInstallationInstructions">showManualInstallationInstructions</a></li><li><a href="global.html#showWSLSetupDialog">showWSLSetupDialog</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#testEmojiSupport">testEmojiSupport</a></li><li><a href="global.html#testWSLAndCTrace">testWSLAndCTrace</a></li><li><a href="global.html#tokenizeCpp">tokenizeCpp</a></li><li><a href="global.html#tokensToHtml">tokensToHtml</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Sun Oct 05 2025 07:55:42 GMT+0200 (Central European Summer Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Wed Nov 26 2025 15:15:41 GMT+0900 (Korean Standard Time)
 </footer>
 
 <script> prettyPrint(); </script>

@@ -33,53 +33,152 @@ const fs = require('fs').promises;
 const os = require('os');
 
 /**
+ * Check if WSL is available and has distributions installed
+ * @returns {Promise&lt;Object>} WSL status object with properties: available (boolean), hasDistros (boolean), error (string)
+ */
+async function checkWSLAvailability() {
+  return new Promise((resolve) => {
+    // First check if WSL command exists
+    const statusChild = spawn('wsl', ['--status'], { stdio: 'pipe' });
+    
+    let statusOutput = '';
+    let statusError = '';
+    
+    statusChild.stdout.on('data', (data) => {
+      statusOutput += data.toString();
+    });
+    
+    statusChild.stderr.on('data', (data) => {
+      statusError += data.toString();
+    });
+    
+    statusChild.on('error', () => {
+      resolve({ available: false, hasDistros: false, error: 'WSL is not installed' });
+    });
+    
+    statusChild.on('close', (statusCode) => {
+      if (statusCode !== 0) {
+        resolve({ available: false, hasDistros: false, error: 'WSL is not available' });
+        return;
+      }
+      
+      // WSL exists, now check for installed distributions
+      const listChild = spawn('wsl', ['--list', '--quiet'], { stdio: 'pipe' });
+      
+      let listOutput = '';
+      
+      listChild.stdout.on('data', (data) => {
+        listOutput += data.toString();
+      });
+      
+      listChild.on('error', () => {
+        resolve({ available: true, hasDistros: false, error: 'Cannot check WSL distributions' });
+      });
+      
+      listChild.on('close', (listCode) => {
+        const distributions = listOutput.trim().split('\n').filter(line => line.trim().length > 0);
+        const hasDistros = distributions.length > 0 &amp;&amp; !listOutput.includes('no installed distributions');
+        
+        if (!hasDistros) {
+          const errorMsg = statusError.includes('no installed distributions') || listOutput.includes('no installed distributions')
+            ? 'WSL is installed but no Linux distributions are available'
+            : 'No WSL distributions found';
+          resolve({ available: true, hasDistros: false, error: errorMsg });
+        } else {
+          resolve({ available: true, hasDistros: true });
+        }
+      });
+      
+      // Timeout for list command
+      setTimeout(() => {
+        listChild.kill();
+        resolve({ available: true, hasDistros: false, error: 'Timeout checking WSL distributions' });
+      }, 5000);
+    });
+    
+    // Timeout for status command
+    setTimeout(() => {
+      statusChild.kill();
+      resolve({ available: false, hasDistros: false, error: 'Timeout checking WSL status' });
+    }, 5000);
+  });
+}
+
+/**
  * Setup IPC handlers for running the ctrace binary
  */
 function setupCtraceHandlers() {
   ipcMain.handle('run-ctrace', async (event, args = []) => {
-    // Determine binary name based on platform
-    const platform = os.platform();
-    const binaryName = platform === 'win32' ? 'ctrace.exe' : 'ctrace';
+    // Always use the Linux binary 'ctrace' (no .exe extension)
+    // On Windows, this will be executed through WSL
+    const binaryName = 'ctrace';
     
     // Resolve binary in dev and production (packaged) locations
-    // __dirname is .../src/main/ipc, so project root bin is ../../bin/ctrace
-    const devPath = path.join(__dirname, '../../../bin', binaryName);
-    const prodPath = path.join(process.resourcesPath || '', 'bin', binaryName);
+    let binPath;
     
-    // Alternative: platform-specific paths
-    const devPlatformPath = path.join(__dirname, '../../../bin', platform, binaryName);
-    const prodPlatformPath = path.join(process.resourcesPath || '', 'bin', platform, binaryName);
+    if (process.resourcesPath) {
+      // In packaged app, binary is in extraResources
+      binPath = path.join(process.resourcesPath, 'bin', binaryName);
+    } else {
+      // In development, binary is in the project bin directory
+      // __dirname is .../src/main/ipc, so project root bin is ../../../bin/ctrace
+      binPath = path.join(__dirname, '../../../bin', binaryName);
+    }
 
     async function resolveBinary() {
-      // Try platform-specific paths first
       try {
-        await fs.access(devPlatformPath);
-        return devPlatformPath;
-      } catch (_) {
-        try {
-          await fs.access(prodPlatformPath);
-          return prodPlatformPath;
-        } catch (__) {
-          // Fallback to generic paths
-          try {
-            await fs.access(devPath);
-            return devPath;
-          } catch (___) {
-            try {
-              await fs.access(prodPath);
-              return prodPath;
-            } catch (____) {
-              return null;
-            }
-          }
-        }
+        await fs.access(binPath);
+        return binPath;
+      } catch (error) {
+        console.error(`Binary not found at ${binPath}:`, error.message);
+        return null;
       }
     }
 
     try {
-      const binPath = await resolveBinary();
-      if (!binPath) {
-        return { success: false, error: `ctrace binary not found at: ${devPath} or ${prodPath}` };
+      const resolvedBinPath = await resolveBinary();
+      if (!resolvedBinPath) {
+        const platform = os.platform();
+        const platformInfo = platform === 'win32' ? ' (Linux binary executed via WSL)' : '';
+        const checkedPath = process.resourcesPath ? 
+          path.join(process.resourcesPath, 'bin', binaryName) : 
+          path.join(__dirname, '../../../bin', binaryName);
+        return { 
+          success: false, 
+          error: `ctrace binary not found at: ${checkedPath}${platformInfo}` 
+        };
+      }
+
+      // On Windows, check if WSL is available before proceeding
+      if (os.platform() === 'win32') {
+        const wslStatus = await checkWSLAvailability();
+        if (!wslStatus.available || !wslStatus.hasDistros) {
+          let errorMessage = 'CTrace requires WSL (Windows Subsystem for Linux) to run on Windows.\n\n';
+          
+          if (!wslStatus.available) {
+            errorMessage += 'WSL is not installed. Please install WSL by running:\n';
+            errorMessage += '• Open PowerShell as Administrator\n';
+            errorMessage += '• Run: wsl --install\n';
+            errorMessage += '• Restart your computer when prompted\n\n';
+          } else if (!wslStatus.hasDistros) {
+            errorMessage += 'WSL is installed but no Linux distributions are available.\n\n';
+            errorMessage += 'To fix this:\n';
+            errorMessage += '• Run: wsl --list --online (to see available distributions)\n';
+            errorMessage += '• Run: wsl --install Ubuntu (or another distribution)\n';
+            errorMessage += '• Follow the setup instructions\n\n';
+          }
+          
+          errorMessage += 'After setup, restart the application to use CTrace.';
+          
+          if (wslStatus.error) {
+            errorMessage += `\n\nDetailed error: ${wslStatus.error}`;
+          }
+          
+          return { 
+            success: false, 
+            error: errorMessage
+          };
+        }
       }
 
       return await new Promise((resolve) => {
@@ -87,12 +186,14 @@ function setupCtraceHandlers() {
         
         let command, commandArgs;
         
-        // Check if we're on Windows and have a Linux binary (need WSL)
-        const isWindowsWithLinuxBinary = os.platform() === 'win32' &amp;&amp; !binPath.endsWith('.exe');
-        
-        if (isWindowsWithLinuxBinary) {
+        // Check if we're on Windows (we always have a Linux binary now)
+        if (os.platform() === 'win32') {
+          // On Windows, use WSL to execute the Linux binary
+          console.log('Windows detected, using WSL to execute ctrace');
+          console.log('Binary path:', resolvedBinPath);
+          
           // Convert Windows path to WSL path
-          const wslPath = binPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => `/mnt/${drive.toLowerCase()}`);
+          const wslPath = resolvedBinPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => `/mnt/${drive.toLowerCase()}`);
           command = 'wsl';
           
           // Convert arguments with Windows paths to WSL paths
@@ -105,10 +206,12 @@ function setupCtraceHandlers() {
           });
           
           commandArgs = [wslPath, ...convertedArgs];
+          console.log('WSL command:', command, commandArgs);
         } else {
-          // On Linux/Mac, or Windows with .exe binary, use directly
-          command = binPath;
+          // On Linux/Mac, use the binary directly
+          command = resolvedBinPath;
           commandArgs = Array.isArray(args) ? args : [];
+          console.log('Direct execution:', command, commandArgs);
         }
         
         const child = spawn(command, commandArgs, {
@@ -127,7 +230,20 @@ function setupCtraceHandlers() {
         });
 
         child.on('error', (err) => {
-          resolve({ success: false, error: err.message });
+          let errorMessage = err.message;
+          
+          // Provide more helpful error messages for WSL-related issues
+          if (os.platform() === 'win32' &amp;&amp; command === 'wsl') {
+            if (err.code === 'ENOENT') {
+              errorMessage = 'WSL (Windows Subsystem for Linux) is not installed or not available in PATH. Please install WSL to use CTrace.';
+            } else if (err.code === 'EACCES') {
+              errorMessage = 'Permission denied when trying to execute WSL. Please check WSL installation and permissions.';
+            } else {
+              errorMessage = `WSL execution failed: ${err.message}`;
+            }
+          }
+          
+          resolve({ success: false, error: errorMessage });
         });
 
         child.on('close', (code) => {
@@ -155,13 +271,13 @@ module.exports = { setupCtraceHandlers };
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="EditorManager.html">EditorManager</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li></ul><h3>Global</h3><ul><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AnthropicProvider.html">AnthropicProvider</a></li><li><a href="BaseProvider.html">BaseProvider</a></li><li><a href="DeepseekProvider.html">DeepseekProvider</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="GenericOpenAIProvider.html">GenericOpenAIProvider</a></li><li><a href="GroqProvider.html">GroqProvider</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="OpenAIProvider.html">OpenAIProvider</a></li><li><a href="PerplexityProvider.html">PerplexityProvider</a></li><li><a href="ProviderRegistry.html">ProviderRegistry</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li><li><a href="VisualyzerManager.html">VisualyzerManager</a></li></ul><h3>Global</h3><ul><li><a href="global.html#applySyntaxHighlight">applySyntaxHighlight</a></li><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#checkWSLAvailability">checkWSLAvailability</a></li><li><a href="global.html#createVisualizerWindow">createVisualizerWindow</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#detectWSL">detectWSL</a></li><li><a href="global.html#detectWSLStatus">detectWSLStatus</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#getLanguageConfig">getLanguageConfig</a></li><li><a href="global.html#handleLocalChat">handleLocalChat</a></li><li><a href="global.html#handleModularProvider">handleModularProvider</a></li><li><a href="global.html#handleOllamaChat">handleOllamaChat</a></li><li><a href="global.html#highlightCppSyntax">highlightCppSyntax</a></li><li><a href="global.html#installWSLAutomatically">installWSLAutomatically</a></li><li><a href="global.html#installWSLDistribution">installWSLDistribution</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupAssistantHandlers">setupAssistantHandlers</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#setupWindowControls">setupWindowControls</a></li><li><a href="global.html#shouldHighlight">shouldHighlight</a></li><li><a href="global.html#showDistributionOptions">showDistributionOptions</a></li><li><a href="global.html#showLimitedFunctionalityDialog">showLimitedFunctionalityDialog</a></li><li><a href="global.html#showManualInstallationInstructions">showManualInstallationInstructions</a></li><li><a href="global.html#showWSLSetupDialog">showWSLSetupDialog</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#testEmojiSupport">testEmojiSupport</a></li><li><a href="global.html#testWSLAndCTrace">testWSLAndCTrace</a></li><li><a href="global.html#tokenizeCpp">tokenizeCpp</a></li><li><a href="global.html#tokensToHtml">tokensToHtml</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Sun Oct 05 2025 07:55:41 GMT+0200 (Central European Summer Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Wed Nov 26 2025 15:15:41 GMT+0900 (Korean Standard Time)
 </footer>
 
 <script> prettyPrint(); </script>

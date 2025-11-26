@@ -13,7 +13,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 
 #editor-area {
@@ -21,9 +25,12 @@
   display: flex;
   flex-direction: row;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   background: #0d1117;
   position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .gutter {
@@ -42,19 +49,22 @@
   overflow: hidden;
   white-space: pre;
   flex-shrink: 0;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .editor {
   flex: 1;
   background: #0d1117;
-  color: #f0f6fc;
+  color: #d4d4d4;
+  caret-color: #f0f6fc;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 12px;
   line-height: 20px;
   border: none;
   outline: none;
   padding: 20px;
-  resize: none;
+  margin: 0;
   overflow-y: auto;
   overflow-x: auto;
   tab-size: 2;
@@ -62,24 +72,39 @@
   box-sizing: border-box;
   min-height: 0;
   min-width: 0;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  letter-spacing: normal;
+  word-spacing: normal;
+  will-change: scroll-position;
 }
 
-.editor::placeholder {
+/* Placeholder for contenteditable */
+.editor:empty:before {
+  content: attr(data-placeholder);
   color: #6e7681;
   font-style: italic;
+  pointer-events: none;
+}
+
+/* Placeholder for contenteditable */
+.editor:empty:before {
+  content: attr(data-placeholder);
+  color: #6e7681;
+  font-style: italic;
+  pointer-events: none;
 }
 
 .editor:focus {
   box-shadow: inset 0 0 0 1px #1f6feb;
 }
 
-/* Active selection (when editor is focused) - use VS Code blue */
-.editor:focus::selection {
-  background: #264f78;
-  color: #f0f6fc;
+/* Active selection - use VS Code blue */
+.editor::selection {
+  background-color: #264f78;
 }
 
-.editor:focus::-moz-selection {
-  background: #264f78;
-  color: #f0f6fc;
+.editor::-moz-selection {
+  background-color: #264f78;
 }
