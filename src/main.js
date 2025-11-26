@@ -112,7 +112,7 @@ function createVisualizerWindow() {
  */
 /**
  * Comprehensive WSL status detection
- * @returns {Promise<{available: boolean, hasDistros: boolean, error?: string, distributions?: string[]}>}
+ * @returns {Promise<Object>} Object with available, hasDistros, error, and distributions properties
  */
 async function detectWSLStatus() {
   return new Promise((resolve) => {

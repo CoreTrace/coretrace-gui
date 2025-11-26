@@ -40,6 +40,8 @@ function getLanguageConfig(fileType) {
 
 /**
  * Escape HTML special characters
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML string
  */
 function escapeHtml(text) {
   return text

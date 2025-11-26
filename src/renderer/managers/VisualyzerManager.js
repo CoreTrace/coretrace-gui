@@ -100,6 +100,7 @@ class VisualyzerManager {
   /**
    * Handle dropped or selected file
    * @param {File} file - DOT file
+   * @returns {Promise<void>}
    */
   async handleFile(file) {
     try {
@@ -193,6 +194,11 @@ class VisualyzerManager {
    * @param {string} label - Node label
    * @returns {Object} Parsed label data
    */
+  /**
+   * Parse node label text
+   * @param {string} label - Label text to parse
+   * @returns {Object} Parsed label with title and fields
+   */
   parseLabel(label) {
     // Check if it's a record-style label
     if (label.startsWith('{') && label.endsWith('}')) {
@@ -210,6 +216,11 @@ class VisualyzerManager {
    * Parse record-style label into structured data
    * @param {string} label - Record label like "{Title|{field1|value1}|{field2|value2}}"
    * @returns {Object} Parsed label data
+   */
+  /**
+   * Parse record-style label into structured fields
+   * @param {string} label - Record label text
+   * @returns {Object} Object with title and fields array
    */
   parseRecordLabel(label) {
     // Remove outer braces
@@ -313,6 +324,12 @@ class VisualyzerManager {
    * @param {Object} data - Graph data
    * @param {string} filename - File name
    */
+  /**
+   * Create D3.js force-directed graph visualization
+   * @param {Object} data - Graph data with nodes and edges
+   * @param {string} filename - Name of the DOT file
+   * @returns {void}
+   */
   createForceGraph(data, filename) {
     // Clear canvas
     this.canvas.innerHTML = '';
@@ -388,6 +405,11 @@ class VisualyzerManager {
    * Create legend for node types
    * @param {Object} svg - SVG element
    */
+  /**
+   * Create legend showing node type colors
+   * @param {Object} svg - D3.js SVG selection
+   * @returns {void}
+   */
   createLegend(svg) {
     const legend = svg.append('g')
       .attr('class', 'legend')
@@ -446,6 +468,10 @@ class VisualyzerManager {
 
   /**
    * Update graph to show only visible nodes and edges
+   */
+  /**
+   * Update graph visualization with current visible nodes and edges
+   * @returns {void}
    */
   updateGraph() {
     const data = this.fullGraphData;
@@ -634,6 +660,11 @@ class VisualyzerManager {
    * @param {Object} node - Node to check
    * @returns {boolean} Has unexpanded children
    */
+  /**
+   * Check if node has children that haven't been expanded
+   * @param {Object} node - Node to check
+   * @returns {boolean} True if node has unexpanded children
+   */
   hasUnexpandedChildren(node) {
     const children = this.fullGraphData.edges
       .filter(e => (e.source.id || e.source) === node.id)
@@ -645,6 +676,11 @@ class VisualyzerManager {
   /**
    * Toggle node expansion
    * @param {Object} node - Node to toggle
+   */
+  /**
+   * Toggle node expansion state (expand/collapse children)
+   * @param {Object} node - Node to toggle
+   * @returns {void}
    */
   toggleNodeExpansion(node) {
     const hasChildren = this.hasUnexpandedChildren(node);
@@ -677,6 +713,11 @@ class VisualyzerManager {
    * Expand node to show its children
    * @param {Object} node - Node to expand
    */
+  /**
+   * Expand node to show its children
+   * @param {Object} node - Node to expand
+   * @returns {void}
+   */
   expandNode(node) {
     this.expandedNodes.add(node.id);
     node._expanded = true;
@@ -693,6 +734,11 @@ class VisualyzerManager {
   /**
    * Collapse node to hide its children
    * @param {Object} node - Node to collapse
+   */
+  /**
+   * Collapse node and hide its children recursively
+   * @param {Object} node - Node to collapse
+   * @returns {void}
    */
   collapseNode(node) {
     this.expandedNodes.delete(node.id);
@@ -725,6 +771,11 @@ class VisualyzerManager {
   /**
    * Show node metadata (type and address) as overlay
    * @param {Object} node - Node data
+   */
+  /**
+   * Display node metadata in the info panel
+   * @param {Object} node - Node whose metadata to display
+   * @returns {void}
    */
   showNodeMetadata(node) {
     // Remove existing tooltip
@@ -769,17 +820,37 @@ class VisualyzerManager {
   /**
    * Drag event handlers for D3
    */
+  /**
+   * Handle drag start event for node
+   * @param {Object} event - D3 drag event
+   * @param {Object} d - Node data
+   * @param {Object} simulation - D3 simulation
+   * @returns {void}
+   */
   dragStarted(event, d, simulation) {
     if (!event.active) simulation.alphaTarget(0.3).restart();
     d.fx = d.x;
     d.fy = d.y;
   }
 
+  /**
+   * Handle drag event for node
+   * @param {Object} event - D3 drag event
+   * @param {Object} d - Node data
+   * @returns {void}
+   */
   dragged(event, d) {
     d.fx = event.x;
     d.fy = event.y;
   }
 
+  /**
+   * Handle drag end event for node
+   * @param {Object} event - D3 drag event
+   * @param {Object} d - Node data
+   * @param {Object} simulation - D3 simulation
+   * @returns {void}
+   */
   dragEnded(event, d, simulation) {
     if (!event.active) simulation.alphaTarget(0);
     d.fx = null;
@@ -789,6 +860,10 @@ class VisualyzerManager {
   /**
    * Zoom controls
    */
+  /**
+   * Zoom in on the graph
+   * @returns {void}
+   */
   zoomIn() {
     if (!this.svg || !this.zoom) return;
     this.svg.transition().duration(300).call(
@@ -797,6 +872,10 @@ class VisualyzerManager {
     );
   }
 
+  /**
+   * Zoom out on the graph
+   * @returns {void}
+   */
   zoomOut() {
     if (!this.svg || !this.zoom) return;
     this.svg.transition().duration(300).call(
@@ -805,6 +884,10 @@ class VisualyzerManager {
     );
   }
 
+  /**
+   * Reset zoom to default level
+   * @returns {void}
+   */
   resetZoom() {
     if (!this.svg || !this.zoom) return;
     this.svg.transition().duration(300).call(
@@ -815,6 +898,10 @@ class VisualyzerManager {
 
   /**
    * Clear current visualization
+   */
+  /**
+   * Clear the graph and return to dropzone
+   * @returns {void}
    */
   clear() {
     this.canvas.innerHTML = '';
@@ -847,6 +934,11 @@ class VisualyzerManager {
   /**
    * Show error message
    * @param {string} message - Error message
+   */
+  /**
+   * Display error message to user
+   * @param {string} message - Error message to display
+   * @returns {void}
    */
   showError(message) {
     this.info.classList.add('error');

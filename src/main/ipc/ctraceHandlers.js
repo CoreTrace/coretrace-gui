@@ -6,7 +6,7 @@ const os = require('os');
 
 /**
  * Check if WSL is available and has distributions installed
- * @returns {Promise<{available: boolean, hasDistros: boolean, error?: string}>} - WSL status
+ * @returns {Promise<Object>} WSL status object with properties: available (boolean), hasDistros (boolean), error (string)
  */
 async function checkWSLAvailability() {
   return new Promise((resolve) => {

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: main/external_llm/OpenAIProvider.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: main/external_llm/OpenAIProvider.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @fileoverview OpenAI API Provider (ChatGPT, GPT-4, etc.)
+ * 
+ * Implements OpenAI's chat completions API for GPT models.
+ * 
+ * @author CTrace GUI Team
+ * @version 1.0.0
+ */
+
+const https = require('https');
+const BaseProvider = require('./BaseProvider');
+
+/**
+ * OpenAI API Provider
+ * @extends BaseProvider
+ */
+class OpenAIProvider extends BaseProvider {
+  constructor(config) {
+    super(config);
+    this.endpoint = config.endpoint || 'https://api.openai.com/v1/chat/completions';
+    this.model = config.model || 'gpt-4';
+    this.apiKey = config.apiKey;
+  }
+
+  getName() {
+    return 'OpenAI (ChatGPT)';
+  }
+
+  getConfigFields() {
+    return [
+      {
+        name: 'apiKey',
+        label: 'API Key',
+        type: 'password',
+        required: true,
+        placeholder: 'sk-...',
+        help: 'Get your API key from https://platform.openai.com/api-keys'
+      },
+      {
+        name: 'model',
+        label: 'Model',
+        type: 'select',
+        required: true,
+        default: 'gpt-4',
+        options: [
+          { value: 'gpt-4', label: 'GPT-4' },
+          { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+          { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+          { value: 'gpt-4o', label: 'GPT-4o' },
+          { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }
+        ],
+        help: 'Choose the OpenAI model to use'
+      },
+      {
+        name: 'endpoint',
+        label: 'API Endpoint (Advanced)',
+        type: 'text',
+        required: false,
+        default: 'https://api.openai.com/v1/chat/completions',
+        placeholder: 'https://api.openai.com/v1/chat/completions',
+        help: 'Custom endpoint URL (for proxies or alternative deployments)'
+      }
+    ];
+  }
+
+  async chat(message, options = {}) {
+    if (!this.apiKey) {
+      return { success: false, error: 'API key is required' };
+    }
+
+    const messages = [];
+    
+    // Add system prompt
+    const systemPrompt = options.systemPrompt || 'You are a helpful coding assistant.';
+    messages.push({ role: 'system', content: systemPrompt });
+    messages.push({ role: 'user', content: message });
+
+    const body = JSON.stringify({
+      model: this.model,
+      messages: messages,
+      temperature: options.temperature !== undefined ? options.temperature : 0.7,
+      max_tokens: options.maxTokens || 2000
+    });
+
+    return new Promise((resolve) => {
+      const url = new URL(this.endpoint);
+      const requestOptions = {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Length': Buffer.byteLength(body)
+        },
+        timeout: 60000
+      };
+
+      const req = https.request(requestOptions, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.choices &amp;&amp; parsed.choices[0] &amp;&amp; parsed.choices[0].message) {
+              resolve({ success: true, reply: parsed.choices[0].message.content });
+            } else if (parsed.error) {
+              resolve({ success: false, error: parsed.error.message || 'API error' });
+            } else {
+              resolve({ success: false, error: 'Invalid API response' });
+            }
+          } catch (err) {
+            resolve({ success: false, error: 'Failed to parse API response: ' + err.message });
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        resolve({ success: false, error: 'API request failed: ' + err.message });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: 'API request timed out' });
+      });
+
+      req.write(body);
+      req.end();
+    });
+  }
+}
+
+module.exports = OpenAIProvider;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="AnthropicProvider.html">AnthropicProvider</a></li><li><a href="BaseProvider.html">BaseProvider</a></li><li><a href="DeepseekProvider.html">DeepseekProvider</a></li><li><a href="FileOperationsManager.html">FileOperationsManager</a></li><li><a href="FileOperationsManager.FileOperationsManager.html">FileOperationsManager</a></li><li><a href="GenericOpenAIProvider.html">GenericOpenAIProvider</a></li><li><a href="GroqProvider.html">GroqProvider</a></li><li><a href="NotificationManager.html">NotificationManager</a></li><li><a href="OpenAIProvider.html">OpenAIProvider</a></li><li><a href="PerplexityProvider.html">PerplexityProvider</a></li><li><a href="ProviderRegistry.html">ProviderRegistry</a></li><li><a href="SearchManager.html">SearchManager</a></li><li><a href="TabManager.html">TabManager</a></li><li><a href="TabManager.TabManager.html">TabManager</a></li><li><a href="UIController.html">UIController</a></li><li><a href="UIController.UIController.html">UIController</a></li><li><a href="VisualyzerManager.html">VisualyzerManager</a></li></ul><h3>Global</h3><ul><li><a href="global.html#applySyntaxHighlight">applySyntaxHighlight</a></li><li><a href="global.html#buildFileTree">buildFileTree</a></li><li><a href="global.html#checkWSLAvailability">checkWSLAvailability</a></li><li><a href="global.html#createVisualizerWindow">createVisualizerWindow</a></li><li><a href="global.html#createWindow">createWindow</a></li><li><a href="global.html#detectFileEncoding">detectFileEncoding</a></li><li><a href="global.html#detectFileType">detectFileType</a></li><li><a href="global.html#detectWSL">detectWSL</a></li><li><a href="global.html#detectWSLStatus">detectWSLStatus</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#getFileIcon">getFileIcon</a></li><li><a href="global.html#getLanguageConfig">getLanguageConfig</a></li><li><a href="global.html#handleLocalChat">handleLocalChat</a></li><li><a href="global.html#handleModularProvider">handleModularProvider</a></li><li><a href="global.html#handleOllamaChat">handleOllamaChat</a></li><li><a href="global.html#highlightCppSyntax">highlightCppSyntax</a></li><li><a href="global.html#installWSLAutomatically">installWSLAutomatically</a></li><li><a href="global.html#installWSLDistribution">installWSLDistribution</a></li><li><a href="global.html#isValidUTF8">isValidUTF8</a></li><li><a href="global.html#searchInDirectory">searchInDirectory</a></li><li><a href="global.html#setupAssistantHandlers">setupAssistantHandlers</a></li><li><a href="global.html#setupCtraceHandlers">setupCtraceHandlers</a></li><li><a href="global.html#setupEditorHandlers">setupEditorHandlers</a></li><li><a href="global.html#setupFileHandlers">setupFileHandlers</a></li><li><a href="global.html#setupWindowControls">setupWindowControls</a></li><li><a href="global.html#shouldHighlight">shouldHighlight</a></li><li><a href="global.html#showDistributionOptions">showDistributionOptions</a></li><li><a href="global.html#showLimitedFunctionalityDialog">showLimitedFunctionalityDialog</a></li><li><a href="global.html#showManualInstallationInstructions">showManualInstallationInstructions</a></li><li><a href="global.html#showWSLSetupDialog">showWSLSetupDialog</a></li><li><a href="global.html#startWatchingWorkspace">startWatchingWorkspace</a></li><li><a href="global.html#stopWatchingWorkspace">stopWatchingWorkspace</a></li><li><a href="global.html#testEmojiSupport">testEmojiSupport</a></li><li><a href="global.html#testWSLAndCTrace">testWSLAndCTrace</a></li><li><a href="global.html#tokenizeCpp">tokenizeCpp</a></li><li><a href="global.html#tokensToHtml">tokensToHtml</a></li><li><a href="global.html#updateFileTypeStatus">updateFileTypeStatus</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Wed Nov 26 2025 15:15:41 GMT+0900 (Korean Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
