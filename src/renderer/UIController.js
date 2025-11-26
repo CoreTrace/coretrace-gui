@@ -819,6 +819,14 @@ class UIController {
     };
 
     window.hideAllMenus = () => this.hideAllMenus();
+    
+    // Add click handlers to all dropdown items to stop propagation
+    document.querySelectorAll('.dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // hideAllMenus will be called by the onclick handler in HTML
+      });
+    });
   }
 
   hideAllMenus() {

@@ -3,42 +3,40 @@
  * Provides real-time syntax highlighting with optimized performance for large files
  */
 
-/**
- * C/C++ Keywords
- */
-const C_CPP_KEYWORDS = new Set([
-  // C keywords
-  'auto', 'break', 'case', 'char', 'const', 'continue', 'default', 'do',
-  'double', 'else', 'enum', 'extern', 'float', 'for', 'goto', 'if',
-  'int', 'long', 'register', 'return', 'short', 'signed', 'sizeof', 'static',
-  'struct', 'switch', 'typedef', 'union', 'unsigned', 'void', 'volatile', 'while',
-  // C++ keywords
-  'alignas', 'alignof', 'and', 'and_eq', 'asm', 'atomic_cancel', 'atomic_commit',
-  'atomic_noexcept', 'bitand', 'bitor', 'bool', 'catch', 'char8_t', 'char16_t',
-  'char32_t', 'class', 'compl', 'concept', 'const_cast', 'consteval', 'constexpr',
-  'constinit', 'co_await', 'co_return', 'co_yield', 'decltype', 'delete', 'dynamic_cast',
-  'explicit', 'export', 'false', 'friend', 'inline', 'mutable', 'namespace', 'new',
-  'noexcept', 'not', 'not_eq', 'nullptr', 'operator', 'or', 'or_eq', 'private',
-  'protected', 'public', 'reflexpr', 'reinterpret_cast', 'requires', 'static_assert',
-  'static_cast', 'synchronized', 'template', 'this', 'thread_local', 'throw', 'true',
-  'try', 'typeid', 'typename', 'using', 'virtual', 'wchar_t', 'xor', 'xor_eq',
-  // Common preprocessor
-  'define', 'undef', 'include', 'ifdef', 'ifndef', 'if', 'elif', 'else', 'endif',
-  'error', 'pragma', 'line'
-]);
+// Load syntax configuration
+const syntaxConfig = require('./syntax-config.json');
+
+// Cache for language configurations
+let languageCache = {};
 
 /**
- * C/C++ Types (commonly used standard library types)
+ * Get language configuration
+ * @param {string} fileType - The file type
+ * @returns {Object} - Language configuration
  */
-const C_CPP_TYPES = new Set([
-  'int8_t', 'int16_t', 'int32_t', 'int64_t',
-  'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t',
-  'size_t', 'ssize_t', 'ptrdiff_t', 'intptr_t', 'uintptr_t',
-  'string', 'vector', 'map', 'set', 'list', 'deque', 'queue',
-  'stack', 'array', 'unordered_map', 'unordered_set',
-  'shared_ptr', 'unique_ptr', 'weak_ptr', 'optional', 'variant',
-  'FILE', 'nullptr_t', 'std', 'iostream', 'fstream'
-]);
+function getLanguageConfig(fileType) {
+  // Check cache first
+  if (languageCache[fileType]) {
+    return languageCache[fileType];
+  }
+  
+  // Find matching language config
+  for (const [langKey, config] of Object.entries(syntaxConfig)) {
+    if (config.fileTypes.includes(fileType)) {
+      // Convert arrays to Sets for faster lookup
+      const processedConfig = {
+        ...config,
+        keywords: new Set(config.keywords),
+        types: new Set(config.types),
+        preprocessor: new Set(config.preprocessor)
+      };
+      languageCache[fileType] = processedConfig;
+      return processedConfig;
+    }
+  }
+  
+  return null;
+}
 
 /**
  * Escape HTML special characters
@@ -55,9 +53,10 @@ function escapeHtml(text) {
 /**
  * Tokenize C/C++ code for highlighting
  * @param {string} code - The code to tokenize
+ * @param {Object} langConfig - Language configuration
  * @returns {Array} - Array of tokens with type and value
  */
-function tokenizeCpp(code) {
+function tokenizeCpp(code, langConfig) {
   const tokens = [];
   let i = 0;
   
@@ -179,9 +178,9 @@ function tokenizeCpp(code) {
       
       const isFunction = code[j] === '(';
       
-      if (C_CPP_KEYWORDS.has(word)) {
+      if (langConfig.keywords.has(word)) {
         tokens.push({ type: 'keyword', value: word });
-      } else if (C_CPP_TYPES.has(word)) {
+      } else if (langConfig.types.has(word)) {
         tokens.push({ type: 'type', value: word });
       } else if (isFunction) {
         tokens.push({ type: 'function', value: word });
@@ -211,22 +210,11 @@ function tokenizeCpp(code) {
 /**
  * Convert tokens to HTML
  * @param {Array} tokens - Array of tokens
+ * @param {Object} langConfig - Language configuration
  * @returns {string} - HTML string
  */
-function tokensToHtml(tokens) {
-  const colorMap = {
-    comment: '#6a9955',
-    string: '#ce9178',
-    preprocessor: '#c586c0',
-    number: '#b5cea8',
-    keyword: '#569cd6',
-    type: '#4ec9b0',
-    function: '#dcdcaa',
-    constant: '#4fc1ff',
-    identifier: '#9cdcfe',
-    operator: '#d4d4d4',
-    plain: '#d4d4d4'
-  };
+function tokensToHtml(tokens, langConfig) {
+  const colorMap = langConfig.colors;
   
   return tokens.map(token => {
     const color = colorMap[token.type] || colorMap.plain;
@@ -240,13 +228,17 @@ function tokensToHtml(tokens) {
 /**
  * Highlight C/C++ syntax (optimized version)
  * @param {string} code - The code to highlight
+ * @param {string} fileType - The file type
  * @returns {string} - HTML with syntax highlighting
  */
-function highlightCppSyntax(code) {
+function highlightCppSyntax(code, fileType) {
   if (!code) return '';
   
-  const tokens = tokenizeCpp(code);
-  return tokensToHtml(tokens);
+  const langConfig = getLanguageConfig(fileType);
+  if (!langConfig) return escapeHtml(code);
+  
+  const tokens = tokenizeCpp(code, langConfig);
+  return tokensToHtml(tokens, langConfig);
 }
 
 /**
@@ -258,9 +250,11 @@ function highlightCppSyntax(code) {
 function applySyntaxHighlight(code, fileType) {
   if (!code) return '';
   
-  // Only apply highlighting for C/C++ files
-  if (fileType === 'C' || fileType === 'C++' || fileType === 'C/C++ Header') {
-    return highlightCppSyntax(code);
+  const langConfig = getLanguageConfig(fileType);
+  
+  // Apply highlighting if language config found
+  if (langConfig) {
+    return highlightCppSyntax(code, fileType);
   }
   
   // For other file types, return escaped HTML
@@ -273,7 +267,7 @@ function applySyntaxHighlight(code, fileType) {
  * @returns {boolean} - True if highlighting should be applied
  */
 function shouldHighlight(fileType) {
-  return fileType === 'C' || fileType === 'C++' || fileType === 'C/C++ Header';
+  return getLanguageConfig(fileType) !== null;
 }
 
 // Export for use in other modules
