@@ -62,9 +62,10 @@ npm run docs
 
 ## Documentation
 
-Complete API documentation is available in the `docs/` directory after running `npm run docs`.
+Complete API documentation is available [here](https://coretrace.github.io/coretrace-gui/) 
 
 ## License
 
 
 // To determine
+
