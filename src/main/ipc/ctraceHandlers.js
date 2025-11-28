@@ -2,7 +2,10 @@ const { ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const os = require('os');
+const net = require('net');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * Check if WSL is available and has distributions installed
@@ -77,14 +80,50 @@ async function checkWSLAvailability() {
 }
 
 /**
- * Setup IPC handlers for running the ctrace binary
+ * Create a temporary socket file path
+ */
+function createTempSocketPath() {
+  const tmpDir = os.tmpdir();
+  const socketName = `ctrace-${uuidv4()}.sock`;
+  return path.join(tmpDir, socketName);
+}
+
+/**
+ * Setup IPC handlers for running the ctrace binary with socket IPC
  */
 function setupCtraceHandlers() {
   ipcMain.handle('run-ctrace', async (event, args = []) => {
     // Always use the Linux binary 'ctrace' (no .exe extension)
     // On Windows, this will be executed through WSL
     const binaryName = 'ctrace';
+    const socketPath = createTempSocketPath();
+    let server = null;
     
+    // Clean up socket file on exit
+    const cleanup = () => {
+      if (server) {
+        try {
+          console.log('Starting cleanup of IPC resources...');
+          server.close();
+          if (fsSync.existsSync(socketPath)) {
+            console.log(`Removing socket file: ${socketPath}`);
+            fsSync.unlinkSync(socketPath);
+          }
+          console.log('✅ Cleanup completed successfully');
+          console.log('----------------------------------------');
+          console.log('🚀 ctrace IPC session has ended');
+          console.log('----------------------------------------');
+        } catch (error) {
+          console.error('❌ Error during cleanup:', error);
+        }
+      }
+    };
+
+    // Handle process exit
+    process.on('exit', cleanup);
+    process.on('SIGINT', () => process.exit());
+    process.on('SIGTERM', () => process.exit());
+
     // Resolve binary in dev and production (packaged) locations
     let binPath;
     
@@ -153,77 +192,113 @@ function setupCtraceHandlers() {
         }
       }
 
-      return await new Promise((resolve) => {
-        console.log('args', args);
+      return await new Promise((resolve, reject) => {
+        console.log('Setting up socket IPC at:', socketPath);
         
-        let command, commandArgs;
-        
-        // Check if we're on Windows (we always have a Linux binary now)
-        if (os.platform() === 'win32') {
-          // On Windows, use WSL to execute the Linux binary
-          console.log('Windows detected, using WSL to execute ctrace');
-          console.log('Binary path:', resolvedBinPath);
+        // Create and configure the server
+        server = net.createServer((socket) => {
+
+          let outputBuffer = '';
           
-          // Convert Windows path to WSL path
-          const wslPath = resolvedBinPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => `/mnt/${drive.toLowerCase()}`);
-          command = 'wsl';
-          
-          // Convert arguments with Windows paths to WSL paths
-          const convertedArgs = (Array.isArray(args) ? args : []).map(arg => {
-            // Convert paths in arguments like --input=C:\path\to\file
-            if (typeof arg === 'string' && arg.includes(':\\')) {
-              return arg.replace(/([A-Z]):\\/g, (match, drive) => `/mnt/${drive.toLowerCase()}/`).replace(/\\/g, '/');
+          socket.on('data', (data) => {
+            const dataStr = data.toString();
+            outputBuffer += dataStr;
+            console.log('data');
+            console.log(data);
+            console.log('dataStr');
+            console.log(dataStr);
+            console.log('outputBuffer');
+            console.log(outputBuffer);
+
+            // Forward data to renderer as it comes in
+            if (event && event.sender && !event.sender.isDestroyed()) {
+              event.sender.send('ctrace-output', dataStr);
             }
-            return arg;
           });
           
-          commandArgs = [wslPath, ...convertedArgs];
-          console.log('WSL command:', command, commandArgs);
-        } else {
-          // On Linux/Mac, use the binary directly
-          command = resolvedBinPath;
-          commandArgs = Array.isArray(args) ? args : [];
-          console.log('Direct execution:', command, commandArgs);
-        }
-        
-        const child = spawn(command, commandArgs, {
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        child.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        child.on('error', (err) => {
-          let errorMessage = err.message;
-          
-          // Provide more helpful error messages for WSL-related issues
-          if (os.platform() === 'win32' && command === 'wsl') {
-            if (err.code === 'ENOENT') {
-              errorMessage = 'WSL (Windows Subsystem for Linux) is not installed or not available in PATH. Please install WSL to use CTrace.';
-            } else if (err.code === 'EACCES') {
-              errorMessage = 'Permission denied when trying to execute WSL. Please check WSL installation and permissions.';
-            } else {
-              errorMessage = `WSL execution failed: ${err.message}`;
+          socket.on('end', () => {
+            // Send final output and completion status
+            if (event && event.sender && !event.sender.isDestroyed()) {
+              event.sender.send('ctrace-complete', { 
+                success: true, 
+                output: outputBuffer 
+              });
             }
+            cleanup();
+            resolve({ success: true, output: outputBuffer });
+          });
+          
+          socket.on('error', (err) => {
+            console.error('Socket error:', err);
+            cleanup();
+            reject({ success: false, error: `Socket error: ${err.message}` });
+          });
+        });
+        
+        // Handle server errors
+        server.on('error', (err) => {
+          console.error('Server error:', err);
+          cleanup();
+          reject({ success: false, error: `Server error: ${err.message}` });
+        });
+        
+        // Start listening on the socket
+        server.listen(socketPath, () => {
+          console.log('Server listening on', socketPath);
+          
+          // Prepare command and arguments
+          let command, commandArgs;
+          const binaryArgs = ['--ipc', 'socket', '--ipc-path', socketPath, ...(Array.isArray(args) ? args : [])];
+          
+          if (os.platform() === 'win32') {
+            // On Windows, use WSL to execute the Linux binary
+            console.log('Windows detected, using WSL to execute ctrace');
+            const wslPath = resolvedBinPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => 
+              `/mnt/${drive.toLowerCase()}`);
+            
+            command = 'wsl';
+            commandArgs = [wslPath, ...binaryArgs];
+            console.log('WSL command:', command, commandArgs);
+          } else {
+            // On Linux/Mac, use the binary directly
+            command = resolvedBinPath;
+            commandArgs = binaryArgs;
+            console.log('Direct execution:', command, commandArgs);
           }
           
-          resolve({ success: false, error: errorMessage });
-        });
-
-        child.on('close', (code) => {
-          if (code === 0) {
-            resolve({ success: true, output: stdout, exitCode: code });
-          } else {
-            resolve({ success: false, error: `ctrace exited with code ${code}`, stderr, output: stdout, exitCode: code });
-          }
+          // Set up process
+          const child = spawn(command, commandArgs, {
+            stdio: ['ignore', 'pipe', 'pipe']
+          });
+          
+          // Handle process output (for logging)
+          child.stdout.on('data', (data) => {
+            console.log(`[test]\n`);
+            console.log(`----------------------------\n`);
+            console.log(`[${data}]\n`);
+            console.log(`----------------------------\n`);
+          });
+          
+          child.stderr.on('data', (data) => {
+            console.error(`[ctrace error] ${data}`);
+          });
+          
+          child.on('error', (err) => {
+            console.error('Error spawning process:', err);
+            cleanup();
+            reject({ success: false, error: `Failed to start process: ${err.message}` });
+          });
+          
+          child.on('exit', (code, signal) => {
+            console.log(`Process exited with code ${code} and signal ${signal}`);
+            if (code !== 0) {
+              cleanup();
+              reject({ 
+                success: false, 
+                error: `Process exited with code ${code}` 
+              });
+            }
+          });
         });
       });
     } catch (error) {

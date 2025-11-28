@@ -916,9 +916,14 @@ class UIController {
         args.push(`--input=${currentFilePath}`);
         args.push("--static");
         args.push("--sarif-format");
+        console.log("invoke run-ctrace");
         const result = await window.ipcRenderer.invoke('run-ctrace', args);
+        console.log("after exec result");
+        console.log(result);
         if (result && result.success) {
-          outEl.textContent = stripAnsi(result.output || '(no output)');
+          console.log("result.output");
+          console.log(result.output);
+          outEl.textContent = result.output;
           this.notificationManager.showSuccess('CTrace completed successfully');
         } else {
           const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';

@@ -27,7 +27,8 @@
   "license": "ISC",
   "dependencies": {
     "chokidar": "^4.0.3",
-    "node-llama-cpp": "^3.14.2"
+    "node-llama-cpp": "^3.14.2",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "electron": "^38.0.0",
