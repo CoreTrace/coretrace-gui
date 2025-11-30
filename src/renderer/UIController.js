@@ -104,6 +104,24 @@ class UIController {
   }
 
   /**
+   * Convert Windows path to WSL path
+   * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
+   * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
+   * @private
+   */
+  convertToWSLPath(windowsPath) {
+    if (!windowsPath) return windowsPath;
+    
+    // Convert backslashes to forward slashes
+    let wslPath = windowsPath.replace(/\\/g, '/');
+    
+    // Convert drive letter (C: -> /mnt/c)
+    wslPath = wslPath.replace(/^([A-Z]):/i, (match, drive) => `/mnt/${drive.toLowerCase()}`);
+    
+    return wslPath;
+  }
+
+  /**
    * Initializes the UI Controller and sets up all necessary components.
    * 
    * This method is called automatically by the constructor and sets up:
@@ -910,13 +928,17 @@ class UIController {
         return;
       }
 
+      // Convert Windows path to WSL path for Linux binary
+      const wslFilePath = this.convertToWSLPath(currentFilePath);
+      
       outEl.textContent = `Running ctrace on: ${currentFilePath}`;
       try {
         let args = [];
-        args.push(`--input=${currentFilePath}`);
-        args.push("--static");
+        args.push(`--input=${wslFilePath}`);
+        //args.push("--static");
+        args.push("--invoke=ctrace_stack_analyzer");
         args.push("--sarif-format");
-        console.log("invoke run-ctrace");
+        console.log("invoke run-ctrace with WSL path:", wslFilePath);
         const result = await window.ipcRenderer.invoke('run-ctrace', args);
         console.log("after exec result");
         console.log(result);

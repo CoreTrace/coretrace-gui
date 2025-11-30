@@ -8,6 +8,63 @@ const net = require('net');
 const { v4: uuidv4 } = require('uuid');
 
 /**
+ * Check if socat is installed in WSL, install if needed
+ * @returns {Promise<boolean>} True if socat is available or successfully installed
+ */
+async function ensureSocatInstalled() {
+  return new Promise((resolve) => {
+    // Check if socat is installed
+    const checkChild = spawn('wsl', ['which', 'socat'], { stdio: 'pipe' });
+    
+    checkChild.on('close', (code) => {
+      if (code === 0) {
+        console.log('✅ socat is already installed in WSL');
+        resolve(true);
+        return;
+      }
+      
+      console.log('📦 socat not found, attempting to install...');
+      
+      // Attempt to install socat using wsl --user root (no password needed)
+      const installChild = spawn('wsl', [
+        '--user', 'root',
+        'bash', '-c',
+        'apt-get update -qq && apt-get install -y socat'
+      ], { stdio: 'inherit' });
+      
+      installChild.on('close', (installCode) => {
+        if (installCode === 0) {
+          console.log('✅ socat installed successfully');
+          resolve(true);
+        } else {
+          console.error('❌ Failed to install socat. Please run: wsl --user root apt-get install socat');
+          resolve(false);
+        }
+      });
+      
+      installChild.on('error', () => {
+        console.error('❌ Error installing socat');
+        resolve(false);
+      });
+      
+      setTimeout(() => {
+        installChild.kill();
+        resolve(false);
+      }, 60000); // 60 second timeout for installation
+    });
+    
+    checkChild.on('error', () => {
+      resolve(false);
+    });
+    
+    setTimeout(() => {
+      checkChild.kill();
+      resolve(false);
+    }, 5000);
+  });
+}
+
+/**
  * Check if WSL is available and has distributions installed
  * @returns {Promise<Object>} WSL status object with properties: available (boolean), hasDistros (boolean), error (string)
  */
@@ -43,7 +100,8 @@ async function checkWSLAvailability() {
       let listOutput = '';
       
       listChild.stdout.on('data', (data) => {
-        listOutput += data.toString();
+        // WSL outputs in UTF-16LE on Windows, decode properly and remove null bytes
+        listOutput += data.toString('utf16le').replace(/\x00/g, '');
       });
       
       listChild.on('error', () => {
@@ -80,12 +138,79 @@ async function checkWSLAvailability() {
 }
 
 /**
- * Create a temporary socket file path
+ * Get Windows host IP address from WSL perspective
+ * @returns {Promise<string>} Windows host IP address
  */
-function createTempSocketPath() {
-  const tmpDir = os.tmpdir();
-  const socketName = `ctrace-${uuidv4()}.sock`;
-  return path.join(tmpDir, socketName);
+async function getWindowsHostIP() {
+  return new Promise((resolve, reject) => {
+    const child = spawn('wsl', ['ip', 'route', 'show', 'default'], {
+      stdio: 'pipe'
+    });
+    
+    let output = '';
+    
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    child.on('close', (code) => {
+      if (code === 0 && output) {
+        // Parse the output: "default via 172.30.240.1 dev eth0 proto kernel"
+        // Extract the IP address (third field)
+        const match = output.match(/default\s+via\s+(\d+\.\d+\.\d+\.\d+)/);
+        if (match && match[1]) {
+          const ip = match[1];
+          console.log(`Windows host IP from WSL: ${ip}`);
+          resolve(ip);
+        } else {
+          reject(new Error(`Failed to parse IP from output: ${output}`));
+        }
+      } else {
+        reject(new Error('Failed to get Windows host IP'));
+      }
+    });
+    
+    child.on('error', (err) => {
+      reject(err);
+    });
+    
+    setTimeout(() => {
+      child.kill();
+      reject(new Error('Timeout getting Windows host IP'));
+    }, 5000);
+  });
+}
+
+/**
+ * Wait for socket file to exist in WSL
+ * @param {string} socketPath - Path to socket file in WSL
+ * @param {number} timeout - Maximum wait time in ms
+ * @returns {Promise<boolean>} True if socket exists
+ */
+async function waitForSocketFile(socketPath, timeout = 5000) {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeout) {
+    const exists = await new Promise((resolve) => {
+      const child = spawn('wsl', ['test', '-S', socketPath], { stdio: 'pipe' });
+      child.on('close', (code) => resolve(code === 0));
+      child.on('error', () => resolve(false));
+      setTimeout(() => {
+        child.kill();
+        resolve(false);
+      }, 1000);
+    });
+    
+    if (exists) {
+      console.log(`✅ Socket file ready: ${socketPath}`);
+      return true;
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  console.warn(`⚠️ Socket file not ready after ${timeout}ms: ${socketPath}`);
+  return false;
 }
 
 /**
@@ -96,26 +221,47 @@ function setupCtraceHandlers() {
     // Always use the Linux binary 'ctrace' (no .exe extension)
     // On Windows, this will be executed through WSL
     const binaryName = 'ctrace';
-    const socketPath = createTempSocketPath();
+    const wslSocketPath = '/tmp/ctrace.sock'; // Socket path inside WSL
     let server = null;
+    let socatProcess = null;
+    let ctraceProcess = null;
+    let tcpPort = null;
     
-    // Clean up socket file on exit
+    // Clean up all resources on exit
     const cleanup = () => {
-      if (server) {
-        try {
-          console.log('Starting cleanup of IPC resources...');
+      try {
+        console.log('Starting cleanup of IPC resources...');
+        
+        // Close TCP server
+        if (server) {
           server.close();
-          if (fsSync.existsSync(socketPath)) {
-            console.log(`Removing socket file: ${socketPath}`);
-            fsSync.unlinkSync(socketPath);
-          }
-          console.log('✅ Cleanup completed successfully');
-          console.log('----------------------------------------');
-          console.log('🚀 ctrace IPC session has ended');
-          console.log('----------------------------------------');
-        } catch (error) {
-          console.error('❌ Error during cleanup:', error);
+          console.log('✅ TCP server closed');
         }
+        
+        // Kill socat bridge process
+        if (socatProcess && !socatProcess.killed) {
+          socatProcess.kill('SIGTERM');
+          console.log('✅ socat bridge terminated');
+        }
+        
+        // Kill ctrace process
+        if (ctraceProcess && !ctraceProcess.killed) {
+          ctraceProcess.kill('SIGTERM');
+          console.log('✅ ctrace process terminated');
+        }
+        
+        // Clean up socket file in WSL
+        if (os.platform() === 'win32') {
+          spawn('wsl', ['rm', '-f', wslSocketPath]);
+          console.log(`✅ Removed WSL socket file: ${wslSocketPath}`);
+        }
+        
+        console.log('✅ Cleanup completed successfully');
+        console.log('----------------------------------------');
+        console.log('🚀 ctrace IPC session has ended');
+        console.log('----------------------------------------');
+      } catch (error) {
+        console.error('❌ Error during cleanup:', error);
       }
     };
 
@@ -192,23 +338,31 @@ function setupCtraceHandlers() {
         }
       }
 
-      return await new Promise((resolve, reject) => {
-        console.log('Setting up socket IPC at:', socketPath);
+      return await new Promise(async (resolve, reject) => {
+        console.log('Setting up TCP-based IPC bridge...');
         
-        // Create and configure the server
+        // On Windows, check and ensure socat is installed
+        if (os.platform() === 'win32') {
+          const socatAvailable = await ensureSocatInstalled();
+          if (!socatAvailable) {
+            cleanup();
+            reject({ 
+              success: false, 
+              error: 'socat is required but not installed. Please install it in WSL: sudo apt-get install socat' 
+            });
+            return;
+          }
+        }
+        
+        // Create and configure the TCP server
         server = net.createServer((socket) => {
-
           let outputBuffer = '';
           
           socket.on('data', (data) => {
             const dataStr = data.toString();
             outputBuffer += dataStr;
-            console.log('data');
-            console.log(data);
-            console.log('dataStr');
+            console.log('📥 Received data from ctrace:');
             console.log(dataStr);
-            console.log('outputBuffer');
-            console.log(outputBuffer);
 
             // Forward data to renderer as it comes in
             if (event && event.sender && !event.sender.isDestroyed()) {
@@ -217,6 +371,7 @@ function setupCtraceHandlers() {
           });
           
           socket.on('end', () => {
+            console.log('📭 Connection closed by ctrace');
             // Send final output and completion status
             if (event && event.sender && !event.sender.isDestroyed()) {
               event.sender.send('ctrace-complete', { 
@@ -229,7 +384,7 @@ function setupCtraceHandlers() {
           });
           
           socket.on('error', (err) => {
-            console.error('Socket error:', err);
+            console.error('❌ Socket error:', err);
             cleanup();
             reject({ success: false, error: `Socket error: ${err.message}` });
           });
@@ -237,68 +392,117 @@ function setupCtraceHandlers() {
         
         // Handle server errors
         server.on('error', (err) => {
-          console.error('Server error:', err);
+          console.error('❌ Server error:', err);
           cleanup();
           reject({ success: false, error: `Server error: ${err.message}` });
         });
         
-        // Start listening on the socket
-        server.listen(socketPath, () => {
-          console.log('Server listening on', socketPath);
+        // Start listening on TCP with random port
+        server.listen(0, '0.0.0.0', async () => {
+          tcpPort = server.address().port;
+          console.log(`🌐 TCP server listening on 0.0.0.0:${tcpPort}`);
           
-          // Prepare command and arguments
-          let command, commandArgs;
-          const binaryArgs = ['--ipc', 'socket', '--ipc-path', socketPath, ...(Array.isArray(args) ? args : [])];
-          
-          if (os.platform() === 'win32') {
-            // On Windows, use WSL to execute the Linux binary
-            console.log('Windows detected, using WSL to execute ctrace');
-            const wslPath = resolvedBinPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => 
-              `/mnt/${drive.toLowerCase()}`);
+          try {
+            // Prepare command and arguments
+            let command, commandArgs;
+            const binaryArgs = ['--ipc', 'socket', '--ipc-path', wslSocketPath, ...(Array.isArray(args) ? args : [])];
             
-            command = 'wsl';
-            commandArgs = [wslPath, ...binaryArgs];
-            console.log('WSL command:', command, commandArgs);
-          } else {
-            // On Linux/Mac, use the binary directly
-            command = resolvedBinPath;
-            commandArgs = binaryArgs;
-            console.log('Direct execution:', command, commandArgs);
-          }
-          
-          // Set up process
-          const child = spawn(command, commandArgs, {
-            stdio: ['ignore', 'pipe', 'pipe']
-          });
-          
-          // Handle process output (for logging)
-          child.stdout.on('data', (data) => {
-            console.log(`[test]\n`);
-            console.log(`----------------------------\n`);
-            console.log(`[${data}]\n`);
-            console.log(`----------------------------\n`);
-          });
-          
-          child.stderr.on('data', (data) => {
-            console.error(`[ctrace error] ${data}`);
-          });
-          
-          child.on('error', (err) => {
-            console.error('Error spawning process:', err);
-            cleanup();
-            reject({ success: false, error: `Failed to start process: ${err.message}` });
-          });
-          
-          child.on('exit', (code, signal) => {
-            console.log(`Process exited with code ${code} and signal ${signal}`);
-            if (code !== 0) {
-              cleanup();
-              reject({ 
-                success: false, 
-                error: `Process exited with code ${code}` 
+            if (os.platform() === 'win32') {
+              // On Windows, use WSL with socat bridge
+              console.log('🪟 Windows detected, setting up socat bridge...');
+              
+              // Get Windows host IP from WSL perspective
+              const windowsHostIP = await getWindowsHostIP();
+              console.log(`🔗 Windows host IP: ${windowsHostIP}`);
+              
+              // Step 1: Start socat bridge
+              const socatCommand = `rm -f ${wslSocketPath}; socat UNIX-LISTEN:${wslSocketPath},fork,reuseaddr TCP:${windowsHostIP}:${tcpPort}`;
+              console.log(`🌉 Starting socat bridge: ${socatCommand}`);
+              
+              socatProcess = spawn('wsl', ['bash', '-c', socatCommand], {
+                stdio: ['ignore', 'pipe', 'pipe']
               });
+              
+              socatProcess.stdout.on('data', (data) => {
+                console.log(`[socat] ${data.toString().trim()}`);
+              });
+              
+              socatProcess.stderr.on('data', (data) => {
+                console.error(`[socat error] ${data.toString().trim()}`);
+              });
+              
+              socatProcess.on('error', (err) => {
+                console.error('❌ Error spawning socat:', err);
+                cleanup();
+                reject({ success: false, error: `Failed to start socat bridge: ${err.message}` });
+              });
+              
+              socatProcess.on('exit', (code, signal) => {
+                console.log(`⚠️ socat bridge exited with code ${code} and signal ${signal}`);
+              });
+              
+              // Step 2: Wait for socket file to be ready
+              console.log(`⏳ Waiting for socket file to be ready...`);
+              const socketReady = await waitForSocketFile(wslSocketPath, 5000);
+              
+              if (!socketReady) {
+                cleanup();
+                reject({ 
+                  success: false, 
+                  error: 'Socket file not ready after timeout. socat bridge may have failed.' 
+                });
+                return;
+              }
+              
+              // Step 3: Start ctrace binary
+              const wslPath = resolvedBinPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => 
+                `/mnt/${drive.toLowerCase()}`);
+              
+              command = 'wsl';
+              commandArgs = [wslPath, ...binaryArgs];
+              console.log('🚀 Starting ctrace:', command, commandArgs);
+            } else {
+              // On Linux/Mac, use the binary directly (legacy path, not using TCP bridge)
+              command = resolvedBinPath;
+              commandArgs = binaryArgs;
+              console.log('🐧 Direct execution:', command, commandArgs);
             }
-          });
+            
+            // Set up ctrace process
+            ctraceProcess = spawn(command, commandArgs, {
+              stdio: ['ignore', 'pipe', 'pipe']
+            });
+            
+            // Handle process output (for logging)
+            ctraceProcess.stdout.on('data', (data) => {
+              console.log(`[ctrace stdout] ${data.toString().trim()}`);
+            });
+            
+            ctraceProcess.stderr.on('data', (data) => {
+              console.error(`[ctrace stderr] ${data.toString().trim()}`);
+            });
+            
+            ctraceProcess.on('error', (err) => {
+              console.error('❌ Error spawning ctrace:', err);
+              cleanup();
+              reject({ success: false, error: `Failed to start ctrace: ${err.message}` });
+            });
+            
+            ctraceProcess.on('exit', (code, signal) => {
+              console.log(`ctrace exited with code ${code} and signal ${signal}`);
+              if (code !== 0 && code !== null) {
+                cleanup();
+                reject({ 
+                  success: false, 
+                  error: `ctrace exited with code ${code}` 
+                });
+              }
+            });
+          } catch (error) {
+            console.error('❌ Error in bridge setup:', error);
+            cleanup();
+            reject({ success: false, error: error.message });
+          }
         });
       });
     } catch (error) {
