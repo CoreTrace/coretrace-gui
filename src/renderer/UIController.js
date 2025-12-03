@@ -1,6 +1,6 @@
 // Import manager classes
 const NotificationManager = require('./managers/NotificationManager');
-const MonacoEditorManager = require('./managers/MonacoEditorManager');
+const EditorManager = require('./managers/EditorManager');
 const TabManager = require('./managers/TabManager');
 const SearchManager = require('./managers/SearchManager');
 const FileOperationsManager = require('./managers/FileOperationsManager');
@@ -39,10 +39,10 @@ class UIController {
     
     /**
      * Editor manager instance
-     * @type {MonacoEditorManager}
+     * @type {EditorManager}
      * @private
      */
-    this.editorManager = new MonacoEditorManager();
+    this.editorManager = new EditorManager();
     
     /**
      * Tab manager instance
@@ -101,24 +101,6 @@ class UIController {
     this.platform = 'unknown';
 
     this.init();
-  }
-
-  /**
-   * Convert Windows path to WSL path
-   * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
-   * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
-   * @private
-   */
-  convertToWSLPath(windowsPath) {
-    if (!windowsPath) return windowsPath;
-    
-    // Convert backslashes to forward slashes
-    let wslPath = windowsPath.replace(/\\/g, '/');
-    
-    // Convert drive letter (C: -> /mnt/c)
-    wslPath = wslPath.replace(/^([A-Z]):/i, (match, drive) => `/mnt/${drive.toLowerCase()}`);
-    
-    return wslPath;
   }
 
   /**
@@ -576,28 +558,12 @@ class UIController {
     this.searchManager.setWorkspacePath(this.fileOpsManager.getCurrentWorkspacePath());
 
     // Set up editor content change tracking
-    try {
-      // If Monaco editor is available, use its model change event
-      const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
-      if (monacoEditor && monacoEditor.onDidChangeModelContent) {
-        monacoEditor.onDidChangeModelContent(() => {
-          if (this.tabManager.activeTabId) {
-            const newContent = this.editorManager.getContent();
-            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
-          }
-        });
-      } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
-        // Fallback for the legacy DOM-based editor
-        this.editorManager.editor.addEventListener('input', () => {
-          if (this.tabManager.activeTabId) {
-            const newContent = this.editorManager.getContent();
-            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
-          }
-        });
+    this.editorManager.editor.addEventListener('input', () => {
+      if (this.tabManager.activeTabId) {
+        const newContent = this.editorManager.getContent();
+        this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
       }
-    } catch (err) {
-      console.warn('Failed to wire editor change listener:', err);
-    }
+    });
   }
 
   /**
@@ -944,24 +910,15 @@ class UIController {
         return;
       }
 
-      // Convert Windows path to WSL path for Linux binary
-      const wslFilePath = this.convertToWSLPath(currentFilePath);
-      
       outEl.textContent = `Running ctrace on: ${currentFilePath}`;
       try {
         let args = [];
-        args.push(`--input=${wslFilePath}`);
-        //args.push("--static");
-        args.push("--invoke=ctrace_stack_analyzer");
+        args.push(`--input=${currentFilePath}`);
+        args.push("--static");
         args.push("--sarif-format");
-        console.log("invoke run-ctrace with WSL path:", wslFilePath);
         const result = await window.ipcRenderer.invoke('run-ctrace', args);
-        console.log("after exec result");
-        console.log(result);
         if (result && result.success) {
-          console.log("result.output");
-          console.log(result.output);
-          outEl.textContent = result.output;
+          outEl.textContent = stripAnsi(result.output || '(no output)');
           this.notificationManager.showSuccess('CTrace completed successfully');
         } else {
           const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
@@ -1428,49 +1385,34 @@ class UIController {
     let capturedLineInfo = '';
     
     inputEl.addEventListener('focus', () => {
-      try {
-        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
-        if (monacoEditor) {
-          const selection = monacoEditor.getSelection();
-          const model = monacoEditor.getModel();
-          if (selection && model) {
-            const selectedText = model.getValueInRange(selection);
-            if (selectedText) {
-              capturedSelection = selectedText;
-              const startLine = selection.startLineNumber;
-              const endLine = selection.endLineNumber;
-              const activeTab = this.tabManager.getActiveTab();
-              const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
-              capturedLineInfo = startLine === endLine ? `${fileName}: ${startLine}` : `${fileName}: ${startLine}-${endLine}`;
-              contextText.textContent = capturedLineInfo;
-              contextIndicator.style.display = 'block';
-            }
-          }
+      const editor = this.editorManager.editor;
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const selection = editor.value.substring(start, end);
+      
+      if (selection) {
+        capturedSelection = selection;
+        
+        // Calculate line numbers
+        const textBeforeStart = editor.value.substring(0, start);
+        const textBeforeEnd = editor.value.substring(0, end);
+        const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
+        const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
+        
+        // Get current file name
+        const activeTab = this.tabManager.getActiveTab();
+        const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
+        
+        // Format context info
+        if (startLine === endLine) {
+          capturedLineInfo = `${fileName}: ${startLine}`;
         } else {
-          // Fallback for legacy textarea editor
-          const editor = this.editorManager.editor;
-          const start = editor.selectionStart;
-          const end = editor.selectionEnd;
-          const selection = editor.value.substring(start, end);
-          if (selection) {
-            capturedSelection = selection;
-            const textBeforeStart = editor.value.substring(0, start);
-            const textBeforeEnd = editor.value.substring(0, end);
-            const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
-            const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
-            const activeTab = this.tabManager.getActiveTab();
-            const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
-            if (startLine === endLine) {
-              capturedLineInfo = `${fileName}: ${startLine}`;
-            } else {
-              capturedLineInfo = `${fileName}: ${startLine}-${endLine}`;
-            }
-            contextText.textContent = capturedLineInfo;
-            contextIndicator.style.display = 'block';
-          }
+          capturedLineInfo = `${fileName}: ${startLine}-${endLine}`;
         }
-      } catch (err) {
-        console.warn('Error capturing selection for assistant context:', err);
+        
+        // Show context indicator
+        contextText.textContent = capturedLineInfo;
+        contextIndicator.style.display = 'block';
       }
     });
 
@@ -1610,68 +1552,41 @@ class UIController {
         btn.onclick = () => {
           const base64Code = btn.getAttribute('data-code-b64');
           const code = decodeURIComponent(escape(atob(base64Code)));
-          try {
-            const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
-            if (monacoEditor) {
-              const model = monacoEditor.getModel();
-              const selection = monacoEditor.getSelection();
-              let rangeObj = null;
-              let actionLabel = 'Inserted!';
-
-              if (selection && typeof selection.isEmpty === 'function' ? !selection.isEmpty() : (selection.startLineNumber !== selection.endLineNumber || selection.startColumn !== selection.endColumn)) {
-                rangeObj = {
-                  startLineNumber: selection.startLineNumber,
-                  startColumn: selection.startColumn,
-                  endLineNumber: selection.endLineNumber,
-                  endColumn: selection.endColumn
-                };
-                actionLabel = 'Replaced!';
-              } else {
-                const pos = monacoEditor.getPosition();
-                rangeObj = { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column };
-                actionLabel = 'Inserted!';
-              }
-
-              monacoEditor.executeEdits('assistant', [{ range: rangeObj, text: code, forceMoveMarkers: true }]);
-              // Update tab state
-              if (this.tabManager.activeTabId && model) {
-                this.tabManager.handleContentChange(this.tabManager.activeTabId, model.getValue());
-              }
-              btn.textContent = actionLabel;
-              setTimeout(() => btn.textContent = 'Replace', 2000);
-              monacoEditor.focus();
-            } else {
-              // Fallback to legacy textarea editor
-              const editor = this.editorManager.editor;
-              const start = editor.selectionStart;
-              const end = editor.selectionEnd;
-              if (start !== end) {
-                // Replace selected text
-                const before = editor.value.substring(0, start);
-                const after = editor.value.substring(end);
-                editor.value = before + code + after;
-                if (this.tabManager.activeTabId) {
-                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
-                }
-                btn.textContent = 'Replaced!';
-                setTimeout(() => btn.textContent = 'Replace', 2000);
-              } else {
-                const before = editor.value.substring(0, start);
-                const after = editor.value.substring(start);
-                editor.value = before + code + after;
-                if (this.tabManager.activeTabId) {
-                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
-                }
-                btn.textContent = 'Inserted!';
-                setTimeout(() => btn.textContent = 'Replace', 2000);
-              }
-              editor.focus();
+          
+          const editor = this.editorManager.editor;
+          const start = editor.selectionStart;
+          const end = editor.selectionEnd;
+          
+          if (start !== end) {
+            // Replace selected text
+            const before = editor.value.substring(0, start);
+            const after = editor.value.substring(end);
+            editor.value = before + code + after;
+            
+            // Update tab state
+            if (this.tabManager.activeTabId) {
+              this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
             }
-          } catch (err) {
-            console.error('Error replacing/inserting code from assistant:', err);
-            btn.textContent = 'Error';
+            
+            btn.textContent = 'Replaced!';
+            setTimeout(() => btn.textContent = 'Replace', 2000);
+          } else {
+            // Insert at cursor position
+            const before = editor.value.substring(0, start);
+            const after = editor.value.substring(start);
+            editor.value = before + code + after;
+            
+            // Update tab state
+            if (this.tabManager.activeTabId) {
+              this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+            }
+            
+            btn.textContent = 'Inserted!';
             setTimeout(() => btn.textContent = 'Replace', 2000);
           }
+          
+          // Focus editor
+          editor.focus();
         };
       });
     };
