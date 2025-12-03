@@ -45,6 +45,37 @@
     window.ipcRenderer = ipcRenderer;
   </script>
   
+  <!-- Monaco Editor Loader -->
+  <script>
+    const path = require('path');
+    const monacoBasePath = path.join(__dirname, '../node_modules/monaco-editor/min/vs');
+    
+    // Load Monaco's AMD loader
+    const loaderScript = document.createElement('script');
+    loaderScript.src = path.join(monacoBasePath, 'loader.js');
+    loaderScript.onload = () => {
+      // Configure AMD loader paths
+      require.config({ paths: { 'vs': monacoBasePath } });
+      
+      // Set up Monaco environment - disable web workers for Electron
+      window.MonacoEnvironment = {
+        getWorker: function (workerId, label) {
+          // Return undefined to disable workers (simpler for Electron)
+          return undefined;
+        }
+      };
+      
+      // Load Monaco Editor
+      require(['vs/editor/editor.main'], function() {
+        window.monaco = monaco;
+        console.log('Monaco Editor loaded successfully');
+        // Dispatch event to let other scripts know Monaco is ready
+        window.dispatchEvent(new Event('monaco-loaded'));
+      });
+    };
+    document.head.appendChild(loaderScript);
+  </script>
+  
   <!-- Load modular JavaScript -->
   <script>
     // Since we're in a renderer process, we need to handle module loading differently
@@ -302,8 +333,7 @@
           
           <!-- Editor Area (hidden by default) -->
           <div style="display: none;" id="editor-area">
-            <div class="gutter" id="gutter">1</div>
-            <div class="editor" id="editor" contenteditable="true" spellcheck="false" data-placeholder="Start typing your code here..."></div>
+            <div class="editor" id="editor"></div>
           </div>
           
           <!-- Visualyzer Area (hidden by default) -->

@@ -133,7 +133,7 @@ class TabManager {
    * Switch to a specific tab
    * @param {string} tabId - Tab ID to switch to
    */
-  switchToTab(tabId) {
+  async switchToTab(tabId) {
     // Save current tab content if we have an active tab
     if (this.activeTabId && this.openTabs.has(this.activeTabId)) {
       const currentTab = this.openTabs.get(this.activeTabId);
@@ -146,11 +146,11 @@ class TabManager {
     
     if (newTab) {
       // Update editor
-      this.editorManager.setContent(newTab.content);
+      await this.editorManager.setContent(newTab.content);
       
       // Set file type for syntax highlighting
       if (newTab.fileName) {
-        this.editorManager.setFileType(newTab.fileName);
+        await this.editorManager.setFileType(newTab.fileName);
       }
       
       // Update tab appearance
@@ -307,6 +307,14 @@ class TabManager {
     this.welcomeScreen.style.display = 'none';
     this.editorArea.style.display = 'flex';
     this.tabsContainer.style.display = 'flex';
+    
+    // Trigger Monaco layout update after showing editor area
+    setTimeout(() => {
+      if (this.editorManager && this.editorManager.editor) {
+        this.editorManager.editor.layout();
+        console.log('TabManager: Triggered Monaco layout update after showing editor');
+      }
+    }, 50);
   }
 
   /**
