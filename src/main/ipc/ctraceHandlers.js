@@ -276,18 +276,33 @@ function setupCtraceHandlers() {
     if (process.resourcesPath) {
       // In packaged app, binary is in extraResources
       binPath = path.join(process.resourcesPath, 'bin', binaryName);
+      console.log(`📦 Packaged mode - looking for binary at: ${binPath}`);
+      console.log(`📂 Resources path: ${process.resourcesPath}`);
     } else {
       // In development, binary is in the project bin directory
       // __dirname is .../src/main/ipc, so project root bin is ../../../bin/ctrace
       binPath = path.join(__dirname, '../../../bin', binaryName);
+      console.log(`🔧 Development mode - looking for binary at: ${binPath}`);
+      console.log(`📂 __dirname: ${__dirname}`);
     }
 
     async function resolveBinary() {
       try {
         await fs.access(binPath);
+        console.log(`✅ Binary found at: ${binPath}`);
         return binPath;
       } catch (error) {
-        console.error(`Binary not found at ${binPath}:`, error.message);
+        console.error(`❌ Binary not found at ${binPath}:`, error.message);
+        
+        // Try to list the directory contents for debugging
+        try {
+          const dir = path.dirname(binPath);
+          const files = await fs.readdir(dir);
+          console.error(`📁 Directory contents of ${dir}:`, files);
+        } catch (listError) {
+          console.error(`❌ Could not list directory: ${listError.message}`);
+        }
+        
         return null;
       }
     }
@@ -300,9 +315,16 @@ function setupCtraceHandlers() {
         const checkedPath = process.resourcesPath ? 
           path.join(process.resourcesPath, 'bin', binaryName) : 
           path.join(__dirname, '../../../bin', binaryName);
+        
+        // Additional debug info
+        let debugInfo = `\n\nDebug Info:\n`;
+        debugInfo += `- process.resourcesPath: ${process.resourcesPath || 'undefined'}\n`;
+        debugInfo += `- __dirname: ${__dirname}\n`;
+        debugInfo += `- Checked path: ${checkedPath}\n`;
+        
         return { 
           success: false, 
-          error: `ctrace binary not found at: ${checkedPath}${platformInfo}` 
+          error: `ctrace binary not found at: ${checkedPath}${platformInfo}${debugInfo}` 
         };
       }
 

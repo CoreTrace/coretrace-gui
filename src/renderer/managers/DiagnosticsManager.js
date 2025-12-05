@@ -26,6 +26,13 @@ class DiagnosticsManager {
    * @returns {boolean} Success status
    */
   parseOutput(output) {
+    // Check if output is empty or whitespace only
+    if (!output || output.trim() === '') {
+      console.warn('CTrace output is empty');
+      this.clear();
+      return false;
+    }
+    
     try {
       const data = JSON.parse(output);
       
