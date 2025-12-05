@@ -43,12 +43,6 @@ function createWindow () {
     minHeight: 600,
     icon: iconApp,
     frame: false,               // Custom frame for consistency across platforms
-    titleBarStyle: 'hidden',    // Hide native title bar
-    titleBarOverlay: {
-      color: '#0d1117',         // Match VS Code dark theme
-      symbolColor: '#ffffff',
-      height: 30
-    },
     webPreferences: {
       nodeIntegration: true,      // allows require() in renderer
       contextIsolation: false,    // disables security isolation
