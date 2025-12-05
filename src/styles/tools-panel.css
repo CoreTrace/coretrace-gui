@@ -29,8 +29,9 @@
 
 .tools-panel-content {
   flex: 1;
-  padding: 16px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .close-btn {

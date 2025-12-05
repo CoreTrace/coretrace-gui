@@ -28,8 +28,48 @@ async function testWSLAndCTrace() {
   
   console.log('✅ WSL is available');
   
-  // Test 2: CTrace binary accessibility via WSL
-  console.log('\n2. Testing CTrace binary via WSL...');
+  // Test 2: socat availability
+  console.log('\n2. Testing socat installation...');
+  const socatAvailable = await testSocat();
+  
+  if (!socatAvailable) {
+    console.log('⚠️  socat is not installed (required for IPC bridge)');
+    console.log('   Would you like to install it now? (y/n)');
+    
+    // Prompt user for installation
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    const answer = await new Promise((resolve) => {
+      rl.question('Install socat? (y/n): ', (ans) => {
+        rl.close();
+        resolve(ans.toLowerCase().trim());
+      });
+    });
+    
+    if (answer === 'y' || answer === 'yes') {
+      console.log('📦 Installing socat...');
+      const installed = await installSocat();
+      if (installed) {
+        console.log('✅ socat installed successfully');
+      } else {
+        console.log('❌ Failed to install socat');
+        console.log('   Please install manually: wsl sudo apt-get install socat');
+        return false;
+      }
+    } else {
+      console.log('⚠️  Skipping socat installation. The IPC bridge will not work without it.');
+      return false;
+    }
+  } else {
+    console.log('✅ socat is installed');
+  }
+  
+  // Test 3: CTrace binary accessibility via WSL
+  console.log('\n3. Testing CTrace binary via WSL...');
   const ctraceAvailable = await testCTraceViaWSL();
   
   if (!ctraceAvailable) {
@@ -39,11 +79,15 @@ async function testWSLAndCTrace() {
   
   console.log('✅ CTrace binary is accessible via WSL');
   
-  // Test 3: WSL path conversion
-  console.log('\n3. Testing WSL path conversion...');
+  // Test 4: WSL path conversion
+  console.log('\n4. Testing WSL path conversion...');
   testPathConversion();
   
-  console.log('\n🎉 All tests passed! WSL and CTrace are properly configured.');
+  // Test 5: Windows host IP detection
+  console.log('\n5. Testing Windows host IP detection from WSL...');
+  await testWindowsHostIP();
+  
+  console.log('\n🎉 All critical tests passed! WSL and CTrace are properly configured.');
   return true;
 }
 
@@ -118,6 +162,98 @@ function testPathConversion() {
   testPaths.forEach(winPath => {
     const wslPath = winPath.replace(/([A-Z]):\\/g, (match, drive) => `/mnt/${drive.toLowerCase()}/`).replace(/\\/g, '/');
     console.log(`  ${winPath} → ${wslPath}`);
+  });
+}
+
+function testSocat() {
+  return new Promise((resolve) => {
+    const child = spawn('wsl', ['which', 'socat'], { stdio: 'pipe' });
+    
+    child.on('close', (code) => {
+      resolve(code === 0);
+    });
+    
+    child.on('error', () => {
+      resolve(false);
+    });
+    
+    setTimeout(() => {
+      child.kill();
+      resolve(false);
+    }, 5000);
+  });
+}
+
+function installSocat() {
+  return new Promise((resolve) => {
+    console.log('   Running: wsl --user root apt-get update && apt-get install -y socat');
+    console.log('   (No password required - using Windows admin privileges)');
+    console.log('   This may take a few moments...');
+    
+    const child = spawn('wsl', [
+      '--user', 'root',
+      'bash', '-c',
+      'apt-get update -qq && apt-get install -y socat'
+    ], { 
+      stdio: 'inherit' // Show installation output to user
+    });
+    
+    child.on('close', (code) => {
+      resolve(code === 0);
+    });
+    
+    child.on('error', (err) => {
+      console.error(`   Installation error: ${err.message}`);
+      resolve(false);
+    });
+    
+    setTimeout(() => {
+      console.log('   Installation timeout');
+      child.kill();
+      resolve(false);
+    }, 120000); // 2 minute timeout for installation
+  });
+}
+
+function testWindowsHostIP() {
+  return new Promise((resolve) => {
+    const child = spawn('wsl', ['ip', 'route', 'show', 'default'], {
+      stdio: 'pipe'
+    });
+    
+    let output = '';
+    
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    child.on('close', (code) => {
+      if (code === 0 && output) {
+        // Parse: "default via 172.30.240.1 dev eth0 proto kernel"
+        const match = output.match(/default\s+via\s+(\d+\.\d+\.\d+\.\d+)/);
+        if (match && match[1]) {
+          console.log(`  Windows host IP from WSL: ${match[1]}`);
+          console.log('  ✅ IP detection successful');
+          resolve(true);
+        } else {
+          console.log('  ❌ Failed to parse IP address');
+          resolve(false);
+        }
+      } else {
+        console.log('  ❌ Failed to detect Windows host IP');
+        resolve(false);
+      }
+    });
+    
+    child.on('error', () => {
+      console.log('  ❌ Error detecting Windows host IP');
+      resolve(false);
+    });
+    
+    setTimeout(() => {
+      child.kill();
+      resolve(false);
+    }, 5000);
   });
 }
 

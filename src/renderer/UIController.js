@@ -1,9 +1,10 @@
 // Import manager classes
 const NotificationManager = require('./managers/NotificationManager');
-const EditorManager = require('./managers/EditorManager');
+const MonacoEditorManager = require('./managers/MonacoEditorManager');
 const TabManager = require('./managers/TabManager');
 const SearchManager = require('./managers/SearchManager');
 const FileOperationsManager = require('./managers/FileOperationsManager');
+const DiagnosticsManager = require('./managers/DiagnosticsManager');
 
 // Import utilities
 const fileTypeUtils = require('./utils/fileTypeUtils');
@@ -39,10 +40,10 @@ class UIController {
     
     /**
      * Editor manager instance
-     * @type {EditorManager}
+     * @type {MonacoEditorManager}
      * @private
      */
-    this.editorManager = new EditorManager();
+    this.editorManager = new MonacoEditorManager();
     
     /**
      * Tab manager instance
@@ -64,6 +65,13 @@ class UIController {
      * @private
      */
     this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
+
+    /**
+     * Diagnostics manager instance
+     * @type {DiagnosticsManager}
+     * @private
+     */
+    this.diagnosticsManager = new DiagnosticsManager(this.editorManager);
 
     /**
      * Flag indicating if UI is being resized
@@ -101,6 +109,24 @@ class UIController {
     this.platform = 'unknown';
 
     this.init();
+  }
+
+  /**
+   * Convert Windows path to WSL path
+   * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
+   * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
+   * @private
+   */
+  convertToWSLPath(windowsPath) {
+    if (!windowsPath) return windowsPath;
+    
+    // Convert backslashes to forward slashes
+    let wslPath = windowsPath.replace(/\\/g, '/');
+    
+    // Convert drive letter (C: -> /mnt/c)
+    wslPath = wslPath.replace(/^([A-Z]):/i, (match, drive) => `/mnt/${drive.toLowerCase()}`);
+    
+    return wslPath;
   }
 
   /**
@@ -558,12 +584,28 @@ class UIController {
     this.searchManager.setWorkspacePath(this.fileOpsManager.getCurrentWorkspacePath());
 
     // Set up editor content change tracking
-    this.editorManager.editor.addEventListener('input', () => {
-      if (this.tabManager.activeTabId) {
-        const newContent = this.editorManager.getContent();
-        this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+    try {
+      // If Monaco editor is available, use its model change event
+      const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+      if (monacoEditor && monacoEditor.onDidChangeModelContent) {
+        monacoEditor.onDidChangeModelContent(() => {
+          if (this.tabManager.activeTabId) {
+            const newContent = this.editorManager.getContent();
+            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+          }
+        });
+      } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
+        // Fallback for the legacy DOM-based editor
+        this.editorManager.editor.addEventListener('input', () => {
+          if (this.tabManager.activeTabId) {
+            const newContent = this.editorManager.getContent();
+            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+          }
+        });
       }
-    });
+    } catch (err) {
+      console.warn('Failed to wire editor change listener:', err);
+    }
   }
 
   /**
@@ -895,90 +937,157 @@ class UIController {
     };
 
     window.runCTrace = async () => {
-      const outEl = document.getElementById('ctrace-output');
+      const resultsArea = document.getElementById('ctrace-results-area');
       this.showToolsPanel();
-      if (!outEl) {
-        this.notificationManager.showError('CTrace output panel not found');
+      if (!resultsArea) {
+        this.notificationManager.showError('CTrace results area not found');
         return;
       }
 
       const active = this.tabManager.getActiveTab();
       const currentFilePath = active && active.filePath ? active.filePath : null;
       if (!currentFilePath) {
-        outEl.textContent = 'No active file to analyze. Open a file first.';
+        resultsArea.innerHTML = `
+          <div class="ctrace-error">
+            <div class="error-icon">⚠️</div>
+            <div class="error-text">No active file to analyze</div>
+            <div class="error-subtext">Please open a file first</div>
+          </div>
+        `;
         this.notificationManager.showWarning('Open a file to analyze with CTrace');
         return;
       }
 
-      outEl.textContent = `Running ctrace on: ${currentFilePath}`;
+      // Convert Windows path to WSL path for Linux binary
+      const wslFilePath = this.convertToWSLPath(currentFilePath);
+      
+      // Clear previous diagnostics and show loading state
+      this.diagnosticsManager.clear();
+      resultsArea.innerHTML = `
+        <div class="ctrace-loading">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">Analyzing ${this.diagnosticsManager.getFileName(currentFilePath)}...</div>
+          <div class="loading-subtext">This may take a moment</div>
+        </div>
+      `;
+      
       try {
+        // Get custom arguments from input field
+        const argsInput = document.getElementById('ctrace-args');
+        const customArgs = argsInput ? argsInput.value.trim() : '';
+        
+        // Parse custom arguments (simple split by space, preserving quoted strings)
         let args = [];
-        args.push(`--input=${currentFilePath}`);
-        args.push("--static");
-        args.push("--sarif-format");
+        if (customArgs) {
+          // Simple parsing - split by space but respect quotes
+          const matches = customArgs.match(/(?:[^\s"]+|"[^"]*")+/g);
+          if (matches) {
+            args = matches.map(arg => arg.replace(/^"(.*)"$/, '$1'));
+          }
+        }
+        
+        // Always prepend --input parameter as first argument
+        args.unshift(`--input=${wslFilePath}`);
+        
+        console.log("invoke run-ctrace with WSL path:", wslFilePath);
+        console.log("Custom arguments:", args);
         const result = await window.ipcRenderer.invoke('run-ctrace', args);
+        console.log("after exec result");
+        console.log(result);
         if (result && result.success) {
-          outEl.textContent = stripAnsi(result.output || '(no output)');
-          this.notificationManager.showSuccess('CTrace completed successfully');
+          console.log("result.output");
+          console.log(result.output);
+          
+          // Check if output is empty
+          if (!result.output || result.output.trim() === '') {
+            resultsArea.innerHTML = `
+              <div class="ctrace-error">
+                <div class="error-icon">⚠️</div>
+                <div class="error-text">No Output from CTrace</div>
+                <div class="error-details">CTrace completed successfully but produced no output. This might indicate:</div>
+                <div class="error-help">
+                  • The file may not be supported by CTrace<br>
+                  • The analysis produced no diagnostics<br>
+                  • Check that your custom arguments are correct<br>
+                  • Try adding <code>--sarif-format</code> for JSON output
+                </div>
+              </div>
+            `;
+            this.notificationManager.showWarning('CTrace produced no output');
+            return;
+          }
+          
+          // Try to parse as JSON for diagnostics
+          const isParsed = this.diagnosticsManager.parseOutput(result.output);
+          
+          if (isParsed) {
+            // Display diagnostics with rich UI
+            await this.diagnosticsManager.displayDiagnostics();
+            this.notificationManager.showSuccess('CTrace analysis completed');
+          } else {
+            // Fallback to plain text output
+            resultsArea.innerHTML = `
+              <div class="ctrace-raw-output">
+                <div class="raw-output-header">
+                  <span>Raw Output</span>
+                </div>
+                <pre class="raw-output-content">${this.diagnosticsManager.escapeHtml(result.output)}</pre>
+              </div>
+            `;
+            this.notificationManager.showSuccess('CTrace completed');
+          }
         } else {
           const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
           
           // Check if this is a WSL setup error and provide helpful UI
           if (details.includes('WSL') && details.includes('distributions')) {
-            outEl.innerHTML = `
-              <div style="color: #ff6b6b; font-weight: bold; margin-bottom: 10px;">⚠️ WSL Setup Required</div>
-              <div style="white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.4;">${stripAnsi(details)}</div>
-              <div style="margin-top: 15px; padding: 10px; background: #f0f8ff; border: 1px solid #007acc; border-radius: 4px;">
-                <div style="font-weight: bold; color: #007acc; margin-bottom: 5px;">Quick Setup:</div>
-                <div style="font-size: 12px; color: #333;">
+            resultsArea.innerHTML = `
+              <div class="ctrace-error">
+                <div class="error-icon">⚠️</div>
+                <div class="error-text">WSL Setup Required</div>
+                <div class="error-details">${stripAnsi(details)}</div>
+                <div class="error-help">
+                  <strong>Quick Setup:</strong><br>
                   1. Open PowerShell as Administrator<br>
-                  2. Run: <code style="background: #e6e6e6; padding: 2px 4px; border-radius: 2px;">wsl --install Ubuntu</code><br>
-                  3. Restart when prompted and follow setup instructions<br>
+                  2. Run: <code>wsl --install Ubuntu</code><br>
+                  3. Restart when prompted<br>
                   4. Restart this application
                 </div>
               </div>
             `;
-            this.notificationManager.showWarning('WSL setup required - see output panel for instructions');
+            this.notificationManager.showWarning('WSL setup required');
           } else {
-            outEl.textContent = `Error running ctrace:\n${stripAnsi(details)}`;
+            resultsArea.innerHTML = `
+              <div class="ctrace-error">
+                <div class="error-icon">❌</div>
+                <div class="error-text">CTrace Error</div>
+                <pre class="error-details">${stripAnsi(details)}</pre>
+              </div>
+            `;
             this.notificationManager.showError('Failed to run CTrace');
           }
         }
-        // Auto-scroll to bottom
-        outEl.scrollTop = outEl.scrollHeight;
       } catch (err) {
-        outEl.textContent = `Exception: ${err.message}`;
+        resultsArea.innerHTML = `
+          <div class="ctrace-error">
+            <div class="error-icon">❌</div>
+            <div class="error-text">Exception</div>
+            <pre class="error-details">${err.message}</pre>
+          </div>
+        `;
         this.notificationManager.showError('Error invoking CTrace');
       }
     };
 
     window.clearCTraceOutput = () => {
-      const outEl = document.getElementById('ctrace-output');
-      if (outEl) outEl.textContent = '';
-    };
-
-    window.copyCTraceOutput = () => {
-      const outEl = document.getElementById('ctrace-output');
-      if (!outEl) return;
-      const text = outEl.textContent || '';
-      try {
-        // Prefer Electron clipboard if available via require
-        const { clipboard } = require('electron');
-        clipboard.writeText(text);
-        this.notificationManager.showSuccess('Output copied to clipboard');
-      } catch (_) {
-        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text)
-            .then(() => this.notificationManager.showSuccess('Output copied to clipboard'))
-            .catch(() => this.notificationManager.showError('Failed to copy output'));
-        } else {
-          this.notificationManager.showError('Clipboard not available');
-        }
-      }
+      this.diagnosticsManager.clear();
     };
 
     // Tab manager reference for global access
     window.tabManager = this.tabManager;
+    
+    // Diagnostics manager reference for global access
+    window.diagnosticsManager = this.diagnosticsManager;
     window.searchManager = this.searchManager;
   }
 
@@ -1385,34 +1494,49 @@ class UIController {
     let capturedLineInfo = '';
     
     inputEl.addEventListener('focus', () => {
-      const editor = this.editorManager.editor;
-      const start = editor.selectionStart;
-      const end = editor.selectionEnd;
-      const selection = editor.value.substring(start, end);
-      
-      if (selection) {
-        capturedSelection = selection;
-        
-        // Calculate line numbers
-        const textBeforeStart = editor.value.substring(0, start);
-        const textBeforeEnd = editor.value.substring(0, end);
-        const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
-        const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
-        
-        // Get current file name
-        const activeTab = this.tabManager.getActiveTab();
-        const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
-        
-        // Format context info
-        if (startLine === endLine) {
-          capturedLineInfo = `${fileName}: ${startLine}`;
+      try {
+        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+        if (monacoEditor) {
+          const selection = monacoEditor.getSelection();
+          const model = monacoEditor.getModel();
+          if (selection && model) {
+            const selectedText = model.getValueInRange(selection);
+            if (selectedText) {
+              capturedSelection = selectedText;
+              const startLine = selection.startLineNumber;
+              const endLine = selection.endLineNumber;
+              const activeTab = this.tabManager.getActiveTab();
+              const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
+              capturedLineInfo = startLine === endLine ? `${fileName}: ${startLine}` : `${fileName}: ${startLine}-${endLine}`;
+              contextText.textContent = capturedLineInfo;
+              contextIndicator.style.display = 'block';
+            }
+          }
         } else {
-          capturedLineInfo = `${fileName}: ${startLine}-${endLine}`;
+          // Fallback for legacy textarea editor
+          const editor = this.editorManager.editor;
+          const start = editor.selectionStart;
+          const end = editor.selectionEnd;
+          const selection = editor.value.substring(start, end);
+          if (selection) {
+            capturedSelection = selection;
+            const textBeforeStart = editor.value.substring(0, start);
+            const textBeforeEnd = editor.value.substring(0, end);
+            const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
+            const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
+            const activeTab = this.tabManager.getActiveTab();
+            const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
+            if (startLine === endLine) {
+              capturedLineInfo = `${fileName}: ${startLine}`;
+            } else {
+              capturedLineInfo = `${fileName}: ${startLine}-${endLine}`;
+            }
+            contextText.textContent = capturedLineInfo;
+            contextIndicator.style.display = 'block';
+          }
         }
-        
-        // Show context indicator
-        contextText.textContent = capturedLineInfo;
-        contextIndicator.style.display = 'block';
+      } catch (err) {
+        console.warn('Error capturing selection for assistant context:', err);
       }
     });
 
@@ -1552,41 +1676,68 @@ class UIController {
         btn.onclick = () => {
           const base64Code = btn.getAttribute('data-code-b64');
           const code = decodeURIComponent(escape(atob(base64Code)));
-          
-          const editor = this.editorManager.editor;
-          const start = editor.selectionStart;
-          const end = editor.selectionEnd;
-          
-          if (start !== end) {
-            // Replace selected text
-            const before = editor.value.substring(0, start);
-            const after = editor.value.substring(end);
-            editor.value = before + code + after;
-            
-            // Update tab state
-            if (this.tabManager.activeTabId) {
-              this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+          try {
+            const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+            if (monacoEditor) {
+              const model = monacoEditor.getModel();
+              const selection = monacoEditor.getSelection();
+              let rangeObj = null;
+              let actionLabel = 'Inserted!';
+
+              if (selection && typeof selection.isEmpty === 'function' ? !selection.isEmpty() : (selection.startLineNumber !== selection.endLineNumber || selection.startColumn !== selection.endColumn)) {
+                rangeObj = {
+                  startLineNumber: selection.startLineNumber,
+                  startColumn: selection.startColumn,
+                  endLineNumber: selection.endLineNumber,
+                  endColumn: selection.endColumn
+                };
+                actionLabel = 'Replaced!';
+              } else {
+                const pos = monacoEditor.getPosition();
+                rangeObj = { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column };
+                actionLabel = 'Inserted!';
+              }
+
+              monacoEditor.executeEdits('assistant', [{ range: rangeObj, text: code, forceMoveMarkers: true }]);
+              // Update tab state
+              if (this.tabManager.activeTabId && model) {
+                this.tabManager.handleContentChange(this.tabManager.activeTabId, model.getValue());
+              }
+              btn.textContent = actionLabel;
+              setTimeout(() => btn.textContent = 'Replace', 2000);
+              monacoEditor.focus();
+            } else {
+              // Fallback to legacy textarea editor
+              const editor = this.editorManager.editor;
+              const start = editor.selectionStart;
+              const end = editor.selectionEnd;
+              if (start !== end) {
+                // Replace selected text
+                const before = editor.value.substring(0, start);
+                const after = editor.value.substring(end);
+                editor.value = before + code + after;
+                if (this.tabManager.activeTabId) {
+                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+                }
+                btn.textContent = 'Replaced!';
+                setTimeout(() => btn.textContent = 'Replace', 2000);
+              } else {
+                const before = editor.value.substring(0, start);
+                const after = editor.value.substring(start);
+                editor.value = before + code + after;
+                if (this.tabManager.activeTabId) {
+                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+                }
+                btn.textContent = 'Inserted!';
+                setTimeout(() => btn.textContent = 'Replace', 2000);
+              }
+              editor.focus();
             }
-            
-            btn.textContent = 'Replaced!';
-            setTimeout(() => btn.textContent = 'Replace', 2000);
-          } else {
-            // Insert at cursor position
-            const before = editor.value.substring(0, start);
-            const after = editor.value.substring(start);
-            editor.value = before + code + after;
-            
-            // Update tab state
-            if (this.tabManager.activeTabId) {
-              this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
-            }
-            
-            btn.textContent = 'Inserted!';
+          } catch (err) {
+            console.error('Error replacing/inserting code from assistant:', err);
+            btn.textContent = 'Error';
             setTimeout(() => btn.textContent = 'Replace', 2000);
           }
-          
-          // Focus editor
-          editor.focus();
         };
       });
     };

@@ -111,6 +111,85 @@ function createVisualizerWindow() {
  * @returns {Promise<boolean>} True if WSL is available, false otherwise
  */
 /**
+ * Check if socat is installed in WSL
+ * @returns {Promise<boolean>} True if socat is installed, false otherwise
+ */
+async function checkSocatInstalled() {
+  return new Promise((resolve) => {
+    if (os.platform() !== 'win32') {
+      resolve(true); // Not needed on non-Windows
+      return;
+    }
+
+    const child = spawn('wsl', ['which', 'socat'], { stdio: 'pipe', windowsHide: true });
+    
+    child.on('close', (code) => {
+      resolve(code === 0);
+    });
+    
+    child.on('error', () => {
+      resolve(false);
+    });
+    
+    setTimeout(() => {
+      child.kill();
+      resolve(false);
+    }, 5000);
+  });
+}
+
+/**
+ * Attempt to install socat in WSL
+ * @returns {Promise<boolean>} True if installation succeeded, false otherwise
+ */
+async function installSocat() {
+  return new Promise((resolve) => {
+    console.log('Attempting to install socat in WSL...');
+    
+    // Use wsl.exe with --user root to bypass sudo password requirement
+    // This works because WSL allows running as root without password from Windows
+    const child = spawn('wsl', [
+      '--user', 'root',
+      'bash', '-c',
+      'apt-get update -qq && apt-get install -y socat'
+    ], { 
+      stdio: 'inherit',
+      windowsHide: false 
+    });
+    
+    child.on('close', (code) => {
+      if (code === 0) {
+        console.log('✅ socat installed successfully');
+        
+        // Show success dialog to user
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Installation Successful',
+          message: 'socat installed successfully!',
+          detail: 'The socat tool has been installed in WSL and is ready to use.',
+          buttons: ['OK']
+        });
+        
+        resolve(true);
+      } else {
+        console.error('❌ Failed to install socat');
+        resolve(false);
+      }
+    });
+    
+    child.on('error', (err) => {
+      console.error('Error installing socat:', err);
+      resolve(false);
+    });
+    
+    setTimeout(() => {
+      child.kill();
+      resolve(false);
+    }, 120000); // 2 minute timeout
+  });
+}
+
+/**
  * Comprehensive WSL status detection
  * @returns {Promise<Object>} Object with available, hasDistros, error, and distributions properties
  */
@@ -552,6 +631,45 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       const wslStatus = await detectWSLStatus();
       console.log('WSL Status detected:', wslStatus);
+      
+      // Check if socat is installed
+      if (wslStatus.available && wslStatus.hasDistros) {
+        const socatInstalled = await checkSocatInstalled();
+        wslStatus.socatInstalled = socatInstalled;
+        console.log('socat installed:', socatInstalled);
+        
+        if (!socatInstalled) {
+          console.log('⚠️  socat is not installed (required for IPC bridge)');
+          
+          // Show dialog to offer installation
+          const response = await dialog.showMessageBox(mainWindow, {
+            type: 'warning',
+            title: 'socat Required',
+            message: 'CTrace requires socat for IPC communication',
+            detail: 'socat is not installed in your WSL distribution. Would you like to install it now?\n\n' +
+                    'This will run: wsl --user root apt-get install socat\n' +
+                    '(No password required - uses Windows admin privileges)',
+            buttons: ['Install Now', 'Cancel'],
+            defaultId: 0,
+            cancelId: 1
+          });
+          
+          if (response.response === 0) {
+            // User chose to install
+            const installed = await installSocat();
+            wslStatus.socatInstalled = installed;
+            
+            if (!installed) {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Installation Failed',
+                message: 'Failed to install socat',
+                detail: 'Please install it manually by running:\nwsl sudo apt-get install socat'
+              });
+            }
+          }
+        }
+      }
       
       // Send status to renderer
       if (mainWindow && mainWindow.webContents) {

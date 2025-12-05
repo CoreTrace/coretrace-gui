@@ -314,7 +314,7 @@ class FileOperationsManager {
           };
           
           // Update editor content
-          this.tabManager.editorManager.setContent(result.content);
+          await this.tabManager.editorManager.setContent(result.content);
           
           // Update tab appearance to remove warning
           const tabElement = document.querySelector(`[data-tab-id="${this.tabManager.activeTabId}"]`);
