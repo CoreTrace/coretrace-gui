@@ -387,6 +387,9 @@ class FileOperationsManager {
       
       if (item.type === 'directory') {
         itemElement.className = 'file-tree-item';
+        itemElement.setAttribute('data-path', item.path);
+        itemElement.setAttribute('data-type', 'directory');
+        itemElement.setAttribute('data-name', item.name);
         itemElement.innerHTML = `
           <span class="icon">📁</span>
           <span class="name">${item.name}</span>
@@ -411,6 +414,9 @@ class FileOperationsManager {
       } else {
         itemElement.className = 'file-tree-item';
         itemElement.setAttribute('data-file-path', item.path);
+        itemElement.setAttribute('data-path', item.path);
+        itemElement.setAttribute('data-type', 'file');
+        itemElement.setAttribute('data-name', item.name);
         const fileIcon = this.getFileIcon(item.name);
         itemElement.innerHTML = `
           <span class="icon">${fileIcon}</span>

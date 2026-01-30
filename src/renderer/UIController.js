@@ -95,6 +95,13 @@ class UIController {
     this.activeMenu = null;
 
     /**
+     * File tree context menu DOM element
+     * @type {HTMLElement|null}
+     * @private
+     */
+    this.fileTreeContextMenu = null;
+
+    /**
      * WSL availability status
      * @type {boolean}
      * @private
@@ -168,6 +175,9 @@ class UIController {
 
     // Set up file system watcher for auto-refresh
     this.setupFileTreeWatcher();
+
+    // Set up explorer file tree context menu (right click)
+    this.setupFileTreeContextMenu();
     
     // Set up custom title bar controls
     this.setupTitleBarControls();
@@ -206,7 +216,7 @@ class UIController {
    * // Refresh is typically triggered by the refresh button
    * await uiController.refreshFileTree();
    */
-  async refreshFileTree() {
+  async refreshFileTree(silent = false) {
     // Only refresh if workspace is open
     const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
     if (!workspacePath) {
@@ -219,7 +229,9 @@ class UIController {
       if (result.success) {
         const folderName = workspacePath.split(/[/\\]/).pop();
         this.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
-        this.notificationManager.showSuccess('File tree refreshed');
+        if (!silent) {
+          this.notificationManager.showSuccess('File tree refreshed');
+        }
       } else {
         this.notificationManager.showError('Failed to refresh file tree: ' + (result.error || 'Unknown error'));
       }
@@ -634,6 +646,317 @@ class UIController {
         this.hideAllMenus();
       }
     });
+
+    // Close file tree context menu when clicking anywhere
+    document.addEventListener('click', () => {
+      this.hideFileTreeContextMenu();
+    });
+
+    // Close file tree context menu on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.hideFileTreeContextMenu();
+      }
+    });
+  }
+
+  /**
+   * Setup a custom context menu for the explorer file tree.
+   *
+   * Requirements:
+   * - Right click on empty area: New File.. / New Folder..
+   * - Right click on folder: New File.. / New Folder.. / Rename / Delete
+   * - Right click on file: Rename / Delete
+   */
+  setupFileTreeContextMenu() {
+    const workspaceFolderEl = document.getElementById('workspace-folder');
+    const fileTreeElement = document.getElementById('file-tree');
+    const targetEl = workspaceFolderEl || fileTreeElement;
+    if (!targetEl) return;
+
+    targetEl.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // No workspace => no file operations
+      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+      if (!workspacePath) {
+        this.notificationManager.showWarning('Open a workspace to use file operations');
+        return;
+      }
+
+      const itemEl = e.target.closest('.file-tree-item');
+      const itemType = itemEl ? itemEl.getAttribute('data-type') : null;
+      const itemPath = itemEl ? (itemEl.getAttribute('data-path') || itemEl.getAttribute('data-file-path')) : null;
+      const itemName = itemEl ? (itemEl.getAttribute('data-name') || '') : '';
+
+      const menuItems = [];
+
+      // Right click on empty area
+      if (!itemEl) {
+        menuItems.push({
+          label: 'New file..',
+          action: () => this.createFileInDirectory(workspacePath)
+        });
+        menuItems.push({
+          label: 'New folder..',
+          action: () => this.createFolderInDirectory(workspacePath)
+        });
+      } else if (itemType === 'directory') {
+        // Folder menu
+        menuItems.push({
+          label: 'New file..',
+          action: () => this.createFileInDirectory(itemPath)
+        });
+        menuItems.push({
+          label: 'New folder..',
+          action: () => this.createFolderInDirectory(itemPath)
+        });
+        menuItems.push({
+          label: 'Rename',
+          action: () => this.renamePath(itemPath, itemName)
+        });
+        menuItems.push({
+          label: 'Delete',
+          action: () => this.deletePath(itemPath, itemType)
+        });
+      } else {
+        // File menu
+        menuItems.push({
+          label: 'Rename',
+          action: () => this.renamePath(itemPath, itemName)
+        });
+        menuItems.push({
+          label: 'Delete',
+          action: () => this.deletePath(itemPath, itemType)
+        });
+      }
+
+      this.showFileTreeContextMenu(e.clientX, e.clientY, menuItems);
+    });
+  }
+
+  /**
+   * Show a simple in-app input dialog (avoids relying on window.prompt).
+   * @param {string} title
+   * @param {string} [placeholder]
+   * @param {string} [defaultValue]
+   * @returns {Promise<string|null>}
+   */
+  promptForText(title, placeholder = '', defaultValue = '') {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'input-dialog-overlay';
+
+      const dialog = document.createElement('div');
+      dialog.className = 'input-dialog';
+
+      const header = document.createElement('div');
+      header.className = 'input-dialog-title';
+      header.textContent = title;
+
+      const input = document.createElement('input');
+      input.className = 'input-dialog-input';
+      input.type = 'text';
+      input.placeholder = placeholder;
+      input.value = defaultValue || '';
+
+      const actions = document.createElement('div');
+      actions.className = 'input-dialog-actions';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'input-dialog-button';
+      cancelBtn.textContent = 'Cancel';
+
+      const okBtn = document.createElement('button');
+      okBtn.className = 'input-dialog-button primary';
+      okBtn.textContent = 'OK';
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(okBtn);
+
+      dialog.appendChild(header);
+      dialog.appendChild(input);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      const cleanup = (value) => {
+        overlay.remove();
+        resolve(value);
+      };
+
+      cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cleanup(null);
+      });
+
+      okBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cleanup(input.value);
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) cleanup(null);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          cleanup(input.value);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup(null);
+        }
+      });
+
+      // Focus synchronously (still inside the click handler user gesture)
+      // so typing works reliably even if the editor has global key handlers.
+      try {
+        input.disabled = false;
+        input.readOnly = false;
+        input.focus();
+        input.select();
+      } catch (_) {
+        // ignore
+      }
+
+      // Fallback focus in next frame
+      requestAnimationFrame(() => {
+        try {
+          input.focus();
+        } catch (_) {
+          // ignore
+        }
+      });
+    });
+  }
+
+  showFileTreeContextMenu(x, y, items) {
+    this.hideFileTreeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+
+    items.forEach(({ label, action }) => {
+      const item = document.createElement('div');
+      item.className = 'context-menu-item';
+      item.textContent = label;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hideFileTreeContextMenu();
+        action();
+      });
+      menu.appendChild(item);
+    });
+
+    document.body.appendChild(menu);
+
+    // Position within viewport
+    const rect = menu.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width - 8;
+    const maxY = window.innerHeight - rect.height - 8;
+    const posX = Math.max(8, Math.min(x, maxX));
+    const posY = Math.max(8, Math.min(y, maxY));
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
+
+    this.fileTreeContextMenu = menu;
+  }
+
+  hideFileTreeContextMenu() {
+    if (this.fileTreeContextMenu) {
+      this.fileTreeContextMenu.remove();
+      this.fileTreeContextMenu = null;
+    }
+  }
+
+  async createFileInDirectory(directoryPath) {
+    const fileName = await this.promptForText('New file', 'e.g. main.c');
+    if (!fileName) return;
+
+    try {
+      const result = await window.ipcRenderer.invoke('create-file', directoryPath, fileName);
+      if (result.success) {
+        this.notificationManager.showSuccess(`Created file "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to create file: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error creating file: ' + error.message);
+    }
+  }
+
+  async createFolderInDirectory(directoryPath) {
+    const folderName = await this.promptForText('New folder', 'e.g. include');
+    if (!folderName) return;
+
+    try {
+      const result = await window.ipcRenderer.invoke('create-folder', directoryPath, folderName);
+      if (result.success) {
+        this.notificationManager.showSuccess(`Created folder "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to create folder: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error creating folder: ' + error.message);
+    }
+  }
+
+  async renamePath(targetPath, currentName = '') {
+    if (!targetPath) return;
+    const newName = await this.promptForText('Rename', '', currentName || '');
+    if (!newName) return;
+
+    try {
+      const result = await window.ipcRenderer.invoke('rename-path', targetPath, newName);
+      if (result.success) {
+        // Update open tab if the renamed item is an open file
+        if (result.isFile) {
+          const tabId = this.tabManager.findTabByPath(targetPath);
+          if (tabId) {
+            this.tabManager.updateTabFile(tabId, result.newPath, result.name);
+          }
+        }
+        this.notificationManager.showSuccess(`Renamed to "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to rename: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error renaming: ' + error.message);
+    }
+  }
+
+  async deletePath(targetPath, itemType) {
+    if (!targetPath) return;
+    const isFolder = itemType === 'directory';
+
+    const ok = confirm(isFolder ? 'Delete this folder and all its contents?' : 'Delete this file?');
+    if (!ok) return;
+
+    // If deleting an open file, close the tab first (honor unsaved changes)
+    if (!isFolder) {
+      const tabId = this.tabManager.findTabByPath(targetPath);
+      if (tabId) {
+        const closed = this.tabManager.closeTabById(tabId);
+        if (!closed) return;
+      }
+    }
+
+    try {
+      const result = await window.ipcRenderer.invoke('delete-path', targetPath);
+      if (result.success) {
+        this.notificationManager.showSuccess('Deleted successfully');
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to delete: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error deleting: ' + error.message);
+    }
   }
 
   /**
@@ -1897,18 +2220,23 @@ class UIController {
         `;
         extra.appendChild(selRow);
         extra.appendChild(makeInputRow('API Key', 'external-api-key', 'sk-...'));
+        extra.appendChild(makeInputRow('Model Name', 'external-model', 'gpt-4'));
         extra.appendChild(makeInputRow('System prompt (optional)', 'system-prompt', 'You are a helpful assistant...'));
         
         // Pre-fill with saved values
         setTimeout(() => {
           const providerSelect = document.getElementById('external-provider');
           const apiKeyInput = document.getElementById('external-api-key');
+          const modelInput = document.getElementById('external-model');
           const systemInput = document.getElementById('system-prompt');
           if (providerSelect && existingConfig.externalProvider) {
             providerSelect.value = existingConfig.externalProvider;
           }
           if (apiKeyInput && existingConfig.apiKey) {
             apiKeyInput.value = existingConfig.apiKey;
+          }
+          if (modelInput && existingConfig.model) {
+            modelInput.value = existingConfig.model;
           }
           if (systemInput && existingConfig.systemPrompt) {
             systemInput.value = existingConfig.systemPrompt;
@@ -2040,8 +2368,25 @@ class UIController {
       } else if (provider === 'external') {
         const prov = document.getElementById('external-provider');
         const key = document.getElementById('external-api-key');
+        const model = document.getElementById('external-model');
+        
         cfg.externalProvider = prov ? prov.value : 'ChatGPT5';
         cfg.apiKey = key ? key.value.trim() : '';
+        cfg.model = model ? model.value.trim() : '';
+
+        // Map UI selection to backend provider ID
+        if (cfg.externalProvider === 'Deepseek') {
+          cfg.providerId = 'deepseek';
+          if (!cfg.model) cfg.model = 'deepseek-chat';
+        } else if (cfg.externalProvider === 'ChatGPT5') {
+          cfg.providerId = 'openai';
+          if (!cfg.model) cfg.model = 'gpt-4';
+        } else {
+          // Default to openai for compatibility if not specified
+          cfg.providerId = 'openai';
+          if (!cfg.model) cfg.model = 'gpt-4';
+        }
+
         if (!cfg.apiKey) {
           this.notificationManager.showError('Please enter an API key for the external provider');
           return;
