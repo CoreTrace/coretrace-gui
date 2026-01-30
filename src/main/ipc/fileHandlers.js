@@ -89,6 +89,19 @@ function setupFileHandlers(mainWindow) {
     }
   });
 
+  // Start watching a workspace (renderer may request this after opening)
+  ipcMain.handle('watch-workspace', async (event, folderPath) => {
+    try {
+      if (!folderPath) {
+        return { success: false, error: 'No folder path provided' };
+      }
+      startWatchingWorkspace(folderPath, mainWindow);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // Open file dialog
   ipcMain.handle('open-file-dialog', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -202,6 +215,95 @@ function setupFileHandlers(mainWindow) {
     }
     
     return { success: false, canceled: true };
+  });
+
+  // Create a new empty file in a directory
+  ipcMain.handle('create-file', async (event, directoryPath, fileName) => {
+    try {
+      if (!directoryPath) return { success: false, error: 'No directory provided' };
+      if (!fileName || typeof fileName !== 'string') return { success: false, error: 'Invalid file name' };
+
+      const trimmed = fileName.trim();
+      if (!trimmed || trimmed === '.' || trimmed === '..') {
+        return { success: false, error: 'Invalid file name' };
+      }
+      if (trimmed.includes('/') || trimmed.includes('\\')) {
+        return { success: false, error: 'File name must not contain path separators' };
+      }
+
+      const newPath = path.join(directoryPath, trimmed);
+
+      await fs.writeFile(newPath, '', { encoding: 'utf8', flag: 'wx' });
+
+      return { success: true, path: newPath, name: trimmed };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Create a new folder in a directory
+  ipcMain.handle('create-folder', async (event, directoryPath, folderName) => {
+    try {
+      if (!directoryPath) return { success: false, error: 'No directory provided' };
+      if (!folderName || typeof folderName !== 'string') return { success: false, error: 'Invalid folder name' };
+
+      const trimmed = folderName.trim();
+      if (!trimmed || trimmed === '.' || trimmed === '..') {
+        return { success: false, error: 'Invalid folder name' };
+      }
+      if (trimmed.includes('/') || trimmed.includes('\\')) {
+        return { success: false, error: 'Folder name must not contain path separators' };
+      }
+
+      const newPath = path.join(directoryPath, trimmed);
+      await fs.mkdir(newPath);
+
+      return { success: true, path: newPath, name: trimmed };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Rename a file or folder
+  ipcMain.handle('rename-path', async (event, targetPath, newName) => {
+    try {
+      if (!targetPath) return { success: false, error: 'No target path provided' };
+      if (!newName || typeof newName !== 'string') return { success: false, error: 'Invalid new name' };
+
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === '.' || trimmed === '..') {
+        return { success: false, error: 'Invalid new name' };
+      }
+      if (trimmed.includes('/') || trimmed.includes('\\')) {
+        return { success: false, error: 'Name must not contain path separators' };
+      }
+
+      const stats = await fs.lstat(targetPath);
+      const newPath = path.join(path.dirname(targetPath), trimmed);
+      await fs.rename(targetPath, newPath);
+
+      return { success: true, newPath, name: trimmed, isFile: stats.isFile() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Delete a file or folder (recursive for folders)
+  ipcMain.handle('delete-path', async (event, targetPath) => {
+    try {
+      if (!targetPath) return { success: false, error: 'No target path provided' };
+
+      const stats = await fs.lstat(targetPath);
+      if (stats.isDirectory()) {
+        await fs.rm(targetPath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(targetPath);
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   });
 
   // Read file content
