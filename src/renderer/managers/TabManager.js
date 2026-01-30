@@ -183,36 +183,47 @@ class TabManager {
    */
   closeTab(event, tabId) {
     event.stopPropagation();
-    
+
+    this.closeTabById(tabId);
+  }
+
+  /**
+   * Close a tab by id (non-click workflows)
+   * @param {string} tabId - Tab ID to close
+   * @param {boolean} [force=false] - If true, close even if modified
+   * @returns {boolean} - True if closed, false if user canceled
+   */
+  closeTabById(tabId, force = false) {
     const tab = this.openTabs.get(tabId);
-    if (!tab) return;
-    
+    if (!tab) return true;
+
     // Check if modified
-    if (tab.modified) {
+    if (tab.modified && !force) {
       const result = confirm(`${tab.fileName} has unsaved changes. Do you want to close it anyway?`);
-      if (!result) return;
+      if (!result) return false;
     }
-    
+
     // Remove tab element
     const tabElement = document.querySelector(`[data-tab-id="${tabId}"]`);
     if (tabElement) {
       tabElement.remove();
     }
-    
+
     // Remove from data
     this.openTabs.delete(tabId);
-    
+
     // If closing active tab, switch to another tab or show welcome screen
     if (this.activeTabId === tabId) {
       const remainingTabs = Array.from(this.openTabs.keys());
       if (remainingTabs.length > 0) {
         this.switchToTab(remainingTabs[remainingTabs.length - 1]);
       } else {
-        // No more tabs, show welcome screen
         this.activeTabId = null;
         this.showWelcomeScreen();
       }
     }
+
+    return true;
   }
 
   /**
