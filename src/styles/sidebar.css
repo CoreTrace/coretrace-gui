@@ -38,11 +38,30 @@
   flex: 1;
   padding: 8px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* File tree styles */
 .file-tree {
   font-size: 12px;
+  flex: 1;
+  min-height: 160px;
+}
+
+#explorer-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#workspace-folder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .file-tree-item {
@@ -80,4 +99,102 @@
 
 .file-tree-folder {
   margin-left: 12px;
+}
+
+/* Explorer context menu */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 160px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: #c9d1d9;
+  font-size: 12px;
+}
+
+.context-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.context-menu-item:hover {
+  background: #21262d;
+}
+
+/* Simple in-app input dialog */
+.input-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-dialog {
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.input-dialog-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f6fc;
+  margin-bottom: 10px;
+}
+
+.input-dialog-input {
+  width: 100%;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #c9d1d9;
+  font-size: 12px;
+  outline: none;
+}
+
+.input-dialog-input:focus {
+  border-color: #1f6feb;
+}
+
+.input-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.input-dialog-button {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #c9d1d9;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.input-dialog-button:hover {
+  background: #30363d;
+}
+
+.input-dialog-button.primary {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+.input-dialog-button.primary:hover {
+  background: #2b7bff;
 }

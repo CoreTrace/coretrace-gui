@@ -1,9 +1,10 @@
 // Import manager classes
 const NotificationManager = require('./managers/NotificationManager');
-const EditorManager = require('./managers/EditorManager');
+const MonacoEditorManager = require('./managers/MonacoEditorManager');
 const TabManager = require('./managers/TabManager');
 const SearchManager = require('./managers/SearchManager');
 const FileOperationsManager = require('./managers/FileOperationsManager');
+const DiagnosticsManager = require('./managers/DiagnosticsManager');
 
 // Import utilities
 const fileTypeUtils = require('./utils/fileTypeUtils');
@@ -39,10 +40,10 @@ class UIController {
     
     /**
      * Editor manager instance
-     * @type {EditorManager}
+     * @type {MonacoEditorManager}
      * @private
      */
-    this.editorManager = new EditorManager();
+    this.editorManager = new MonacoEditorManager();
     
     /**
      * Tab manager instance
@@ -66,6 +67,13 @@ class UIController {
     this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
 
     /**
+     * Diagnostics manager instance
+     * @type {DiagnosticsManager}
+     * @private
+     */
+    this.diagnosticsManager = new DiagnosticsManager(this.editorManager);
+
+    /**
      * Flag indicating if UI is being resized
      * @type {boolean}
      * @private
@@ -87,6 +95,13 @@ class UIController {
     this.activeMenu = null;
 
     /**
+     * File tree context menu DOM element
+     * @type {HTMLElement|null}
+     * @private
+     */
+    this.fileTreeContextMenu = null;
+
+    /**
      * WSL availability status
      * @type {boolean}
      * @private
@@ -101,6 +116,24 @@ class UIController {
     this.platform = 'unknown';
 
     this.init();
+  }
+
+  /**
+   * Convert Windows path to WSL path
+   * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
+   * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
+   * @private
+   */
+  convertToWSLPath(windowsPath) {
+    if (!windowsPath) return windowsPath;
+    
+    // Convert backslashes to forward slashes
+    let wslPath = windowsPath.replace(/\\/g, '/');
+    
+    // Convert drive letter (C: -> /mnt/c)
+    wslPath = wslPath.replace(/^([A-Z]):/i, (match, drive) => `/mnt/${drive.toLowerCase()}`);
+    
+    return wslPath;
   }
 
   /**
@@ -142,6 +175,9 @@ class UIController {
 
     // Set up file system watcher for auto-refresh
     this.setupFileTreeWatcher();
+
+    // Set up explorer file tree context menu (right click)
+    this.setupFileTreeContextMenu();
     
     // Set up custom title bar controls
     this.setupTitleBarControls();
@@ -180,7 +216,7 @@ class UIController {
    * // Refresh is typically triggered by the refresh button
    * await uiController.refreshFileTree();
    */
-  async refreshFileTree() {
+  async refreshFileTree(silent = false) {
     // Only refresh if workspace is open
     const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
     if (!workspacePath) {
@@ -193,7 +229,9 @@ class UIController {
       if (result.success) {
         const folderName = workspacePath.split(/[/\\]/).pop();
         this.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
-        this.notificationManager.showSuccess('File tree refreshed');
+        if (!silent) {
+          this.notificationManager.showSuccess('File tree refreshed');
+        }
       } else {
         this.notificationManager.showError('Failed to refresh file tree: ' + (result.error || 'Unknown error'));
       }
@@ -558,12 +596,28 @@ class UIController {
     this.searchManager.setWorkspacePath(this.fileOpsManager.getCurrentWorkspacePath());
 
     // Set up editor content change tracking
-    this.editorManager.editor.addEventListener('input', () => {
-      if (this.tabManager.activeTabId) {
-        const newContent = this.editorManager.getContent();
-        this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+    try {
+      // If Monaco editor is available, use its model change event
+      const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+      if (monacoEditor && monacoEditor.onDidChangeModelContent) {
+        monacoEditor.onDidChangeModelContent(() => {
+          if (this.tabManager.activeTabId) {
+            const newContent = this.editorManager.getContent();
+            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+          }
+        });
+      } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
+        // Fallback for the legacy DOM-based editor
+        this.editorManager.editor.addEventListener('input', () => {
+          if (this.tabManager.activeTabId) {
+            const newContent = this.editorManager.getContent();
+            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+          }
+        });
       }
-    });
+    } catch (err) {
+      console.warn('Failed to wire editor change listener:', err);
+    }
   }
 
   /**
@@ -592,6 +646,317 @@ class UIController {
         this.hideAllMenus();
       }
     });
+
+    // Close file tree context menu when clicking anywhere
+    document.addEventListener('click', () => {
+      this.hideFileTreeContextMenu();
+    });
+
+    // Close file tree context menu on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.hideFileTreeContextMenu();
+      }
+    });
+  }
+
+  /**
+   * Setup a custom context menu for the explorer file tree.
+   *
+   * Requirements:
+   * - Right click on empty area: New File.. / New Folder..
+   * - Right click on folder: New File.. / New Folder.. / Rename / Delete
+   * - Right click on file: Rename / Delete
+   */
+  setupFileTreeContextMenu() {
+    const workspaceFolderEl = document.getElementById('workspace-folder');
+    const fileTreeElement = document.getElementById('file-tree');
+    const targetEl = workspaceFolderEl || fileTreeElement;
+    if (!targetEl) return;
+
+    targetEl.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // No workspace => no file operations
+      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+      if (!workspacePath) {
+        this.notificationManager.showWarning('Open a workspace to use file operations');
+        return;
+      }
+
+      const itemEl = e.target.closest('.file-tree-item');
+      const itemType = itemEl ? itemEl.getAttribute('data-type') : null;
+      const itemPath = itemEl ? (itemEl.getAttribute('data-path') || itemEl.getAttribute('data-file-path')) : null;
+      const itemName = itemEl ? (itemEl.getAttribute('data-name') || '') : '';
+
+      const menuItems = [];
+
+      // Right click on empty area
+      if (!itemEl) {
+        menuItems.push({
+          label: 'New file..',
+          action: () => this.createFileInDirectory(workspacePath)
+        });
+        menuItems.push({
+          label: 'New folder..',
+          action: () => this.createFolderInDirectory(workspacePath)
+        });
+      } else if (itemType === 'directory') {
+        // Folder menu
+        menuItems.push({
+          label: 'New file..',
+          action: () => this.createFileInDirectory(itemPath)
+        });
+        menuItems.push({
+          label: 'New folder..',
+          action: () => this.createFolderInDirectory(itemPath)
+        });
+        menuItems.push({
+          label: 'Rename',
+          action: () => this.renamePath(itemPath, itemName)
+        });
+        menuItems.push({
+          label: 'Delete',
+          action: () => this.deletePath(itemPath, itemType)
+        });
+      } else {
+        // File menu
+        menuItems.push({
+          label: 'Rename',
+          action: () => this.renamePath(itemPath, itemName)
+        });
+        menuItems.push({
+          label: 'Delete',
+          action: () => this.deletePath(itemPath, itemType)
+        });
+      }
+
+      this.showFileTreeContextMenu(e.clientX, e.clientY, menuItems);
+    });
+  }
+
+  /**
+   * Show a simple in-app input dialog (avoids relying on window.prompt).
+   * @param {string} title
+   * @param {string} [placeholder]
+   * @param {string} [defaultValue]
+   * @returns {Promise<string|null>}
+   */
+  promptForText(title, placeholder = '', defaultValue = '') {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'input-dialog-overlay';
+
+      const dialog = document.createElement('div');
+      dialog.className = 'input-dialog';
+
+      const header = document.createElement('div');
+      header.className = 'input-dialog-title';
+      header.textContent = title;
+
+      const input = document.createElement('input');
+      input.className = 'input-dialog-input';
+      input.type = 'text';
+      input.placeholder = placeholder;
+      input.value = defaultValue || '';
+
+      const actions = document.createElement('div');
+      actions.className = 'input-dialog-actions';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'input-dialog-button';
+      cancelBtn.textContent = 'Cancel';
+
+      const okBtn = document.createElement('button');
+      okBtn.className = 'input-dialog-button primary';
+      okBtn.textContent = 'OK';
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(okBtn);
+
+      dialog.appendChild(header);
+      dialog.appendChild(input);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      const cleanup = (value) => {
+        overlay.remove();
+        resolve(value);
+      };
+
+      cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cleanup(null);
+      });
+
+      okBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cleanup(input.value);
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) cleanup(null);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          cleanup(input.value);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup(null);
+        }
+      });
+
+      // Focus synchronously (still inside the click handler user gesture)
+      // so typing works reliably even if the editor has global key handlers.
+      try {
+        input.disabled = false;
+        input.readOnly = false;
+        input.focus();
+        input.select();
+      } catch (_) {
+        // ignore
+      }
+
+      // Fallback focus in next frame
+      requestAnimationFrame(() => {
+        try {
+          input.focus();
+        } catch (_) {
+          // ignore
+        }
+      });
+    });
+  }
+
+  showFileTreeContextMenu(x, y, items) {
+    this.hideFileTreeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+
+    items.forEach(({ label, action }) => {
+      const item = document.createElement('div');
+      item.className = 'context-menu-item';
+      item.textContent = label;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.hideFileTreeContextMenu();
+        action();
+      });
+      menu.appendChild(item);
+    });
+
+    document.body.appendChild(menu);
+
+    // Position within viewport
+    const rect = menu.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width - 8;
+    const maxY = window.innerHeight - rect.height - 8;
+    const posX = Math.max(8, Math.min(x, maxX));
+    const posY = Math.max(8, Math.min(y, maxY));
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
+
+    this.fileTreeContextMenu = menu;
+  }
+
+  hideFileTreeContextMenu() {
+    if (this.fileTreeContextMenu) {
+      this.fileTreeContextMenu.remove();
+      this.fileTreeContextMenu = null;
+    }
+  }
+
+  async createFileInDirectory(directoryPath) {
+    const fileName = await this.promptForText('New file', 'e.g. main.c');
+    if (!fileName) return;
+
+    try {
+      const result = await window.ipcRenderer.invoke('create-file', directoryPath, fileName);
+      if (result.success) {
+        this.notificationManager.showSuccess(`Created file "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to create file: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error creating file: ' + error.message);
+    }
+  }
+
+  async createFolderInDirectory(directoryPath) {
+    const folderName = await this.promptForText('New folder', 'e.g. include');
+    if (!folderName) return;
+
+    try {
+      const result = await window.ipcRenderer.invoke('create-folder', directoryPath, folderName);
+      if (result.success) {
+        this.notificationManager.showSuccess(`Created folder "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to create folder: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error creating folder: ' + error.message);
+    }
+  }
+
+  async renamePath(targetPath, currentName = '') {
+    if (!targetPath) return;
+    const newName = await this.promptForText('Rename', '', currentName || '');
+    if (!newName) return;
+
+    try {
+      const result = await window.ipcRenderer.invoke('rename-path', targetPath, newName);
+      if (result.success) {
+        // Update open tab if the renamed item is an open file
+        if (result.isFile) {
+          const tabId = this.tabManager.findTabByPath(targetPath);
+          if (tabId) {
+            this.tabManager.updateTabFile(tabId, result.newPath, result.name);
+          }
+        }
+        this.notificationManager.showSuccess(`Renamed to "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to rename: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error renaming: ' + error.message);
+    }
+  }
+
+  async deletePath(targetPath, itemType) {
+    if (!targetPath) return;
+    const isFolder = itemType === 'directory';
+
+    const ok = confirm(isFolder ? 'Delete this folder and all its contents?' : 'Delete this file?');
+    if (!ok) return;
+
+    // If deleting an open file, close the tab first (honor unsaved changes)
+    if (!isFolder) {
+      const tabId = this.tabManager.findTabByPath(targetPath);
+      if (tabId) {
+        const closed = this.tabManager.closeTabById(tabId);
+        if (!closed) return;
+      }
+    }
+
+    try {
+      const result = await window.ipcRenderer.invoke('delete-path', targetPath);
+      if (result.success) {
+        this.notificationManager.showSuccess('Deleted successfully');
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to delete: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error deleting: ' + error.message);
+    }
   }
 
   /**
@@ -895,90 +1260,157 @@ class UIController {
     };
 
     window.runCTrace = async () => {
-      const outEl = document.getElementById('ctrace-output');
+      const resultsArea = document.getElementById('ctrace-results-area');
       this.showToolsPanel();
-      if (!outEl) {
-        this.notificationManager.showError('CTrace output panel not found');
+      if (!resultsArea) {
+        this.notificationManager.showError('CTrace results area not found');
         return;
       }
 
       const active = this.tabManager.getActiveTab();
       const currentFilePath = active && active.filePath ? active.filePath : null;
       if (!currentFilePath) {
-        outEl.textContent = 'No active file to analyze. Open a file first.';
+        resultsArea.innerHTML = `
+          <div class="ctrace-error">
+            <div class="error-icon">⚠️</div>
+            <div class="error-text">No active file to analyze</div>
+            <div class="error-subtext">Please open a file first</div>
+          </div>
+        `;
         this.notificationManager.showWarning('Open a file to analyze with CTrace');
         return;
       }
 
-      outEl.textContent = `Running ctrace on: ${currentFilePath}`;
+      // Convert Windows path to WSL path for Linux binary
+      const wslFilePath = this.convertToWSLPath(currentFilePath);
+      
+      // Clear previous diagnostics and show loading state
+      this.diagnosticsManager.clear();
+      resultsArea.innerHTML = `
+        <div class="ctrace-loading">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">Analyzing ${this.diagnosticsManager.getFileName(currentFilePath)}...</div>
+          <div class="loading-subtext">This may take a moment</div>
+        </div>
+      `;
+      
       try {
+        // Get custom arguments from input field
+        const argsInput = document.getElementById('ctrace-args');
+        const customArgs = argsInput ? argsInput.value.trim() : '';
+        
+        // Parse custom arguments (simple split by space, preserving quoted strings)
         let args = [];
-        args.push(`--input=${currentFilePath}`);
-        args.push("--static");
-        args.push("--sarif-format");
+        if (customArgs) {
+          // Simple parsing - split by space but respect quotes
+          const matches = customArgs.match(/(?:[^\s"]+|"[^"]*")+/g);
+          if (matches) {
+            args = matches.map(arg => arg.replace(/^"(.*)"$/, '$1'));
+          }
+        }
+        
+        // Always prepend --input parameter as first argument
+        args.unshift(`--input=${wslFilePath}`);
+        
+        console.log("invoke run-ctrace with WSL path:", wslFilePath);
+        console.log("Custom arguments:", args);
         const result = await window.ipcRenderer.invoke('run-ctrace', args);
+        console.log("after exec result");
+        console.log(result);
         if (result && result.success) {
-          outEl.textContent = stripAnsi(result.output || '(no output)');
-          this.notificationManager.showSuccess('CTrace completed successfully');
+          console.log("result.output");
+          console.log(result.output);
+          
+          // Check if output is empty
+          if (!result.output || result.output.trim() === '') {
+            resultsArea.innerHTML = `
+              <div class="ctrace-error">
+                <div class="error-icon">⚠️</div>
+                <div class="error-text">No Output from CTrace</div>
+                <div class="error-details">CTrace completed successfully but produced no output. This might indicate:</div>
+                <div class="error-help">
+                  • The file may not be supported by CTrace<br>
+                  • The analysis produced no diagnostics<br>
+                  • Check that your custom arguments are correct<br>
+                  • Try adding <code>--sarif-format</code> for JSON output
+                </div>
+              </div>
+            `;
+            this.notificationManager.showWarning('CTrace produced no output');
+            return;
+          }
+          
+          // Try to parse as JSON for diagnostics
+          const isParsed = this.diagnosticsManager.parseOutput(result.output);
+          
+          if (isParsed) {
+            // Display diagnostics with rich UI
+            await this.diagnosticsManager.displayDiagnostics();
+            this.notificationManager.showSuccess('CTrace analysis completed');
+          } else {
+            // Fallback to plain text output
+            resultsArea.innerHTML = `
+              <div class="ctrace-raw-output">
+                <div class="raw-output-header">
+                  <span>Raw Output</span>
+                </div>
+                <pre class="raw-output-content">${this.diagnosticsManager.escapeHtml(result.output)}</pre>
+              </div>
+            `;
+            this.notificationManager.showSuccess('CTrace completed');
+          }
         } else {
           const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
           
           // Check if this is a WSL setup error and provide helpful UI
           if (details.includes('WSL') && details.includes('distributions')) {
-            outEl.innerHTML = `
-              <div style="color: #ff6b6b; font-weight: bold; margin-bottom: 10px;">⚠️ WSL Setup Required</div>
-              <div style="white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.4;">${stripAnsi(details)}</div>
-              <div style="margin-top: 15px; padding: 10px; background: #f0f8ff; border: 1px solid #007acc; border-radius: 4px;">
-                <div style="font-weight: bold; color: #007acc; margin-bottom: 5px;">Quick Setup:</div>
-                <div style="font-size: 12px; color: #333;">
+            resultsArea.innerHTML = `
+              <div class="ctrace-error">
+                <div class="error-icon">⚠️</div>
+                <div class="error-text">WSL Setup Required</div>
+                <div class="error-details">${stripAnsi(details)}</div>
+                <div class="error-help">
+                  <strong>Quick Setup:</strong><br>
                   1. Open PowerShell as Administrator<br>
-                  2. Run: <code style="background: #e6e6e6; padding: 2px 4px; border-radius: 2px;">wsl --install Ubuntu</code><br>
-                  3. Restart when prompted and follow setup instructions<br>
+                  2. Run: <code>wsl --install Ubuntu</code><br>
+                  3. Restart when prompted<br>
                   4. Restart this application
                 </div>
               </div>
             `;
-            this.notificationManager.showWarning('WSL setup required - see output panel for instructions');
+            this.notificationManager.showWarning('WSL setup required');
           } else {
-            outEl.textContent = `Error running ctrace:\n${stripAnsi(details)}`;
+            resultsArea.innerHTML = `
+              <div class="ctrace-error">
+                <div class="error-icon">❌</div>
+                <div class="error-text">CTrace Error</div>
+                <pre class="error-details">${stripAnsi(details)}</pre>
+              </div>
+            `;
             this.notificationManager.showError('Failed to run CTrace');
           }
         }
-        // Auto-scroll to bottom
-        outEl.scrollTop = outEl.scrollHeight;
       } catch (err) {
-        outEl.textContent = `Exception: ${err.message}`;
+        resultsArea.innerHTML = `
+          <div class="ctrace-error">
+            <div class="error-icon">❌</div>
+            <div class="error-text">Exception</div>
+            <pre class="error-details">${err.message}</pre>
+          </div>
+        `;
         this.notificationManager.showError('Error invoking CTrace');
       }
     };
 
     window.clearCTraceOutput = () => {
-      const outEl = document.getElementById('ctrace-output');
-      if (outEl) outEl.textContent = '';
-    };
-
-    window.copyCTraceOutput = () => {
-      const outEl = document.getElementById('ctrace-output');
-      if (!outEl) return;
-      const text = outEl.textContent || '';
-      try {
-        // Prefer Electron clipboard if available via require
-        const { clipboard } = require('electron');
-        clipboard.writeText(text);
-        this.notificationManager.showSuccess('Output copied to clipboard');
-      } catch (_) {
-        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text)
-            .then(() => this.notificationManager.showSuccess('Output copied to clipboard'))
-            .catch(() => this.notificationManager.showError('Failed to copy output'));
-        } else {
-          this.notificationManager.showError('Clipboard not available');
-        }
-      }
+      this.diagnosticsManager.clear();
     };
 
     // Tab manager reference for global access
     window.tabManager = this.tabManager;
+    
+    // Diagnostics manager reference for global access
+    window.diagnosticsManager = this.diagnosticsManager;
     window.searchManager = this.searchManager;
   }
 
@@ -1385,34 +1817,49 @@ class UIController {
     let capturedLineInfo = '';
     
     inputEl.addEventListener('focus', () => {
-      const editor = this.editorManager.editor;
-      const start = editor.selectionStart;
-      const end = editor.selectionEnd;
-      const selection = editor.value.substring(start, end);
-      
-      if (selection) {
-        capturedSelection = selection;
-        
-        // Calculate line numbers
-        const textBeforeStart = editor.value.substring(0, start);
-        const textBeforeEnd = editor.value.substring(0, end);
-        const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
-        const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
-        
-        // Get current file name
-        const activeTab = this.tabManager.getActiveTab();
-        const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
-        
-        // Format context info
-        if (startLine === endLine) {
-          capturedLineInfo = `${fileName}: ${startLine}`;
+      try {
+        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+        if (monacoEditor) {
+          const selection = monacoEditor.getSelection();
+          const model = monacoEditor.getModel();
+          if (selection && model) {
+            const selectedText = model.getValueInRange(selection);
+            if (selectedText) {
+              capturedSelection = selectedText;
+              const startLine = selection.startLineNumber;
+              const endLine = selection.endLineNumber;
+              const activeTab = this.tabManager.getActiveTab();
+              const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
+              capturedLineInfo = startLine === endLine ? `${fileName}: ${startLine}` : `${fileName}: ${startLine}-${endLine}`;
+              contextText.textContent = capturedLineInfo;
+              contextIndicator.style.display = 'block';
+            }
+          }
         } else {
-          capturedLineInfo = `${fileName}: ${startLine}-${endLine}`;
+          // Fallback for legacy textarea editor
+          const editor = this.editorManager.editor;
+          const start = editor.selectionStart;
+          const end = editor.selectionEnd;
+          const selection = editor.value.substring(start, end);
+          if (selection) {
+            capturedSelection = selection;
+            const textBeforeStart = editor.value.substring(0, start);
+            const textBeforeEnd = editor.value.substring(0, end);
+            const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
+            const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
+            const activeTab = this.tabManager.getActiveTab();
+            const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
+            if (startLine === endLine) {
+              capturedLineInfo = `${fileName}: ${startLine}`;
+            } else {
+              capturedLineInfo = `${fileName}: ${startLine}-${endLine}`;
+            }
+            contextText.textContent = capturedLineInfo;
+            contextIndicator.style.display = 'block';
+          }
         }
-        
-        // Show context indicator
-        contextText.textContent = capturedLineInfo;
-        contextIndicator.style.display = 'block';
+      } catch (err) {
+        console.warn('Error capturing selection for assistant context:', err);
       }
     });
 
@@ -1552,41 +1999,68 @@ class UIController {
         btn.onclick = () => {
           const base64Code = btn.getAttribute('data-code-b64');
           const code = decodeURIComponent(escape(atob(base64Code)));
-          
-          const editor = this.editorManager.editor;
-          const start = editor.selectionStart;
-          const end = editor.selectionEnd;
-          
-          if (start !== end) {
-            // Replace selected text
-            const before = editor.value.substring(0, start);
-            const after = editor.value.substring(end);
-            editor.value = before + code + after;
-            
-            // Update tab state
-            if (this.tabManager.activeTabId) {
-              this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+          try {
+            const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+            if (monacoEditor) {
+              const model = monacoEditor.getModel();
+              const selection = monacoEditor.getSelection();
+              let rangeObj = null;
+              let actionLabel = 'Inserted!';
+
+              if (selection && typeof selection.isEmpty === 'function' ? !selection.isEmpty() : (selection.startLineNumber !== selection.endLineNumber || selection.startColumn !== selection.endColumn)) {
+                rangeObj = {
+                  startLineNumber: selection.startLineNumber,
+                  startColumn: selection.startColumn,
+                  endLineNumber: selection.endLineNumber,
+                  endColumn: selection.endColumn
+                };
+                actionLabel = 'Replaced!';
+              } else {
+                const pos = monacoEditor.getPosition();
+                rangeObj = { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column };
+                actionLabel = 'Inserted!';
+              }
+
+              monacoEditor.executeEdits('assistant', [{ range: rangeObj, text: code, forceMoveMarkers: true }]);
+              // Update tab state
+              if (this.tabManager.activeTabId && model) {
+                this.tabManager.handleContentChange(this.tabManager.activeTabId, model.getValue());
+              }
+              btn.textContent = actionLabel;
+              setTimeout(() => btn.textContent = 'Replace', 2000);
+              monacoEditor.focus();
+            } else {
+              // Fallback to legacy textarea editor
+              const editor = this.editorManager.editor;
+              const start = editor.selectionStart;
+              const end = editor.selectionEnd;
+              if (start !== end) {
+                // Replace selected text
+                const before = editor.value.substring(0, start);
+                const after = editor.value.substring(end);
+                editor.value = before + code + after;
+                if (this.tabManager.activeTabId) {
+                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+                }
+                btn.textContent = 'Replaced!';
+                setTimeout(() => btn.textContent = 'Replace', 2000);
+              } else {
+                const before = editor.value.substring(0, start);
+                const after = editor.value.substring(start);
+                editor.value = before + code + after;
+                if (this.tabManager.activeTabId) {
+                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+                }
+                btn.textContent = 'Inserted!';
+                setTimeout(() => btn.textContent = 'Replace', 2000);
+              }
+              editor.focus();
             }
-            
-            btn.textContent = 'Replaced!';
-            setTimeout(() => btn.textContent = 'Replace', 2000);
-          } else {
-            // Insert at cursor position
-            const before = editor.value.substring(0, start);
-            const after = editor.value.substring(start);
-            editor.value = before + code + after;
-            
-            // Update tab state
-            if (this.tabManager.activeTabId) {
-              this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
-            }
-            
-            btn.textContent = 'Inserted!';
+          } catch (err) {
+            console.error('Error replacing/inserting code from assistant:', err);
+            btn.textContent = 'Error';
             setTimeout(() => btn.textContent = 'Replace', 2000);
           }
-          
-          // Focus editor
-          editor.focus();
         };
       });
     };
@@ -1746,18 +2220,23 @@ class UIController {
         `;
         extra.appendChild(selRow);
         extra.appendChild(makeInputRow('API Key', 'external-api-key', 'sk-...'));
+        extra.appendChild(makeInputRow('Model Name', 'external-model', 'gpt-4'));
         extra.appendChild(makeInputRow('System prompt (optional)', 'system-prompt', 'You are a helpful assistant...'));
         
         // Pre-fill with saved values
         setTimeout(() => {
           const providerSelect = document.getElementById('external-provider');
           const apiKeyInput = document.getElementById('external-api-key');
+          const modelInput = document.getElementById('external-model');
           const systemInput = document.getElementById('system-prompt');
           if (providerSelect && existingConfig.externalProvider) {
             providerSelect.value = existingConfig.externalProvider;
           }
           if (apiKeyInput && existingConfig.apiKey) {
             apiKeyInput.value = existingConfig.apiKey;
+          }
+          if (modelInput && existingConfig.model) {
+            modelInput.value = existingConfig.model;
           }
           if (systemInput && existingConfig.systemPrompt) {
             systemInput.value = existingConfig.systemPrompt;
@@ -1889,8 +2368,25 @@ class UIController {
       } else if (provider === 'external') {
         const prov = document.getElementById('external-provider');
         const key = document.getElementById('external-api-key');
+        const model = document.getElementById('external-model');
+        
         cfg.externalProvider = prov ? prov.value : 'ChatGPT5';
         cfg.apiKey = key ? key.value.trim() : '';
+        cfg.model = model ? model.value.trim() : '';
+
+        // Map UI selection to backend provider ID
+        if (cfg.externalProvider === 'Deepseek') {
+          cfg.providerId = 'deepseek';
+          if (!cfg.model) cfg.model = 'deepseek-chat';
+        } else if (cfg.externalProvider === 'ChatGPT5') {
+          cfg.providerId = 'openai';
+          if (!cfg.model) cfg.model = 'gpt-4';
+        } else {
+          // Default to openai for compatibility if not specified
+          cfg.providerId = 'openai';
+          if (!cfg.model) cfg.model = 'gpt-4';
+        }
+
         if (!cfg.apiKey) {
           this.notificationManager.showError('Please enter an API key for the external provider');
           return;

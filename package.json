@@ -5,6 +5,7 @@
   "main": "src/main.js",
   "scripts": {
     "test": "node --test",
+    "test:wsl": "node scripts/test-wsl-bridge.js",
     "start": "electron .",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
@@ -27,7 +28,9 @@
   "license": "ISC",
   "dependencies": {
     "chokidar": "^4.0.3",
-    "node-llama-cpp": "^3.14.2"
+    "monaco-editor": "^0.55.1",
+    "node-llama-cpp": "^3.14.2",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "electron": "^38.0.0",

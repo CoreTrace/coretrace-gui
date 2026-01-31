@@ -184,20 +184,37 @@ class SearchManager {
    */
   focusOnCurrentMatch() {
     if (this.currentMatchIndex >= 0 && this.currentMatchIndex < this.currentSearchMatches.length) {
-      const editor = this.editorManager.editor;
       const match = this.currentSearchMatches[this.currentMatchIndex];
-      
+      const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+
+      if (monacoEditor) {
+        const model = monacoEditor.getModel();
+        if (model) {
+          const startPos = model.getPositionAt(match.start);
+          const endPos = model.getPositionAt(match.end);
+          const range = {
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: endPos.column
+          };
+          monacoEditor.focus();
+          monacoEditor.setSelection(range);
+          monacoEditor.revealRangeInCenter(range);
+          return;
+        }
+      }
+
+      // Fallback to legacy textarea editor
+      const editor = this.editorManager.editor;
       editor.focus();
       editor.setSelectionRange(match.start, match.end);
-      
       // Scroll to make the match visible
       const lines = editor.value.substring(0, match.start).split('\n');
       const lineNumber = lines.length;
       const approximateLineHeight = 20;
       const targetScrollTop = (lineNumber - 5) * approximateLineHeight;
-      
       editor.scrollTop = Math.max(0, targetScrollTop);
-      
       setTimeout(() => {
         if (editor.setSelectionRange) {
           editor.setSelectionRange(match.start, match.end);
