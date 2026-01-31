@@ -186,22 +186,6 @@ class UIController {
     this.setupWSLStatusListener();
   }
   /**
-   * Set up file system watcher to auto-refresh file tree
-   */
-  setupFileTreeWatcher() {
-    const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
-    if (!workspacePath) return;
-    // Listen for file system change events from main process
-    window.ipcRenderer.on('workspace-changed', (event, changedPath) => {
-      // Only refresh if the change is in the current workspace
-      if (changedPath && changedPath.startsWith(workspacePath)) {
-        this.refreshFileTree();
-      }
-    });
-    // Request main process to start watching
-    window.ipcRenderer.invoke('watch-workspace', workspacePath);
-  }
-  /**
    * Refreshes the file tree in the explorer view.
    * 
    * This method manually triggers a refresh of the file tree to show any
@@ -241,17 +225,76 @@ class UIController {
   }
 
   /**
-   * Setup file tree watcher to listen for automatic updates
+   * Setup file tree watcher to listen for automatic updates.
+   * Debounces refreshes to avoid UI freezes on large workspaces.
    */
   setupFileTreeWatcher() {
-    // Listen for workspace changes from file watcher in main process
+    if (this._fileTreeWatcherInitialized) return;
+    this._fileTreeWatcherInitialized = true;
+
+    let refreshTimer = null;
     window.ipcRenderer.on('workspace-changed', (event, data) => {
-      if (data.success) {
-        const folderName = data.folderPath.split(/[/\\]/).pop();
-        this.fileOpsManager.updateWorkspaceUI(folderName, data.fileTree);
-        console.log('File tree auto-refreshed due to file system changes');
-      } else {
-        console.error('Error in workspace change notification:', data.error);
+      if (!data || !data.success) {
+        if (data && data.error) {
+          console.error('Error in workspace change notification:', data.error);
+        }
+        return;
+      }
+
+      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+      if (!workspacePath) return;
+      if (data.folderPath && data.folderPath !== workspacePath) return;
+
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        this.refreshFileTree(true);
+      }, 1200);
+    });
+
+    // Show a discrete loading indicator for slow workspace operations
+    this._workspaceLoadingTimer = null;
+    this._workspaceLoadingNotification = null;
+    this._workspaceLoadingRequestId = null;
+
+    window.ipcRenderer.on('workspace-loading', (event, data) => {
+      if (!data || !data.status) return;
+
+      // Only react for the active workspace.
+      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+      if (workspacePath && data.folderPath && data.folderPath !== workspacePath && data.operation !== 'open') {
+        return;
+      }
+
+      if (data.status === 'start') {
+        this._workspaceLoadingRequestId = data.requestId || null;
+        clearTimeout(this._workspaceLoadingTimer);
+
+        this._workspaceLoadingTimer = setTimeout(() => {
+          if (this._workspaceLoadingNotification) return;
+          const folderName = (data.folderPath || '').split(/[/\\]/).pop() || 'workspace';
+          const label = data.operation === 'refresh'
+            ? `Refreshing "${folderName}"...`
+            : `Loading "${folderName}"...`;
+          this._workspaceLoadingNotification = this.notificationManager.showLoading(label);
+        }, 450);
+
+        return;
+      }
+
+      if (data.status === 'end') {
+        if (this._workspaceLoadingRequestId && data.requestId && data.requestId !== this._workspaceLoadingRequestId) {
+          return;
+        }
+
+        clearTimeout(this._workspaceLoadingTimer);
+        this._workspaceLoadingTimer = null;
+
+        if (this._workspaceLoadingNotification) {
+          this._workspaceLoadingNotification.dismiss();
+          this._workspaceLoadingNotification = null;
+        }
+
+        this._workspaceLoadingRequestId = null;
       }
     });
   }
@@ -2426,6 +2469,11 @@ class UIController {
     const result = await this.fileOpsManager.openWorkspace();
     if (result && result.success) {
       this.searchManager.setWorkspacePath(result.folderPath);
+      try {
+        window.ipcRenderer.invoke('watch-workspace', result.folderPath);
+      } catch (_) {
+        // Ignore watcher startup failures
+      }
     }
   }
 

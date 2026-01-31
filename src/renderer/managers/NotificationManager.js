@@ -12,7 +12,7 @@ class NotificationManager {
    * @param {string} type - Notification type (success, error, info, warning)
    * @param {number} duration - Duration in milliseconds (default 4000)
    */
-  showNotification(message, type = 'info', duration = 4000) {
+  showNotification(message, type = 'info', duration = 4000, options = {}) {
     const colors = {
       success: '#238636',
       error: '#f85149',
@@ -27,28 +27,74 @@ class NotificationManager {
       info: 'ℹ'
     };
     
+    const showSpinner = Boolean(options && options.showSpinner);
+
     const notification = document.createElement('div');
     notification.innerHTML = `
-      <div style="position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: ${colors[type]}; color: white; padding: 10px 14px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: fadeIn 0.3s ease; max-width: 300px; font-size: 13px; text-align: center;">
-        ${icons[type]} ${message}
+      <div class="ctrace-notification" style="position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: ${colors[type]}; color: white; padding: 10px 14px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: fadeIn 0.3s ease; max-width: 360px; font-size: 13px; text-align: center; display: inline-flex; align-items: center; gap: 8px;">
+        ${showSpinner ? '<span class="ctrace-spinner" aria-hidden="true" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.45); border-top-color: rgba(255,255,255,1); border-radius: 50%; display: inline-block; animation: ctraceSpin 0.8s linear infinite;"></span>' : ''}
+        <span aria-hidden="true">${icons[type]}</span>
+        <span class="ctrace-notification-message">${message}</span>
+        <button class="ctrace-notification-close" type="button" aria-label="Dismiss" style="margin-left: 6px; background: transparent; border: none; color: rgba(255,255,255,0.9); cursor: pointer; font-size: 16px; line-height: 12px; padding: 2px 4px; border-radius: 4px;">×</button>
       </div>
       <style>
         @keyframes fadeIn {
           from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
+        @keyframes ctraceSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       </style>
     `;
     
     document.body.appendChild(notification);
     this.notifications.push(notification);
-    
-    setTimeout(() => {
+
+    let timeoutId = null;
+
+    const dismiss = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       if (notification.parentNode) {
         notification.remove();
       }
       this.notifications = this.notifications.filter(n => n !== notification);
-    }, duration);
+    };
+
+    const messageEl = notification.querySelector('.ctrace-notification-message');
+    const update = (nextMessage) => {
+      if (messageEl) {
+        messageEl.textContent = String(nextMessage);
+      }
+    };
+
+    const closeBtn = notification.querySelector('.ctrace-notification-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dismiss();
+      });
+    }
+
+    if (typeof duration === 'number' && duration > 0) {
+      timeoutId = setTimeout(dismiss, duration);
+    }
+
+    return { dismiss, update, element: notification };
+  }
+
+  /**
+   * Show a non-dismissed loading notification.
+   * @param {string} message - Message to display
+   * @returns {{dismiss: Function, update: Function, element: HTMLElement}} handle
+   */
+  showLoading(message) {
+    return this.showNotification(message, 'info', 0, { showSpinner: true });
   }
 
   /**

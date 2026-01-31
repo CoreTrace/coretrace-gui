@@ -15,6 +15,8 @@ const path = require('path');
 const chokidar = require('chokidar');
 const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT } = require('../utils/fileUtils');
 
+const FILE_TREE_MAX_DEPTH = 3;
+
 /**
  * File watcher instance for monitoring workspace changes
  * @type {chokidar.FSWatcher|null}
@@ -28,6 +30,8 @@ let fileWatcher = null;
  * @private
  */
 let currentWatchPath = null;
+
+let workspaceLoadingSeq = 0;
 
 /**
  * Sets up all IPC handlers for file operations.
@@ -51,11 +55,31 @@ function setupFileHandlers(mainWindow) {
     
     if (!result.canceled && result.filePaths.length > 0) {
       const folderPath = result.filePaths[0];
+      const requestId = ++workspaceLoadingSeq;
       try {
-        const fileTree = await buildFileTree(folderPath);
-        
+        try {
+          mainWindow.webContents.send('workspace-loading', {
+            status: 'start',
+            operation: 'open',
+            folderPath,
+            requestId
+          });
+        } catch (_) {}
+
+        const fileTree = await buildFileTree(folderPath, FILE_TREE_MAX_DEPTH);
+
         // Start watching the workspace for changes
-        startWatchingWorkspace(folderPath, mainWindow);
+        startWatchingWorkspace(folderPath, mainWindow, FILE_TREE_MAX_DEPTH);
+
+        try {
+          mainWindow.webContents.send('workspace-loading', {
+            status: 'end',
+            operation: 'open',
+            folderPath,
+            requestId,
+            success: true
+          });
+        } catch (_) {}
         
         return {
           success: true,
@@ -63,6 +87,16 @@ function setupFileHandlers(mainWindow) {
           fileTree
         };
       } catch (error) {
+        try {
+          mainWindow.webContents.send('workspace-loading', {
+            status: 'end',
+            operation: 'open',
+            folderPath,
+            requestId,
+            success: false,
+            error: error.message
+          });
+        } catch (_) {}
         return {
           success: false,
           error: error.message
@@ -75,13 +109,43 @@ function setupFileHandlers(mainWindow) {
 
   // Get file tree for refresh
   ipcMain.handle('get-file-tree', async (event, folderPath) => {
+    const requestId = ++workspaceLoadingSeq;
     try {
-      const fileTree = await buildFileTree(folderPath);
+      try {
+        mainWindow.webContents.send('workspace-loading', {
+          status: 'start',
+          operation: 'refresh',
+          folderPath,
+          requestId
+        });
+      } catch (_) {}
+
+      const fileTree = await buildFileTree(folderPath, FILE_TREE_MAX_DEPTH);
+
+      try {
+        mainWindow.webContents.send('workspace-loading', {
+          status: 'end',
+          operation: 'refresh',
+          folderPath,
+          requestId,
+          success: true
+        });
+      } catch (_) {}
       return {
         success: true,
         fileTree
       };
     } catch (error) {
+      try {
+        mainWindow.webContents.send('workspace-loading', {
+          status: 'end',
+          operation: 'refresh',
+          folderPath,
+          requestId,
+          success: false,
+          error: error.message
+        });
+      } catch (_) {}
       return {
         success: false,
         error: error.message
@@ -95,7 +159,7 @@ function setupFileHandlers(mainWindow) {
       if (!folderPath) {
         return { success: false, error: 'No folder path provided' };
       }
-      startWatchingWorkspace(folderPath, mainWindow);
+      startWatchingWorkspace(folderPath, mainWindow, FILE_TREE_MAX_DEPTH);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -453,7 +517,7 @@ function setupFileHandlers(mainWindow) {
  * @param {string} workspacePath - Path to watch
  * @param {BrowserWindow} mainWindow - Main window reference
  */
-function startWatchingWorkspace(workspacePath, mainWindow) {
+function startWatchingWorkspace(workspacePath, mainWindow, watchDepth = FILE_TREE_MAX_DEPTH) {
   // Stop existing watcher if any
   stopWatchingWorkspace();
   
@@ -465,32 +529,47 @@ function startWatchingWorkspace(workspacePath, mainWindow) {
     ignored: [
       /(^|[\/\\])\../, // ignore hidden files
       /node_modules/,  // ignore node_modules
+      /\.git/,         // ignore git metadata
+      /dist/,
+      /build/,
+      /out/,
+      /coverage/,
+      /\.next/,
+      /\.cache/,
+      /target/,
+      /vendor/,
+      /__pycache__/,
+      /\.venv/,
+      /venv/,
       /My Music/,      // ignore Windows system folders
       /My Pictures/,
       /My Videos/,
       /\$RECYCLE\.BIN/,
       /System Volume Information/
     ],
-    depth: 10, // limit recursion depth
+    depth: watchDepth, // keep consistent with file tree depth
     ignorePermissionErrors: true // ignore permission errors
   });
   
   // Debounce function to avoid too many updates
   let updateTimeout;
-  const debouncedUpdate = () => {
+  let lastChangedPath = null;
+  const debouncedUpdate = (changedPath) => {
     clearTimeout(updateTimeout);
+    lastChangedPath = changedPath || lastChangedPath;
     updateTimeout = setTimeout(async () => {
       try {
-        const fileTree = await buildFileTree(workspacePath);
+        // Avoid rebuilding and sending the entire file tree on every FS event.
+        // The renderer can decide when to refresh and pull a new tree.
         mainWindow.webContents.send('workspace-changed', {
           success: true,
-          fileTree,
-          folderPath: workspacePath
+          folderPath: workspacePath,
+          changedPath: lastChangedPath
         });
       } catch (error) {
         console.error('Error updating file tree:', error);
       }
-    }, 300); // 300ms debounce
+    }, 750); // 750ms debounce
   };
   
   // Listen for file system events
