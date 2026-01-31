@@ -43,6 +43,11 @@ class FileOperationsManager {
      * @private
      */
     this.currentWorkspacePath = null;
+
+    this._fileTreeNodeData = new WeakMap();
+    this._fileTreeClickHandler = this._fileTreeClickHandler.bind(this);
+    this._fileTreeClickHandlerAttached = false;
+    this._selectedFileTreeItem = null;
   }
 
   /**
@@ -360,7 +365,60 @@ class FileOperationsManager {
     }
     
     if (fileTreeElement && fileTree) {
+      if (!this._fileTreeClickHandlerAttached) {
+        fileTreeElement.addEventListener('click', this._fileTreeClickHandler);
+        this._fileTreeClickHandlerAttached = true;
+      }
       this.renderFileTree(fileTree, fileTreeElement);
+    }
+  }
+
+  _fileTreeClickHandler(event) {
+    const container = document.getElementById('file-tree');
+    if (!container) return;
+
+    const itemElement = event.target && event.target.closest
+      ? event.target.closest('.file-tree-item')
+      : null;
+    if (!itemElement) return;
+
+    const item = this._fileTreeNodeData.get(itemElement);
+    if (!item) return;
+
+    if (item.type === 'directory') {
+      const isExpanded = itemElement.getAttribute('data-expanded') === 'true';
+
+      if (!isExpanded) {
+        const childContainer = document.createElement('div');
+        childContainer.setAttribute('data-parent-path', item.path);
+        itemElement.parentNode.insertBefore(childContainer, itemElement.nextSibling);
+        this.renderFileTree(item.children || [], childContainer, (parseInt(itemElement.getAttribute('data-level') || '0', 10) + 1));
+
+        const icon = itemElement.querySelector('.icon');
+        if (icon) icon.textContent = '📂';
+        itemElement.setAttribute('data-expanded', 'true');
+      } else {
+        const nextSibling = itemElement.nextSibling;
+        if (nextSibling && nextSibling.getAttribute && nextSibling.getAttribute('data-parent-path') === item.path) {
+          nextSibling.remove();
+        }
+        const icon = itemElement.querySelector('.icon');
+        if (icon) icon.textContent = '📁';
+        itemElement.setAttribute('data-expanded', 'false');
+      }
+
+      return;
+    }
+
+    if (item.type === 'file') {
+      this.readFileFromTree(item.path).then(tabId => {
+        if (!tabId) return;
+        if (this._selectedFileTreeItem) {
+          this._selectedFileTreeItem.classList.remove('selected');
+        }
+        itemElement.classList.add('selected');
+        this._selectedFileTreeItem = itemElement;
+      });
     }
   }
 
@@ -378,63 +436,54 @@ class FileOperationsManager {
     if (!container) return;
     
     if (level === 0) {
-      container.innerHTML = '';
+      container.textContent = '';
+      this._selectedFileTreeItem = null;
     }
-    
-    tree.forEach(item => {
-      const itemElement = document.createElement('div');
-      itemElement.style.marginLeft = (level * 16) + 'px';
-      
-      if (item.type === 'directory') {
+
+    const CHUNK_SIZE = 250;
+    const raf = (typeof requestAnimationFrame === 'function')
+      ? requestAnimationFrame
+      : (cb) => setTimeout(cb, 0);
+    const renderChunk = (startIndex) => {
+      const fragment = document.createDocumentFragment();
+
+      for (let i = startIndex; i < Math.min(startIndex + CHUNK_SIZE, tree.length); i++) {
+        const item = tree[i];
+        const itemElement = document.createElement('div');
+        itemElement.style.marginLeft = (level * 16) + 'px';
         itemElement.className = 'file-tree-item';
         itemElement.setAttribute('data-path', item.path);
-        itemElement.setAttribute('data-type', 'directory');
+        itemElement.setAttribute('data-type', item.type);
         itemElement.setAttribute('data-name', item.name);
-        itemElement.innerHTML = `
-          <span class="icon">📁</span>
-          <span class="name">${item.name}</span>
-        `;
-        
-        let expanded = false;
-        let childContainer = null;
-        
-        itemElement.addEventListener('click', () => {
-          if (!expanded && item.children) {
-            childContainer = document.createElement('div');
-            itemElement.parentNode.insertBefore(childContainer, itemElement.nextSibling);
-            this.renderFileTree(item.children, childContainer, level + 1);
-            itemElement.querySelector('.icon').textContent = '📂';
-            expanded = true;
-          } else if (expanded && childContainer) {
-            childContainer.remove();
-            itemElement.querySelector('.icon').textContent = '📁';
-            expanded = false;
-          }
-        });
-      } else {
-        itemElement.className = 'file-tree-item';
-        itemElement.setAttribute('data-file-path', item.path);
-        itemElement.setAttribute('data-path', item.path);
-        itemElement.setAttribute('data-type', 'file');
-        itemElement.setAttribute('data-name', item.name);
-        const fileIcon = this.getFileIcon(item.name);
-        itemElement.innerHTML = `
-          <span class="icon">${fileIcon}</span>
-          <span class="name">${item.name}</span>
-        `;
-        
-        itemElement.addEventListener('click', async () => {
-          const tabId = await this.readFileFromTree(item.path);
-          if (tabId) {
-            // Highlight selected file
-            document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('selected'));
-            itemElement.classList.add('selected');
-          }
-        });
+        itemElement.setAttribute('data-level', String(level));
+
+        this._fileTreeNodeData.set(itemElement, item);
+
+        if (item.type === 'directory') {
+          itemElement.setAttribute('data-expanded', 'false');
+          itemElement.innerHTML = `
+            <span class="icon">📁</span>
+            <span class="name">${item.name}</span>
+          `;
+        } else {
+          const fileIcon = this.getFileIcon(item.name);
+          itemElement.innerHTML = `
+            <span class="icon">${fileIcon}</span>
+            <span class="name">${item.name}</span>
+          `;
+        }
+
+        fragment.appendChild(itemElement);
       }
-      
-      container.appendChild(itemElement);
-    });
+
+      container.appendChild(fragment);
+
+      if (startIndex + CHUNK_SIZE < tree.length) {
+        raf(() => renderChunk(startIndex + CHUNK_SIZE));
+      }
+    };
+
+    renderChunk(0);
   }
 
   /**
