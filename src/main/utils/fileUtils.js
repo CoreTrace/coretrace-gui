@@ -91,6 +91,35 @@ async function detectFileEncoding(filePath) {
   }
 }
 
+const DEFAULT_IGNORED_DIR_NAMES = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  'out',
+  'coverage',
+  '.git',
+  '.next',
+  '.cache',
+  'target',
+  'vendor',
+  '__pycache__',
+  '.venv',
+  'venv',
+  'My Music',
+  'My Pictures',
+  'My Videos',
+  '$RECYCLE.BIN',
+  'System Volume Information'
+]);
+
+const MAX_ENTRIES_PER_DIR = 5000;
+
+function shouldIgnoreTreeEntry(name) {
+  if (!name) return true;
+  if (name.startsWith('.')) return true;
+  return DEFAULT_IGNORED_DIR_NAMES.has(name);
+}
+
 /**
  * Build file tree for directory
  * @param {string} dirPath - Directory path
@@ -102,53 +131,62 @@ async function buildFileTree(dirPath, maxDepth = 3, currentDepth = 0) {
   if (currentDepth > maxDepth) return null;
   
   try {
-    const items = await fs.readdir(dirPath);
+    const dirents = await fs.readdir(dirPath, { withFileTypes: true });
     const tree = [];
-    
-    for (const item of items) {
-      // Skip hidden files, common build directories, and Windows system folders
-      if (item.startsWith('.') || 
-          ['node_modules', 'dist', 'build', '.git', 'My Music', 'My Pictures', 'My Videos', '$RECYCLE.BIN', 'System Volume Information'].includes(item)) {
+
+    let processedCount = 0;
+
+    for (const dirent of dirents) {
+      if (processedCount >= MAX_ENTRIES_PER_DIR) break;
+      const name = dirent.name;
+
+      if (shouldIgnoreTreeEntry(name)) {
         continue;
       }
-      
-      const itemPath = path.join(dirPath, item);
-      
-      try {
-        const stats = await fs.stat(itemPath);
-        
-        if (stats.isDirectory()) {
-          const children = await buildFileTree(itemPath, maxDepth, currentDepth + 1);
-          tree.push({
-            name: item,
-            path: itemPath,
-            type: 'directory',
-            children: children || []
-          });
-        } else {
-          tree.push({
-            name: item,
-            path: itemPath,
-            type: 'file'
-          });
+
+      // Avoid potential symlink loops and reduce I/O.
+      if (dirent.isSymbolicLink && dirent.isSymbolicLink()) {
+        continue;
+      }
+
+      processedCount++;
+      const itemPath = path.join(dirPath, name);
+
+      if (dirent.isDirectory()) {
+        let children = [];
+        try {
+          children = (await buildFileTree(itemPath, maxDepth, currentDepth + 1)) || [];
+        } catch (childError) {
+          if (childError && (childError.code === 'EPERM' || childError.code === 'EACCES' || childError.code === 'ENOENT')) {
+            children = [];
+          } else {
+            throw childError;
+          }
         }
-      } catch (itemError) {
-        // Skip items that cause permission errors or other access issues
-        if (itemError.code === 'EPERM' || itemError.code === 'EACCES' || itemError.code === 'ENOENT') {
-          console.warn(`Skipping inaccessible item: ${itemPath} (${itemError.code})`);
-          continue;
-        }
-        // Re-throw unexpected errors
-        throw itemError;
+
+        tree.push({
+          name,
+          path: itemPath,
+          type: 'directory',
+          children
+        });
+      } else if (dirent.isFile()) {
+        tree.push({
+          name,
+          path: itemPath,
+          type: 'file'
+        });
       }
     }
-    
-    return tree.sort((a, b) => {
+
+    tree.sort((a, b) => {
       // Directories first, then files
       if (a.type === 'directory' && b.type === 'file') return -1;
       if (a.type === 'file' && b.type === 'directory') return 1;
       return a.name.localeCompare(b.name);
     });
+
+    return tree;
   } catch (error) {
     // Handle directory-level permission errors
     if (error.code === 'EPERM' || error.code === 'EACCES') {
