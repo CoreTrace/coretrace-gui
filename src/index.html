@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="styles/visualyzer.css">
   <link rel="stylesheet" href="styles/resizers.css">
   <link rel="stylesheet" href="styles/titlebar.css">
+  <link rel="stylesheet" href="styles/diagnostics.css">
   
   <!-- Font loading for cross-platform emoji support -->
   <style>
@@ -43,6 +44,37 @@
   <script>
     const { ipcRenderer } = require('electron');
     window.ipcRenderer = ipcRenderer;
+  </script>
+  
+  <!-- Monaco Editor Loader -->
+  <script>
+    const path = require('path');
+    const monacoBasePath = path.join(__dirname, '../node_modules/monaco-editor/min/vs');
+    
+    // Load Monaco's AMD loader
+    const loaderScript = document.createElement('script');
+    loaderScript.src = path.join(monacoBasePath, 'loader.js');
+    loaderScript.onload = () => {
+      // Configure AMD loader paths
+      require.config({ paths: { 'vs': monacoBasePath } });
+      
+      // Set up Monaco environment - disable web workers for Electron
+      window.MonacoEnvironment = {
+        getWorker: function (workerId, label) {
+          // Return undefined to disable workers (simpler for Electron)
+          return undefined;
+        }
+      };
+      
+      // Load Monaco Editor
+      require(['vs/editor/editor.main'], function() {
+        window.monaco = monaco;
+        console.log('Monaco Editor loaded successfully');
+        // Dispatch event to let other scripts know Monaco is ready
+        window.dispatchEvent(new Event('monaco-loaded'));
+      });
+    };
+    document.head.appendChild(loaderScript);
   </script>
   
   <!-- Load modular JavaScript -->
@@ -302,8 +334,7 @@
           
           <!-- Editor Area (hidden by default) -->
           <div style="display: none;" id="editor-area">
-            <div class="gutter" id="gutter">1</div>
-            <div class="editor" id="editor" contenteditable="true" spellcheck="false" data-placeholder="Start typing your code here..."></div>
+            <div class="editor" id="editor"></div>
           </div>
           
           <!-- Visualyzer Area (hidden by default) -->
@@ -382,26 +413,42 @@
         <button class="close-btn" onclick="hideToolsPanel()" title="Close Panel">×</button>
       </div>
       <div class="tools-panel-content">
-        <div style="margin-bottom: 20px;">
-          <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #f0f6fc;">Quick Actions</h3>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <button style="background: #1f6feb; border: none; color: white; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.15s ease;" onclick="runCTrace()">
-              ▶ Run CTrace
-            </button>
+        <!-- CTrace Configuration Section -->
+        <div class="tools-section">
+          <div class="section-header">
+            <span class="section-icon">⚙️</span>
+            <span class="section-title">CTrace Configuration</span>
           </div>
+          
+          <div class="config-group">
+            <label for="ctrace-args" class="config-label">
+              Additional Arguments
+              <span class="config-hint">--input is added automatically</span>
+            </label>
+            <input 
+              type="text" 
+              id="ctrace-args" 
+              class="config-input" 
+              placeholder="e.g., --invoke=ctrace_stack_analyzer --sarif-format"
+              value="--invoke=ctrace_stack_analyzer --sarif-format"
+            />
+          </div>
+          
+          <button class="ctrace-run-btn" onclick="runCTrace()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3 2.5A.5.5 0 0 1 3.5 2h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM3 6a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 6zm0 3.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/>
+            </svg>
+            Run Analysis
+          </button>
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #f0f6fc;">CTrace Output</h3>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <button style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 11px;" onclick="clearCTraceOutput()">Clear</button>
-            <button style="background: #21262d; border: 1px solid #30363d; color: #f0f6fc; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 11px;" onclick="copyCTraceOutput()">Copy</button>
+        <!-- Diagnostics Results Area -->
+        <div id="ctrace-results-area">
+          <div class="ctrace-placeholder">
+            <div class="placeholder-icon">🔍</div>
+            <div class="placeholder-text">Run CTrace to analyze your code</div>
+            <div class="placeholder-subtext">Configure arguments above and click Run</div>
           </div>
-          <pre id="ctrace-output" style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; color: #f0f6fc; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.5; height: 320px; max-height: 65vh; overflow: auto; white-space: pre-wrap;">Waiting to run...</pre>
-        </div>
-
-        <div>
-          <!-- <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #f0f6fc;">Extensions</h3> -->
         </div>
       </div>
     </div>

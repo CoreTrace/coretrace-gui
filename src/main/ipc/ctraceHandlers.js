@@ -2,232 +2,262 @@ const { ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const os = require('os');
+const net = require('net');
+const { v4: uuidv4 } = require('uuid');
 
-/**
- * Check if WSL is available and has distributions installed
- * @returns {Promise<Object>} WSL status object with properties: available (boolean), hasDistros (boolean), error (string)
- */
-async function checkWSLAvailability() {
+// ==========================================
+// HELPER FUNCTIONS (Windows/WSL Specific)
+// ==========================================
+
+async function ensureSocatInstalled() {
   return new Promise((resolve) => {
-    // First check if WSL command exists
-    const statusChild = spawn('wsl', ['--status'], { stdio: 'pipe' });
-    
-    let statusOutput = '';
-    let statusError = '';
-    
-    statusChild.stdout.on('data', (data) => {
-      statusOutput += data.toString();
-    });
-    
-    statusChild.stderr.on('data', (data) => {
-      statusError += data.toString();
-    });
-    
-    statusChild.on('error', () => {
-      resolve({ available: false, hasDistros: false, error: 'WSL is not installed' });
-    });
-    
-    statusChild.on('close', (statusCode) => {
-      if (statusCode !== 0) {
-        resolve({ available: false, hasDistros: false, error: 'WSL is not available' });
+    const checkChild = spawn('wsl', ['which', 'socat'], { stdio: 'pipe' });
+    checkChild.on('close', (code) => {
+      if (code === 0) {
+        resolve(true);
         return;
       }
-      
-      // WSL exists, now check for installed distributions
-      const listChild = spawn('wsl', ['--list', '--quiet'], { stdio: 'pipe' });
-      
-      let listOutput = '';
-      
-      listChild.stdout.on('data', (data) => {
-        listOutput += data.toString();
-      });
-      
-      listChild.on('error', () => {
-        resolve({ available: true, hasDistros: false, error: 'Cannot check WSL distributions' });
-      });
-      
-      listChild.on('close', (listCode) => {
-        const distributions = listOutput.trim().split('\n').filter(line => line.trim().length > 0);
-        const hasDistros = distributions.length > 0 && !listOutput.includes('no installed distributions');
-        
-        if (!hasDistros) {
-          const errorMsg = statusError.includes('no installed distributions') || listOutput.includes('no installed distributions')
-            ? 'WSL is installed but no Linux distributions are available'
-            : 'No WSL distributions found';
-          resolve({ available: true, hasDistros: false, error: errorMsg });
-        } else {
-          resolve({ available: true, hasDistros: true });
-        }
-      });
-      
-      // Timeout for list command
-      setTimeout(() => {
-        listChild.kill();
-        resolve({ available: true, hasDistros: false, error: 'Timeout checking WSL distributions' });
-      }, 5000);
+      console.log('📦 socat not found in WSL, attempting to install...');
+      const installChild = spawn('wsl', ['--user', 'root', 'bash', '-c', 'apt-get update -qq && apt-get install -y socat'], { stdio: 'inherit' });
+      installChild.on('close', (installCode) => resolve(installCode === 0));
+      installChild.on('error', () => resolve(false));
     });
-    
-    // Timeout for status command
-    setTimeout(() => {
-      statusChild.kill();
-      resolve({ available: false, hasDistros: false, error: 'Timeout checking WSL status' });
-    }, 5000);
+    checkChild.on('error', () => resolve(false));
   });
 }
 
-/**
- * Setup IPC handlers for running the ctrace binary
- */
+async function checkWSLAvailability() {
+  return new Promise((resolve) => {
+    const statusChild = spawn('wsl', ['--status'], { stdio: 'pipe' });
+    let output = '';
+    
+    statusChild.stdout.on('data', d => output += d.toString());
+    statusChild.on('error', () => resolve({ available: false, hasDistros: false, error: 'WSL not installed' }));
+    
+    statusChild.on('close', (code) => {
+      if (code !== 0) return resolve({ available: false, hasDistros: false });
+      
+      const listChild = spawn('wsl', ['--list', '--quiet'], { stdio: 'pipe' });
+      let listOut = '';
+      listChild.stdout.on('data', d => listOut += d.toString('utf16le').replace(/\x00/g, ''));
+      
+      listChild.on('close', () => {
+        const hasDistros = listOut.trim().length > 0 && !listOut.includes('no installed distributions');
+        resolve({ available: true, hasDistros });
+      });
+      listChild.on('error', () => resolve({ available: true, hasDistros: false }));
+    });
+  });
+}
+
+async function getWindowsHostIP() {
+  return new Promise((resolve, reject) => {
+    const child = spawn('wsl', ['ip', 'route', 'show', 'default'], { stdio: 'pipe' });
+    let output = '';
+    child.stdout.on('data', d => output += d.toString());
+    child.on('close', (code) => {
+      const match = output.match(/default\s+via\s+(\d+\.\d+\.\d+\.\d+)/);
+      if (code === 0 && match && match[1]) resolve(match[1]);
+      else reject(new Error('Could not determine Host IP from WSL'));
+    });
+  });
+}
+
+async function waitForSocketFile(socketPath, timeout = 5000) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    const exists = await new Promise(r => {
+      const c = spawn('wsl', ['test', '-S', socketPath]);
+      c.on('close', code => r(code === 0));
+    });
+    if (exists) return true;
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
+}
+
+// ==========================================
+// MAIN HANDLER
+// ==========================================
+
 function setupCtraceHandlers() {
   ipcMain.handle('run-ctrace', async (event, args = []) => {
-    // Always use the Linux binary 'ctrace' (no .exe extension)
-    // On Windows, this will be executed through WSL
     const binaryName = 'ctrace';
-    
-    // Resolve binary in dev and production (packaged) locations
+    let server = null;
+    let processes = []; // Track processes to kill on cleanup
+
+    // 1. Resolve Binary Path
     let binPath;
-    
     if (process.resourcesPath) {
-      // In packaged app, binary is in extraResources
       binPath = path.join(process.resourcesPath, 'bin', binaryName);
     } else {
-      // In development, binary is in the project bin directory
-      // __dirname is .../src/main/ipc, so project root bin is ../../../bin/ctrace
       binPath = path.join(__dirname, '../../../bin', binaryName);
     }
 
-    async function resolveBinary() {
-      try {
-        await fs.access(binPath);
-        return binPath;
-      } catch (error) {
-        console.error(`Binary not found at ${binPath}:`, error.message);
-        return null;
-      }
+    // Check if binary exists (Critical for both platforms)
+    try {
+      await fs.access(binPath);
+    } catch (e) {
+        // Fallback check logic for logging
+        const checkedPath = process.resourcesPath ? path.join(process.resourcesPath, 'bin', binaryName) : path.join(__dirname, '../../../bin', binaryName);
+        return { success: false, error: `Binary not found at: ${checkedPath}` };
     }
 
-    try {
-      const resolvedBinPath = await resolveBinary();
-      if (!resolvedBinPath) {
-        const platform = os.platform();
-        const platformInfo = platform === 'win32' ? ' (Linux binary executed via WSL)' : '';
-        const checkedPath = process.resourcesPath ? 
-          path.join(process.resourcesPath, 'bin', binaryName) : 
-          path.join(__dirname, '../../../bin', binaryName);
-        return { 
-          success: false, 
-          error: `ctrace binary not found at: ${checkedPath}${platformInfo}` 
-        };
-      }
+    // ==========================================
+    // CLEANUP ROUTINE
+    // ==========================================
+    const cleanup = () => {
+      console.log('🧹 Cleaning up resources...');
+      
+      // Close Server
+      if (server) server.close();
+      
+      // Kill Processes
+      processes.forEach(p => {
+        if (p && !p.killed) p.kill('SIGTERM');
+      });
 
-      // On Windows, check if WSL is available before proceeding
+      // Platform specific cleanup
       if (os.platform() === 'win32') {
-        const wslStatus = await checkWSLAvailability();
-        if (!wslStatus.available || !wslStatus.hasDistros) {
-          let errorMessage = 'CTrace requires WSL (Windows Subsystem for Linux) to run on Windows.\n\n';
-          
-          if (!wslStatus.available) {
-            errorMessage += 'WSL is not installed. Please install WSL by running:\n';
-            errorMessage += '• Open PowerShell as Administrator\n';
-            errorMessage += '• Run: wsl --install\n';
-            errorMessage += '• Restart your computer when prompted\n\n';
-          } else if (!wslStatus.hasDistros) {
-            errorMessage += 'WSL is installed but no Linux distributions are available.\n\n';
-            errorMessage += 'To fix this:\n';
-            errorMessage += '• Run: wsl --list --online (to see available distributions)\n';
-            errorMessage += '• Run: wsl --install Ubuntu (or another distribution)\n';
-            errorMessage += '• Follow the setup instructions\n\n';
-          }
-          
-          errorMessage += 'After setup, restart the application to use CTrace.';
-          
-          if (wslStatus.error) {
-            errorMessage += `\n\nDetailed error: ${wslStatus.error}`;
-          }
-          
-          return { 
-            success: false, 
-            error: errorMessage
-          };
-        }
+         spawn('wsl', ['rm', '-f', '/tmp/ctrace.sock']);
+      } else {
+         // Linux: Clean up the local socket file if it exists
+         // The path is defined in the Linux block, we can't easily access it here
+         // unless we scope it higher, but usually server.close() handles unlinking 
+         // on Linux if net.createServer was used with a path. 
+         // If not, we rely on os.tmpdir() auto-cleaning eventually.
+      }
+    };
+
+    process.on('exit', cleanup);
+
+    // ==========================================
+    // WINDOWS EXECUTION PATH (WSL + TCP Bridge)
+    // ==========================================
+    if (os.platform() === 'win32') {
+      console.log('🪟 Windows detected. Initializing WSL bridge...');
+      
+      // 1. Check WSL
+      const wslStatus = await checkWSLAvailability();
+      if (!wslStatus.available || !wslStatus.hasDistros) {
+        return { success: false, error: 'WSL is not installed or has no distributions.' };
       }
 
-      return await new Promise((resolve) => {
-        console.log('args', args);
-        
-        let command, commandArgs;
-        
-        // Check if we're on Windows (we always have a Linux binary now)
-        if (os.platform() === 'win32') {
-          // On Windows, use WSL to execute the Linux binary
-          console.log('Windows detected, using WSL to execute ctrace');
-          console.log('Binary path:', resolvedBinPath);
-          
-          // Convert Windows path to WSL path
-          const wslPath = resolvedBinPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (match, drive) => `/mnt/${drive.toLowerCase()}`);
-          command = 'wsl';
-          
-          // Convert arguments with Windows paths to WSL paths
-          const convertedArgs = (Array.isArray(args) ? args : []).map(arg => {
-            // Convert paths in arguments like --input=C:\path\to\file
-            if (typeof arg === 'string' && arg.includes(':\\')) {
-              return arg.replace(/([A-Z]):\\/g, (match, drive) => `/mnt/${drive.toLowerCase()}/`).replace(/\\/g, '/');
-            }
-            return arg;
+      // 2. Check Socat
+      if (!(await ensureSocatInstalled())) {
+        return { success: false, error: 'Failed to install socat in WSL.' };
+      }
+
+      return new Promise(async (resolve, reject) => {
+        const wslSocketPath = '/tmp/ctrace.sock'; // Fixed path inside WSL
+
+        // 3. Start TCP Server
+        server = net.createServer((socket) => {
+          let outputBuffer = '';
+          socket.on('data', (data) => {
+             const str = data.toString();
+             outputBuffer += str;
+             if (event?.sender) event.sender.send('ctrace-output', str);
           });
-          
-          commandArgs = [wslPath, ...convertedArgs];
-          console.log('WSL command:', command, commandArgs);
-        } else {
-          // On Linux/Mac, use the binary directly
-          command = resolvedBinPath;
-          commandArgs = Array.isArray(args) ? args : [];
-          console.log('Direct execution:', command, commandArgs);
-        }
-        
-        const child = spawn(command, commandArgs, {
-          stdio: ['ignore', 'pipe', 'pipe']
+          socket.on('end', () => {
+            if (event?.sender) event.sender.send('ctrace-complete', { success: true, output: outputBuffer });
+            cleanup();
+            resolve({ success: true, output: outputBuffer });
+          });
         });
 
-        let stdout = '';
-        let stderr = '';
+        server.listen(0, '0.0.0.0', async () => {
+          const tcpPort = server.address().port;
+          console.log(`TCP Bridge listening on port ${tcpPort}`);
 
-        child.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
+          try {
+            const hostIP = await getWindowsHostIP();
+            
+            // 4. Start Socat Bridge in WSL
+            const socatCmd = `rm -f ${wslSocketPath}; socat UNIX-LISTEN:${wslSocketPath},fork,reuseaddr TCP:${hostIP}:${tcpPort}`;
+            const socatProc = spawn('wsl', ['bash', '-c', socatCmd]);
+            processes.push(socatProc);
 
-        child.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        child.on('error', (err) => {
-          let errorMessage = err.message;
-          
-          // Provide more helpful error messages for WSL-related issues
-          if (os.platform() === 'win32' && command === 'wsl') {
-            if (err.code === 'ENOENT') {
-              errorMessage = 'WSL (Windows Subsystem for Linux) is not installed or not available in PATH. Please install WSL to use CTrace.';
-            } else if (err.code === 'EACCES') {
-              errorMessage = 'Permission denied when trying to execute WSL. Please check WSL installation and permissions.';
-            } else {
-              errorMessage = `WSL execution failed: ${err.message}`;
+            // 5. Wait for Socket
+            if (!(await waitForSocketFile(wslSocketPath))) {
+              cleanup();
+              reject({ success: false, error: 'Timeout waiting for WSL socket.' });
+              return;
             }
-          }
-          
-          resolve({ success: false, error: errorMessage });
-        });
 
-        child.on('close', (code) => {
-          if (code === 0) {
-            resolve({ success: true, output: stdout, exitCode: code });
-          } else {
-            resolve({ success: false, error: `ctrace exited with code ${code}`, stderr, output: stdout, exitCode: code });
+            // 6. Run Binary via WSL
+            const wslBinPath = binPath.replace(/\\/g, '/').replace(/^([A-Z]):/, (m, d) => `/mnt/${d.toLowerCase()}`);
+            const argsList = [wslBinPath, '--ipc', 'socket', '--ipc-path', wslSocketPath, ...args];
+            
+            console.log('Running:', 'wsl', argsList);
+            const child = spawn('wsl', argsList);
+            processes.push(child);
+
+            // Basic error handling for binary
+            child.on('error', (err) => {
+                cleanup();
+                reject({ success: false, error: err.message });
+            });
+          } catch (err) {
+            cleanup();
+            reject({ success: false, error: err.message });
           }
         });
       });
-    } catch (error) {
-      return { success: false, error: error.message };
+    } 
+    
+    // ==========================================
+    // LINUX / MACOS EXECUTION PATH (Direct Socket)
+    // ==========================================
+    else {
+      console.log('🐧 Linux/Mac detected. Using direct socket IPC.');
+      
+      return new Promise((resolve, reject) => {
+        // 1. Create unique socket path
+        const socketPath = path.join(os.tmpdir(), `ctrace-${uuidv4()}.sock`);
+        
+        // 2. Start Unix Socket Server
+        server = net.createServer((socket) => {
+          let outputBuffer = '';
+          socket.on('data', (data) => {
+            const str = data.toString();
+            outputBuffer += str;
+            if (event?.sender) event.sender.send('ctrace-output', str);
+          });
+          socket.on('end', () => {
+            if (event?.sender) event.sender.send('ctrace-complete', { success: true, output: outputBuffer });
+            cleanup();
+            // Try to unlink socket file specifically for Linux
+            try { fsSync.unlinkSync(socketPath); } catch(e) {}
+            resolve({ success: true, output: outputBuffer });
+          });
+        });
+
+        server.listen(socketPath, () => {
+          console.log(`Listening on Unix socket: ${socketPath}`);
+          
+          // 3. Run Binary Directly
+          const binaryArgs = ['--ipc', 'socket', '--ipc-path', socketPath, ...args];
+          console.log('Running:', binPath, binaryArgs);
+          
+          const child = spawn(binPath, binaryArgs);
+          processes.push(child);
+
+          child.on('error', (err) => {
+            cleanup();
+            reject({ success: false, error: `Failed to start binary: ${err.message}` });
+          });
+
+          child.stderr.on('data', d => console.error(`[ctrace stderr]: ${d}`));
+        });
+        
+        server.on('error', (err) => {
+            cleanup();
+            reject({ success: false, error: `Server error: ${err.message}` });
+        });
+      });
     }
   });
 }
