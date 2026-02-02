@@ -13,6 +13,9 @@ class NotificationManager {
    * @param {number} duration - Duration in milliseconds (default 4000)
    */
   showNotification(message, type = 'info', duration = 4000, options = {}) {
+    // Automatically dismiss all previous notifications when a new one appears
+    this.clearAll();
+    
     const colors = {
       success: '#238636',
       error: '#f85149',

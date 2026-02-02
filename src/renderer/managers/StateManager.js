@@ -133,6 +133,7 @@ class StateManager {
       timestamp: new Date().toISOString(),
       tabs: [],
       activeTabId: null,
+      workspacePath: null,
       diagnostics: null,
       editorState: null
     };
@@ -177,7 +178,10 @@ class StateManager {
         scrollLeft: scrollLeft
       };
     }
-
+    // Collect current workspace path
+    if (window.uiController && window.uiController.fileOpsManager) {
+      state.workspacePath = window.uiController.fileOpsManager.getCurrentWorkspacePath();
+    }
     // Collect last analysis results
     if (this.diagnosticsManager.currentDiagnostics) {
       state.diagnostics = {
@@ -344,6 +348,23 @@ class StateManager {
         } else if (state.tabs.length > 0) {
           // If no active tab or active tab not found, switch to first tab
           await this.tabManager.switchToTab(state.tabs[0].tabId);
+        }
+      }
+
+      // Restore workspace if one was open
+      if (state.workspacePath) {
+        console.log('[StateManager] Restoring workspace:', state.workspacePath);
+        try {
+          // Use IPC to open the workspace
+          const result = await window.ipcRenderer.invoke('get-file-tree', state.workspacePath);
+          if (result.success && window.uiController && window.uiController.fileOpsManager) {
+            const folderName = state.workspacePath.split(/[\/\\]/).pop();
+            window.uiController.fileOpsManager.currentWorkspacePath = state.workspacePath;
+            window.uiController.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
+            console.log('[StateManager] Workspace restored successfully');
+          }
+        } catch (error) {
+          console.error('[StateManager] Failed to restore workspace:', error);
         }
       }
 

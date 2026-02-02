@@ -13,6 +13,11 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+// Fix disk cache errors by disabling cache or using in-memory cache
+app.commandLine.appendSwitch('disable-http-cache');
+app.commandLine.appendSwitch('disk-cache-size', '1');
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+
 // Import IPC handlers
 const { setupFileHandlers } = require('./main/ipc/fileHandlers');
 const { setupEditorHandlers } = require('./main/ipc/editorHandlers');

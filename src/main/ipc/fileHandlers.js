@@ -107,7 +107,7 @@ function setupFileHandlers(mainWindow) {
     return { success: false, canceled: true };
   });
 
-  // Get file tree for refresh
+  // Get file tree for refresh (now uses lazy loading)
   ipcMain.handle('get-file-tree', async (event, folderPath) => {
     const requestId = ++workspaceLoadingSeq;
     try {
@@ -120,7 +120,7 @@ function setupFileHandlers(mainWindow) {
         });
       } catch (_) {}
 
-      const fileTree = await buildFileTree(folderPath, FILE_TREE_MAX_DEPTH);
+      const fileTree = await buildFileTree(folderPath, false); // Lazy load
 
       try {
         mainWindow.webContents.send('workspace-loading', {
@@ -146,6 +146,22 @@ function setupFileHandlers(mainWindow) {
           error: error.message
         });
       } catch (_) {}
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  // Get directory contents for lazy loading
+  ipcMain.handle('get-directory-contents', async (event, dirPath) => {
+    try {
+      const contents = await buildFileTree(dirPath, false);
+      return {
+        success: true,
+        contents
+      };
+    } catch (error) {
       return {
         success: false,
         error: error.message
