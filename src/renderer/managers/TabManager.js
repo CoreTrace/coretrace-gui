@@ -77,6 +77,18 @@ class TabManager {
      * @private
      */
     this.editorArea = document.getElementById('editor-area');
+
+    /**
+     * Optional async callback fired before switching tabs.
+     * @type {(fromTabId: (string|null), toTabId: string) => Promise<void>|null}
+     */
+    this.onBeforeTabSwitch = null;
+
+    /**
+     * Optional async callback fired before closing a tab.
+     * @type {(tabId: string) => Promise<void>|null}
+     */
+    this.onBeforeTabClose = null;
   }
 
   /**
@@ -134,10 +146,19 @@ class TabManager {
    * @param {string} tabId - Tab ID to switch to
    */
   async switchToTab(tabId) {
-    // Save current tab content if we have an active tab
+    // Save current tab content FIRST (before auto-save callback) if we have an active tab
     if (this.activeTabId && this.openTabs.has(this.activeTabId)) {
       const currentTab = this.openTabs.get(this.activeTabId);
       currentTab.content = this.editorManager.getContent();
+    }
+
+    // Give consumers a chance to flush pending edits (e.g., auto-save) before switching.
+    if (typeof this.onBeforeTabSwitch === 'function') {
+      try {
+        await this.onBeforeTabSwitch(this.activeTabId, tabId);
+      } catch (err) {
+        console.warn('TabManager onBeforeTabSwitch failed:', err);
+      }
     }
 
     // Update active tab
@@ -184,7 +205,8 @@ class TabManager {
   closeTab(event, tabId) {
     event.stopPropagation();
 
-    this.closeTabById(tabId);
+    // Fire and forget (UI click handler can't await).
+    void this.closeTabById(tabId);
   }
 
   /**
@@ -193,13 +215,35 @@ class TabManager {
    * @param {boolean} [force=false] - If true, close even if modified
    * @returns {boolean} - True if closed, false if user canceled
    */
-  closeTabById(tabId, force = false) {
+  async closeTabById(tabId, force = false) {
     const tab = this.openTabs.get(tabId);
     if (!tab) return true;
 
+    // Sync content from editor if closing the active tab
+    if (tabId === this.activeTabId) {
+      tab.content = this.editorManager.getContent();
+      console.log('[TabManager] Synced content from editor for tab:', tab.fileName, 'modified:', tab.modified);
+    }
+
+    // Give consumers a chance to flush pending edits (e.g., auto-save) before close confirmation.
+    if (typeof this.onBeforeTabClose === 'function') {
+      console.log('[TabManager] Calling onBeforeTabClose for:', tab.fileName);
+      try {
+        await this.onBeforeTabClose(tabId);
+        console.log('[TabManager] onBeforeTabClose completed for:', tab.fileName, 'modified now:', tab.modified);
+      } catch (err) {
+        console.warn('TabManager onBeforeTabClose failed:', err);
+      }
+    }
+
+    // Re-fetch tab state in case auto-save cleaned it
+    const updatedTab = this.openTabs.get(tabId);
+    if (!updatedTab) return true;
+
     // Check if modified
-    if (tab.modified && !force) {
-      const result = confirm(`${tab.fileName} has unsaved changes. Do you want to close it anyway?`);
+    if (updatedTab.modified && !force) {
+      console.log('[TabManager] Tab still modified after auto-save, prompting user:', updatedTab.fileName);
+      const result = confirm(`${updatedTab.fileName} has unsaved changes. Do you want to close it anyway?`);
       if (!result) return false;
     }
 
@@ -216,7 +260,7 @@ class TabManager {
     if (this.activeTabId === tabId) {
       const remainingTabs = Array.from(this.openTabs.keys());
       if (remainingTabs.length > 0) {
-        this.switchToTab(remainingTabs[remainingTabs.length - 1]);
+        await this.switchToTab(remainingTabs[remainingTabs.length - 1]);
       } else {
         this.activeTabId = null;
         this.showWelcomeScreen();
@@ -224,6 +268,15 @@ class TabManager {
     }
 
     return true;
+  }
+
+  /**
+   * Get a tab by id.
+   * @param {string} tabId
+   * @returns {Object|null}
+   */
+  getTab(tabId) {
+    return this.openTabs.get(tabId) || null;
   }
 
   /**

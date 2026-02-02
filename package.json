@@ -5,7 +5,7 @@
   "main": "src/main.js",
   "scripts": {
     "test": "node --test",
-    "test:wsl": "node scripts/test-wsl-bridge.js",
+    "test:wsl": "node src/main/utils/wslTest.js",
     "start": "electron .",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",

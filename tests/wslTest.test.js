@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const os = require('node:os');
 const childProcess = require('node:child_process');
+const fsPromises = require('node:fs/promises');
 const { EventEmitter } = require('node:events');
 
 function loadModule() {
@@ -49,6 +50,9 @@ test('testWSLAndCTrace resolves immediately on non-Windows platforms', async (t)
 
 test('testWSLAndCTrace completes checks on Windows when commands succeed', async (t) => {
   const platformMock = t.mock.method(os, 'platform', () => 'win32');
+
+  const accessMock = t.mock.method(fsPromises, 'access', async () => {});
+
   const spawnSequence = [
     { code: 0 },
     { stdout: 'ctrace help', code: 0 }
@@ -67,6 +71,7 @@ test('testWSLAndCTrace completes checks on Windows when commands succeed', async
   assert.deepStrictEqual(spawnMock.mock.calls[1].arguments[0], 'wsl');
 
   platformMock.mock.restore();
+  accessMock.mock.restore();
   spawnMock.mock.restore();
 });
 
