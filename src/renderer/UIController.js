@@ -1180,6 +1180,17 @@ class UIController {
         this.tabManager.switchToNextTab();
       }
       
+      // Tab navigation with Ctrl+PageUp/PageDown
+      if (e.ctrlKey && e.key === 'PageDown') {
+        e.preventDefault();
+        this.tabManager.switchToNextTab();
+      }
+      
+      if (e.ctrlKey && e.key === 'PageUp') {
+        e.preventDefault();
+        this.tabManager.switchToPreviousTab();
+      }
+      
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
         this.toggleToolsPanel();
