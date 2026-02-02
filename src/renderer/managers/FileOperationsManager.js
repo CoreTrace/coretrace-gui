@@ -173,14 +173,14 @@ class FileOperationsManager {
   /**
    * Save current file
    */
-  async saveFile() {
+  async saveFile(options = {}) {
     try {
       const currentTab = this.tabManager.getActiveTab();
       if (!currentTab) {
         // Create a new file if none exists
         this.tabManager.createNewFile();
         await new Promise(resolve => setTimeout(resolve, 100));
-        return await this.saveFile();
+        return await this.saveFile(options);
       }
       
       // Update current tab content from editor
@@ -190,7 +190,9 @@ class FileOperationsManager {
         const result = await window.ipcRenderer.invoke('save-file', currentTab.filePath, currentTab.content);
         if (result.success) {
           this.tabManager.markTabClean(this.tabManager.activeTabId);
-          this.notificationManager.showSuccess('File saved successfully');
+          if (!options.silent) {
+            this.notificationManager.showSuccess('File saved successfully');
+          }
           return result;
         } else {
           this.notificationManager.showError('Failed to save file: ' + result.error);
@@ -201,6 +203,46 @@ class FileOperationsManager {
         // Syntax highlighting is already updated in saveAsFile
         return result;
       }
+    } catch (error) {
+      this.notificationManager.showError('Error saving file: ' + error.message);
+    }
+  }
+
+  /**
+   * Save a specific tab by id.
+   * Useful for auto-save on tab close when the tab is not active.
+   *
+   * @param {string} tabId
+   * @param {{silent?: boolean, reason?: string}} [options]
+   */
+  async saveTabById(tabId, options = {}) {
+    try {
+      if (!this.tabManager || typeof this.tabManager.getTab !== 'function') {
+        return;
+      }
+
+      const tab = this.tabManager.getTab(tabId);
+      if (!tab) return;
+
+      // Avoid Save As dialogs during auto-save.
+      if (!tab.filePath) return;
+
+      const content = tabId === this.tabManager.activeTabId
+        ? this.tabManager.editorManager.getContent()
+        : tab.content;
+
+      const result = await window.ipcRenderer.invoke('save-file', tab.filePath, content);
+      if (result.success) {
+        tab.content = content;
+        this.tabManager.markTabClean(tabId);
+        if (!options.silent) {
+          this.notificationManager.showSuccess('File saved successfully');
+        }
+        return result;
+      }
+
+      this.notificationManager.showError('Failed to save file: ' + (result.error || 'Unknown error'));
+      return result;
     } catch (error) {
       this.notificationManager.showError('Error saving file: ' + error.message);
     }

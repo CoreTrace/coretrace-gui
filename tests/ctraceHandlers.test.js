@@ -52,11 +52,16 @@ test('run-ctrace handler reports missing binary when access fails', async (t) =>
     }
   };
 
-  const spawnStub = t.mock.fn(() => createChildProcess({ code: 0 }));
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    callApi: t.mock.fn(async () => ({ ok: true, json: { result: {} }, statusCode: 200 })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace'
+  };
 
   const { setupCtraceHandlers } = withModuleMocks({
     electron: electronStub,
-    'child_process': { spawn: (...args) => spawnStub(...args) }
+    '../utils/ctraceServeClient': serveClientStub
   }, () => {
     const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
     delete require.cache[modulePath];
@@ -74,7 +79,7 @@ test('run-ctrace handler reports missing binary when access fails', async (t) =>
 
   assert.strictEqual(response.success, false);
   assert.ok(response.error.includes('ctrace binary not found'));
-  assert.strictEqual(spawnStub.mock.calls.length, 0);
+  assert.strictEqual(serveClientStub.ensureServerRunning.mock.calls.length, 0);
 
   accessMock.mock.restore();
   platformMock.mock.restore();
@@ -88,11 +93,16 @@ test('run-ctrace handler executes binary and returns output', async (t) => {
     }
   };
 
-  const spawnStub = t.mock.fn(() => createChildProcess({ stdout: 'analysis complete', code: 0 }));
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    callApi: t.mock.fn(async () => ({ ok: true, json: { result: { meta: { tool: 'ctrace' }, diagnostics: [] } }, statusCode: 200 })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace'
+  };
 
   const { setupCtraceHandlers } = withModuleMocks({
     electron: electronStub,
-    'child_process': { spawn: (...args) => spawnStub(...args) }
+    '../utils/ctraceServeClient': serveClientStub
   }, () => {
     const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
     delete require.cache[modulePath];
@@ -105,10 +115,81 @@ test('run-ctrace handler executes binary and returns output', async (t) => {
   setupCtraceHandlers();
   const response = await handlers.get('run-ctrace')(null, ['--version']);
 
-  assert.deepStrictEqual(response, { success: true, output: 'analysis complete', exitCode: 0 });
-  assert.ok(spawnStub.mock.calls.length >= 1);
-  const firstCall = spawnStub.mock.calls[0].arguments;
-  assert.ok(firstCall[0].includes('bin/ctrace'));
+  assert.strictEqual(response.success, true);
+  assert.ok(typeof response.output === 'string');
+  assert.ok(response.output.includes('"diagnostics"'));
+  assert.strictEqual(serveClientStub.ensureServerRunning.mock.calls.length, 1);
+  assert.strictEqual(serveClientStub.callApi.mock.calls.length, 1);
+
+  accessMock.mock.restore();
+  platformMock.mock.restore();
+});
+
+test('run-ctrace handler flattens result.outputs stack analyzer JSON', async (t) => {
+  const handlers = new Map();
+  const electronStub = {
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler)
+    }
+  };
+
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    callApi: t.mock.fn(async () => ({
+      ok: true,
+      statusCode: 200,
+      json: {
+        result: {
+          sarif_format: true,
+          invoked_tools: ['ctrace_stack_analyzer'],
+          outputs: {
+            ctrace_stack_analyzer: [
+              {
+                stream: 'stdout',
+                message: {
+                  meta: { tool: 'ctrace-stack-analyzer', inputFile: 'x.c', mode: 'IR', stackLimit: 123, analysisTimeMs: -1 },
+                  functions: [],
+                  diagnostics: [
+                    {
+                      id: '1',
+                      ruleId: 'StackPointerEscape',
+                      severity: 'WARNING',
+                      location: { file: 'x.c', function: 'main', startLine: 10, startColumn: 1, endLine: 10, endColumn: 1 },
+                      details: { message: 'escape' }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace'
+  };
+
+  const { setupCtraceHandlers } = withModuleMocks({
+    electron: electronStub,
+    '../utils/ctraceServeClient': serveClientStub
+  }, () => {
+    const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
+    delete require.cache[modulePath];
+    return require(modulePath);
+  });
+
+  const accessMock = t.mock.method(fsPromises, 'access', async () => {});
+  const platformMock = t.mock.method(os, 'platform', () => 'linux');
+
+  setupCtraceHandlers();
+  const response = await handlers.get('run-ctrace')(null, ['--invoke', 'ctrace_stack_analyzer', '--sarif-format']);
+
+  assert.strictEqual(response.success, true);
+  const parsed = JSON.parse(response.output);
+  assert.strictEqual(parsed.meta.tool, 'ctrace-stack-analyzer');
+  assert.ok(Array.isArray(parsed.diagnostics));
+  assert.strictEqual(parsed.diagnostics.length, 1);
+  assert.strictEqual(parsed.diagnostics[0].ruleId, 'StackPointerEscape');
 
   accessMock.mock.restore();
   platformMock.mock.restore();

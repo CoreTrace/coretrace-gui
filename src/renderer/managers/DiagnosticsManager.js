@@ -35,6 +35,62 @@ class DiagnosticsManager {
     
     try {
       const data = JSON.parse(output);
+
+      // Support SARIF (commonly produced when `sarif_format` is enabled)
+      if (data && typeof data === 'object' && Array.isArray(data.runs)) {
+        const run = data.runs[0] || {};
+        const tool = run.tool && run.tool.driver ? run.tool.driver : {};
+        const results = Array.isArray(run.results) ? run.results : [];
+
+        const levelToSeverity = (level) => {
+          const l = (level || '').toLowerCase();
+          if (l === 'error') return 'ERROR';
+          if (l === 'warning') return 'WARNING';
+          return 'INFO';
+        };
+
+        const diagnostics = results.map((r, idx) => {
+          const loc0 = (r.locations && r.locations[0]) || {};
+          const phys = loc0.physicalLocation || {};
+          const region = phys.region || {};
+          const artifactUri = phys.artifactLocation && phys.artifactLocation.uri ? phys.artifactLocation.uri : '';
+          const logical0 = loc0.logicalLocations && loc0.logicalLocations[0] ? loc0.logicalLocations[0] : null;
+
+          return {
+            id: String(r.id || `${idx + 1}`),
+            ruleId: String(r.ruleId || 'unknown'),
+            severity: levelToSeverity(r.level),
+            details: {
+              message: (r.message && (r.message.text || r.message.markdown)) || ''
+            },
+            location: {
+              file: artifactUri,
+              startLine: region.startLine || 1,
+              startColumn: region.startColumn || 1,
+              endLine: region.endLine || region.startLine || 1,
+              endColumn: region.endColumn || region.startColumn || 1,
+              function: (logical0 && (logical0.fullyQualifiedName || logical0.name)) || 'global'
+            },
+            code: r.ruleId || '',
+            help: (r.helpUri || '')
+          };
+        });
+
+        this.currentMetadata = {
+          tool: tool.name || 'coretrace',
+          version: tool.version || data.version || null,
+          uri: tool.informationUri || null
+        };
+        this.currentFunctions = [];
+        this.currentDiagnostics = diagnostics;
+
+        console.log('Parsed SARIF output:', {
+          meta: this.currentMetadata,
+          diagnosticsCount: this.currentDiagnostics.length
+        });
+
+        return true;
+      }
       
       this.currentMetadata = data.meta || null;
       this.currentFunctions = data.functions || [];

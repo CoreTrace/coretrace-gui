@@ -102,6 +102,27 @@ class UIController {
     this.fileTreeContextMenu = null;
 
     /**
+     * Auto save enabled state
+     * @type {boolean}
+     * @private
+     */
+    this.autoSaveEnabled = false;
+
+    /**
+     * Auto save timer
+     * @type {number|null}
+     * @private
+     */
+    this.autoSaveTimer = null;
+
+    /**
+     * Auto save delay in milliseconds
+     * @type {number}
+     * @private
+     */
+    this.autoSaveDelay = 1000;
+
+    /**
      * WSL availability status
      * @type {boolean}
      * @private
@@ -175,6 +196,10 @@ class UIController {
 
     // Set up file system watcher for auto-refresh
     this.setupFileTreeWatcher();
+
+    // Set up auto-save feature
+    this.loadAutoSaveState();
+    this.setupAutoSaveListener();
 
     // Set up explorer file tree context menu (right click)
     this.setupFileTreeContextMenu();
@@ -630,6 +655,20 @@ class UIController {
       this.fileOpsManager.loadFullFile(filePath);
     };
 
+    // Auto-save safety net: flush pending edits when switching/closing tabs.
+    // (Auto-save debounce can otherwise be skipped if the user switches/close quickly.)
+    this.tabManager.onBeforeTabSwitch = async (fromTabId) => {
+      if (fromTabId) {
+        await this.maybeAutoSaveTab(fromTabId);
+      }
+    };
+
+    this.tabManager.onBeforeTabClose = async (tabId) => {
+      if (tabId) {
+        await this.maybeAutoSaveTab(tabId);
+      }
+    };
+
     // Set up search manager callbacks
     this.searchManager.openSearchResult = async (filePath, lineNumber) => {
       await this.openSearchResult(filePath, lineNumber);
@@ -639,28 +678,47 @@ class UIController {
     this.searchManager.setWorkspacePath(this.fileOpsManager.getCurrentWorkspacePath());
 
     // Set up editor content change tracking
-    try {
-      // If Monaco editor is available, use its model change event
-      const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
-      if (monacoEditor && monacoEditor.onDidChangeModelContent) {
-        monacoEditor.onDidChangeModelContent(() => {
-          if (this.tabManager.activeTabId) {
-            const newContent = this.editorManager.getContent();
-            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
-          }
-        });
-      } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
-        // Fallback for the legacy DOM-based editor
-        this.editorManager.editor.addEventListener('input', () => {
-          if (this.tabManager.activeTabId) {
-            const newContent = this.editorManager.getContent();
-            this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
-          }
-        });
+    const wireEditorChangeListener = () => {
+      try {
+        // If Monaco editor is available, use its model change event
+        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+        if (monacoEditor && monacoEditor.onDidChangeModelContent) {
+          console.log('[UIController] Wiring Monaco editor change listener');
+          monacoEditor.onDidChangeModelContent(() => {
+            if (this.tabManager.activeTabId) {
+              const newContent = this.editorManager.getContent();
+              this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+              this.triggerAutoSave();
+            }
+          });
+        } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
+          console.log('[UIController] Wiring legacy editor change listener');
+          // Fallback for the legacy DOM-based editor
+          this.editorManager.editor.addEventListener('input', () => {
+            if (this.tabManager.activeTabId) {
+              const newContent = this.editorManager.getContent();
+              this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+              this.triggerAutoSave();
+            }
+          });
+        } else {
+          console.warn('[UIController] Editor not ready yet, will retry after monaco-loaded event');
+        }
+      } catch (err) {
+        console.warn('Failed to wire editor change listener:', err);
       }
-    } catch (err) {
-      console.warn('Failed to wire editor change listener:', err);
-    }
+    };
+
+    // Try to wire immediately
+    wireEditorChangeListener();
+
+    // Also listen for monaco-loaded event in case editor wasn't ready yet
+    window.addEventListener('monaco-loaded', () => {
+      console.log('[UIController] Monaco loaded event received, re-wiring editor listener');
+      setTimeout(() => {
+        wireEditorChangeListener();
+      }, 100);
+    });
   }
 
   /**
@@ -984,7 +1042,7 @@ class UIController {
     if (!isFolder) {
       const tabId = this.tabManager.findTabByPath(targetPath);
       if (tabId) {
-        const closed = this.tabManager.closeTabById(tabId);
+        const closed = await this.tabManager.closeTabById(tabId);
         if (!closed) return;
       }
     }
@@ -1261,6 +1319,13 @@ class UIController {
     window.openWorkspace = () => this.openWorkspace();
     window.saveFile = () => this.fileOpsManager.saveFile();
     window.saveAsFile = () => this.fileOpsManager.saveAsFile();
+    window.autoSave = () => this.toggleAutoSave();
+
+    // Setup auto save status bar click handler
+    const autoSaveStatus = document.getElementById('autoSaveStatus');
+    if (autoSaveStatus) {
+      autoSaveStatus.onclick = () => this.toggleAutoSave();
+    }
     window.closeCurrentTab = () => {
       if (this.tabManager.activeTabId) {
         this.tabManager.closeTab(new Event('click'), this.tabManager.activeTabId);
@@ -2463,6 +2528,149 @@ class UIController {
     modal.onclick = (e) => { if (e.target === modal) closeModal(null); };
   }
   /**
+   * Toggle auto save feature
+   */
+  toggleAutoSave() {
+    this.autoSaveEnabled = !this.autoSaveEnabled;
+    this.updateAutoSaveStatus();
+    this.saveAutoSaveState();
+    
+    const statusMsg = this.autoSaveEnabled ? 'Auto Save enabled' : 'Auto Save disabled';
+    this.notificationManager.showSuccess(statusMsg);
+  }
+
+  /**
+   * Update auto save status in the status bar
+   */
+  updateAutoSaveStatus() {
+    const statusElement = document.getElementById('autoSaveStatus');
+    if (statusElement) {
+      if (this.autoSaveEnabled) {
+        statusElement.style.display = 'inline-block';
+        statusElement.textContent = '💾 Auto Save: ON';
+        statusElement.style.background = 'rgba(31, 111, 235, 0.15)';
+        statusElement.style.color = '#58a6ff';
+      } else {
+        statusElement.style.display = 'none';
+      }
+    }
+  }
+
+  /**
+   * Save auto save state to localStorage
+   */
+  saveAutoSaveState() {
+    try {
+      localStorage.setItem('autoSaveEnabled', JSON.stringify(this.autoSaveEnabled));
+    } catch (error) {
+      console.error('Failed to save auto save state:', error);
+    }
+  }
+
+  /**
+   * Load auto save state from localStorage
+   */
+  loadAutoSaveState() {
+    try {
+      const saved = localStorage.getItem('autoSaveEnabled');
+      if (saved !== null) {
+        this.autoSaveEnabled = JSON.parse(saved);
+        this.updateAutoSaveStatus();
+      }
+    } catch (error) {
+      console.error('Failed to load auto save state:', error);
+    }
+  }
+
+  /**
+   * Setup auto save listener for editor content changes
+   */
+  setupAutoSaveListener() {
+    // Listen to editor content changes via Monaco
+    if (this.editorManager && this.editorManager.editor) {
+      this.editorManager.editor.onDidChangeModelContent(() => {
+        this.triggerAutoSave();
+      });
+    } else {
+      // If Monaco isn't ready yet, wait for it
+      window.addEventListener('monaco-loaded', () => {
+        setTimeout(() => {
+          if (this.editorManager && this.editorManager.editor) {
+            this.editorManager.editor.onDidChangeModelContent(() => {
+              this.triggerAutoSave();
+            });
+          }
+        }, 500);
+      });
+    }
+  }
+
+  /**
+   * Trigger auto save with debounce
+   */
+  triggerAutoSave() {
+    if (!this.autoSaveEnabled) return;
+    
+    // Clear existing timer
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+    
+    // Set new timer
+    this.autoSaveTimer = setTimeout(async () => {
+      const currentTab = this.tabManager.getActiveTab();
+      const isDirty = !!(currentTab && (currentTab.modified || currentTab.isDirty));
+      if (currentTab && currentTab.filePath && isDirty) {
+        try {
+          await this.fileOpsManager.saveFile({ silent: true, reason: 'autosave' });
+          console.log('Auto-saved:', currentTab.fileName);
+        } catch (error) {
+          console.error('Auto-save failed:', error);
+        }
+      }
+    }, this.autoSaveDelay);
+  }
+
+  /**
+   * Save a specific tab if it has unsaved changes and auto-save is enabled.
+   * This is used to ensure edits are not lost on quick tab switches/closes.
+   *
+   * @param {string} tabId
+   */
+  async maybeAutoSaveTab(tabId) {
+    if (!this.autoSaveEnabled) {
+      console.log('[AutoSave] Skipped - auto-save is disabled');
+      return;
+    }
+    if (!this.tabManager || !this.fileOpsManager) return;
+
+    const tab = this.tabManager.getTab ? this.tabManager.getTab(tabId) : null;
+    if (!tab || !tab.filePath) {
+      console.log('[AutoSave] Skipped - no tab or no filePath', { hasTab: !!tab, filePath: tab?.filePath });
+      return;
+    }
+
+    const isDirty = !!(tab.modified || tab.isDirty);
+    if (!isDirty) {
+      console.log('[AutoSave] Skipped - tab is clean', tab.fileName);
+      return;
+    }
+
+    console.log('[AutoSave] Saving tab:', tab.fileName, 'modified:', tab.modified);
+    try {
+      if (typeof this.fileOpsManager.saveTabById === 'function') {
+        await this.fileOpsManager.saveTabById(tabId, { silent: true, reason: 'autosave-tab' });
+        console.log('[AutoSave] Save completed for:', tab.fileName);
+      } else if (tabId === this.tabManager.activeTabId) {
+        await this.fileOpsManager.saveFile({ silent: true, reason: 'autosave-active' });
+        console.log('[AutoSave] Save completed (active tab):', tab.fileName);
+      }
+    } catch (error) {
+      console.error('[AutoSave] Save failed:', error);
+    }
+  }
+
+  /**
    * Open workspace and update search manager
    */
   async openWorkspace() {
@@ -2551,9 +2759,11 @@ class UIController {
   }
 }
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  window.uiController = new UIController();
-});
+// Initialize when DOM is loaded (guarded for Node test environments)
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    window.uiController = new UIController();
+  });
+}
 
 module.exports = UIController;
