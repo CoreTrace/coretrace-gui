@@ -559,6 +559,18 @@ app.whenReady().then(async () => {
   setupAssistantHandlers(mainWindow);
   setupWindowControls(mainWindow);
   
+  // Preload CTrace server in background (don't block GUI startup)
+  setTimeout(async () => {
+    try {
+      console.log('[Main] Preloading CTrace server...');
+      const { ensureServerRunning } = require('./main/utils/ctraceServeClient');
+      await ensureServerRunning();
+      console.log('[Main] CTrace server preloaded successfully');
+    } catch (error) {
+      console.warn('[Main] CTrace server preload failed (will retry on first request):', error.message);
+    }
+  }, 1000);
+  
   // Check WSL status on Windows after window is ready
   if (os.platform() === 'win32') {
     // Give the window time to load, then check WSL
