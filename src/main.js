@@ -18,6 +18,7 @@ const { setupFileHandlers } = require('./main/ipc/fileHandlers');
 const { setupEditorHandlers } = require('./main/ipc/editorHandlers');
 const { setupCtraceHandlers, shutdownCtraceServer } = require('./main/ipc/ctraceHandlers');
 const { setupAssistantHandlers } = require('./main/ipc/assistantHandlers');
+const { setupStateHandlers } = require('./main/ipc/stateHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -539,7 +540,18 @@ app.on('before-quit', async (event) => {
 
   // Allow shutdown to complete before exiting.
   event.preventDefault();
+  
   try {
+    // Request renderer to save state before quitting
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('[Main] Requesting state save before quit...');
+      mainWindow.webContents.send('app-before-quit');
+      
+      // Give renderer time to save state (max 5 seconds)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Shutdown ctrace server
     await shutdownCtraceServer();
   } catch (e) {
     console.warn('Failed to shutdown ctrace server:', e?.message || e);
@@ -557,6 +569,7 @@ app.whenReady().then(async () => {
   setupEditorHandlers();
   setupCtraceHandlers();
   setupAssistantHandlers(mainWindow);
+  setupStateHandlers();
   setupWindowControls(mainWindow);
   
   // Preload CTrace server in background (don't block GUI startup)

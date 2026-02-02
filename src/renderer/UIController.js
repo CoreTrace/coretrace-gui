@@ -5,6 +5,7 @@ const TabManager = require('./managers/TabManager');
 const SearchManager = require('./managers/SearchManager');
 const FileOperationsManager = require('./managers/FileOperationsManager');
 const DiagnosticsManager = require('./managers/DiagnosticsManager');
+const StateManager = require('./managers/StateManager');
 
 // Import utilities
 const fileTypeUtils = require('./utils/fileTypeUtils');
@@ -72,6 +73,13 @@ class UIController {
      * @private
      */
     this.diagnosticsManager = new DiagnosticsManager(this.editorManager);
+
+    /**
+     * State manager instance for work loss prevention
+     * @type {StateManager}
+     * @private
+     */
+    this.stateManager = new StateManager(this.tabManager, this.editorManager, this.diagnosticsManager);
 
     /**
      * Flag indicating if UI is being resized
@@ -200,6 +208,9 @@ class UIController {
     // Set up auto-save feature
     this.loadAutoSaveState();
     this.setupAutoSaveListener();
+
+    // Set up state management for work loss prevention
+    this.setupStateManagement();
 
     // Set up explorer file tree context menu (right click)
     this.setupFileTreeContextMenu();
@@ -2668,6 +2679,53 @@ class UIController {
     } catch (error) {
       console.error('[AutoSave] Save failed:', error);
     }
+  }
+
+  /**
+   * Setup state management for work loss prevention
+   * Initializes state restoration and auto-save mechanisms
+   */
+  setupStateManagement() {
+    // Restore state on startup
+    setTimeout(async () => {
+      try {
+        const restored = await this.stateManager.restoreState();
+        if (restored) {
+          console.log('[StateManagement] Application state restored successfully');
+        } else {
+          console.log('[StateManagement] No previous state found or restoration failed');
+        }
+      } catch (error) {
+        console.error('[StateManagement] Error restoring state:', error);
+      }
+    }, 500); // Delay to ensure UI is fully initialized
+
+    // Start auto-save for state
+    this.stateManager.startAutoSave();
+    console.log('[StateManagement] Auto-save started');
+
+    // Listen for app-before-quit event from main process
+    window.ipcRenderer.on('app-before-quit', async () => {
+      console.log('[StateManagement] Received app-before-quit, saving state...');
+      await this.stateManager.saveStateDebounced(true); // Immediate save
+    });
+
+    // Save state on visibility change (browser/app minimized or closed)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // User is leaving the page, save state
+        this.stateManager.saveStateDebounced(true);
+      }
+    });
+
+    // Save state when window is about to unload
+    window.addEventListener('beforeunload', (e) => {
+      // Attempt to save state synchronously (best effort)
+      // Note: Modern browsers limit what can be done here
+      this.stateManager.saveStateDebounced(true);
+    });
+
+    console.log('[StateManagement] State management setup complete');
   }
 
   /**
