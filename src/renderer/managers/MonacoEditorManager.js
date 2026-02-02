@@ -12,6 +12,199 @@ class MonacoEditorManager {
     this.currentFilePath = null;
     this.editorContainer = document.getElementById('editor');
     this.initializationPromise = this.init();
+
+    // Toggle in DevTools console: window.__CTRACE_DEBUG_SUGGEST__ = true
+    // (kept false by default to avoid noisy logs)
+    if (typeof window !== 'undefined' && window.__CTRACE_DEBUG_SUGGEST__ === undefined) {
+      window.__CTRACE_DEBUG_SUGGEST__ = false;
+    }
+  }
+
+  installSuggestWidgetDebug() {
+    try {
+      if (!window || !document) return;
+
+      const shouldDebug = () => Boolean(window.__CTRACE_DEBUG_SUGGEST__);
+      let lastLogAt = 0;
+
+      const ensureDebugStyle = (enabled) => {
+        const id = 'ctrace-suggest-debug-style';
+        const existing = document.getElementById(id);
+        if (!enabled) {
+          if (existing) existing.remove();
+          return;
+        }
+        if (existing) return;
+        const style = document.createElement('style');
+        style.id = id;
+        style.textContent = `
+          .monaco-editor .suggest-widget { z-index: 99999 !important; }
+          .monaco-editor .suggest-widget * { outline: 1px solid rgba(0,255,255,0.25) !important; }
+          .monaco-editor .suggest-widget .monaco-list-row { background: rgba(255,0,0,0.12) !important; }
+          .monaco-editor .suggest-widget .label-name { background: rgba(0,255,0,0.12) !important; }
+          .monaco-editor .suggest-widget .label-description { background: rgba(0,0,255,0.10) !important; }
+        `;
+        document.head.appendChild(style);
+      };
+
+      const dumpEl = (label, el) => {
+        if (!el) {
+          console.log(`[suggest-debug] ${label}: <null>`);
+          return;
+        }
+        const cs = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        console.log(`[suggest-debug] ${label}`, {
+          tag: el.tagName,
+          className: el.className,
+          textContent: (el.textContent || '').slice(0, 200),
+          rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+          color: cs.color,
+          backgroundColor: cs.backgroundColor,
+          opacity: cs.opacity,
+          visibility: cs.visibility,
+          display: cs.display,
+          fontSize: cs.fontSize,
+          lineHeight: cs.lineHeight,
+          webkitTextFillColor: cs.webkitTextFillColor,
+          filter: cs.filter
+        });
+      };
+
+      const dumpSuggestWidget = () => {
+        const now = Date.now();
+        if (now - lastLogAt < 500) return;
+        lastLogAt = now;
+
+        ensureDebugStyle(shouldDebug());
+
+        const widget = document.querySelector('.monaco-editor .suggest-widget');
+        if (!widget) return;
+
+        console.group('[suggest-debug] suggest-widget');
+        dumpEl('widget', widget);
+
+        const list = widget.querySelector('.monaco-list');
+        const rowsContainer = widget.querySelector('.monaco-list-rows');
+        dumpEl('list', list);
+        dumpEl('rowsContainer', rowsContainer);
+
+        // Show a short HTML snippet to detect weird overlays or missing children.
+        const html = widget.innerHTML || '';
+        console.log('[suggest-debug] widget.innerHTML (head):', html.slice(0, 800));
+
+        // Try to introspect Monaco's suggest controller (best-effort; private API).
+        try {
+          const controller = this.editor && this.editor.getContribution
+            ? this.editor.getContribution('editor.contrib.suggestController')
+            : null;
+          if (controller) {
+            const c = controller;
+            const completionModel = c._model && (c._model._completionModel || c._model.completionModel || c._model._completionModel);
+            const items = completionModel && completionModel.items ? completionModel.items : null;
+            console.log('[suggest-debug] suggestController keys:', Object.keys(c));
+            console.log('[suggest-debug] completion items length:', Array.isArray(items) ? items.length : null);
+            if (Array.isArray(items) && items.length) {
+              const sample = items.slice(0, 5).map(it => {
+                const s = it && (it.suggestion || it);
+                return {
+                  label: s && s.label,
+                  kind: s && s.kind,
+                  detail: s && s.detail
+                };
+              });
+              console.log('[suggest-debug] completion sample:', sample);
+            }
+          } else {
+            console.log('[suggest-debug] suggestController: <null>');
+          }
+        } catch (e) {
+          console.log('[suggest-debug] suggestController introspection failed:', String(e && e.message ? e.message : e));
+        }
+
+        // Try to locate rows and label text.
+        const rows = widget.querySelectorAll('.monaco-list-row');
+        console.log(`[suggest-debug] rows: ${rows.length}`);
+        rows.forEach((row, idx) => {
+          dumpEl(`row[${idx}]`, row);
+          const labelName = row.querySelector('.monaco-icon-label .label-name') || row.querySelector('.label-name');
+          const labelDesc = row.querySelector('.monaco-icon-label .label-description') || row.querySelector('.label-description');
+          dumpEl(`row[${idx}].label-name`, labelName);
+          dumpEl(`row[${idx}].label-description`, labelDesc);
+
+          // Detect overlays: what element is actually "on top" of the label area?
+          const probe = (el, probeLabel) => {
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            const cx = Math.max(0, r.left + Math.min(r.width / 2, r.width - 1));
+            const cy = Math.max(0, r.top + Math.min(r.height / 2, r.height - 1));
+            const topEl = document.elementFromPoint(cx, cy);
+            console.log(`[suggest-debug] ${probeLabel}.elementFromPoint`, {
+              center: { x: cx, y: cy },
+              topTag: topEl ? topEl.tagName : null,
+              topClass: topEl ? topEl.className : null,
+              topText: topEl ? (topEl.textContent || '').slice(0, 80) : null
+            });
+
+            // Dump child nodes to see if text is in a span and potentially styled differently.
+            try {
+              const children = Array.from(el.childNodes || []).map(n => {
+                if (n.nodeType === Node.TEXT_NODE) {
+                  return { type: 'text', text: (n.textContent || '').slice(0, 80) };
+                }
+                if (n.nodeType === Node.ELEMENT_NODE) {
+                  const cs = window.getComputedStyle(n);
+                  return {
+                    type: 'element',
+                    tag: n.tagName,
+                    className: n.className,
+                    text: (n.textContent || '').slice(0, 80),
+                    color: cs.color,
+                    webkitTextFillColor: cs.webkitTextFillColor,
+                    opacity: cs.opacity,
+                    display: cs.display,
+                    visibility: cs.visibility,
+                    fontSize: cs.fontSize
+                  };
+                }
+                return { type: `node:${n.nodeType}` };
+              });
+              console.log(`[suggest-debug] ${probeLabel}.childNodes`, children);
+            } catch (e) {
+              console.log(`[suggest-debug] ${probeLabel}.childNodes failed`, String(e && e.message ? e.message : e));
+            }
+          };
+
+          probe(labelName, `row[${idx}].label-name`);
+        });
+
+        console.groupEnd();
+      };
+
+      // Observe DOM changes; Monaco toggles/updates this widget dynamically.
+      const observer = new MutationObserver((mutations) => {
+        if (!shouldDebug()) return;
+        for (const m of mutations) {
+          if (m.type === 'childList' || m.type === 'attributes') {
+            dumpSuggestWidget();
+            break;
+          }
+        }
+      });
+
+      observer.observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['class', 'style']
+      });
+
+      // Expose a manual trigger.
+      window.__ctraceDumpSuggestWidget = dumpSuggestWidget;
+      window.__ctraceSuggestDebugStyle = (enabled) => ensureDebugStyle(Boolean(enabled));
+    } catch (e) {
+      console.warn('Failed to install suggest-widget debug:', e);
+    }
   }
 
   async init() {
@@ -32,16 +225,48 @@ class MonacoEditorManager {
       return;
     }
 
+    // Define a theme with explicit suggest-widget colors. In some Electron/CSS setups,
+    // the suggest dropdown can appear with invisible text unless these are set via theme.
+    try {
+      window.monaco.editor.defineTheme('ctrace-dark', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': '#0d1117',
+          'editor.foreground': '#f0f6fc',
+          'editorLineNumber.foreground': '#6e7681',
+          'editorLineNumber.activeForeground': '#f0f6fc',
+
+          // Professional suggest widget theme
+          'editorSuggestWidget.background': '#1e1e1e',
+          'editorSuggestWidget.foreground': '#cccccc',
+          'editorSuggestWidget.border': '#3e3e42',
+          'editorSuggestWidget.selectedBackground': '#37373d',
+          'editorSuggestWidget.highlightForeground': '#0097fb',
+
+          'editorHoverWidget.background': '#1e1e1e',
+          'editorHoverWidget.foreground': '#cccccc',
+          'editorHoverWidget.border': '#3e3e42'
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to define Monaco theme:', e);
+    }
+
     console.log('MonacoEditorManager: Creating editor instance');
     // Create Monaco Editor instance
     this.editor = window.monaco.editor.create(this.editorContainer, {
       value: '',
       language: 'plaintext',
-      theme: 'vs-dark',
+      theme: 'ctrace-dark',
       automaticLayout: true,
       fontSize: 12,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace",
       lineHeight: 20,
+      // VS Code-like suggest widget sizing (supported by Monaco; ignored if unavailable)
+      suggestFontSize: 13,
+      suggestLineHeight: 22,
       minimap: {
         enabled: true,
         scale: 1,
@@ -111,6 +336,9 @@ class MonacoEditorManager {
         filteredTypes: { 'keyword': false, 'snippet': true }
       }
     });
+
+    // Debugging for "blank" autocomplete dropdown.
+    this.installSuggestWidgetDebug();
 
     // Update status bar on cursor position change
     this.editor.onDidChangeCursorPosition(() => {
