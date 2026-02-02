@@ -3,11 +3,43 @@
   height: 35px;
   background: #0d1117;
   display: flex;
-  align-items: center;
   border-bottom: 1px solid #21262d;
   overflow-x: auto;
   overflow-y: hidden;
   position: relative;
+  max-width: 100vw;
+  scroll-behavior: smooth;
+}
+
+/* Inner wrapper for tabs */
+.tabs-inner-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-width: min-content;
+}
+
+/* Scrollbar styling for tabs */
+.tabs-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tabs-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tabs-container::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.tabs-container::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+.tabs-container::-webkit-scrollbar-thumb:active {
+  background: #58a6ff;
 }
 
 .tab {
@@ -22,10 +54,10 @@
   font-size: 12px;
   transition: all 0.15s ease;
   white-space: nowrap;
-  min-width: 120px;
-  max-width: 200px;
+  flex: 0 0 180px;
+  min-width: 180px;
+  max-width: 180px;
   position: relative;
-  flex-shrink: 0;
 }
 
 .tab .tab-label {
