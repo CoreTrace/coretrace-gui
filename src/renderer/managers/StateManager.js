@@ -206,13 +206,7 @@ class StateManager {
     try {
       const state = await this.collectState();
       
-      // Only save if there's meaningful state (at least one tab)
-      if (state.tabs.length === 0) {
-        console.log('[StateManager] No tabs to save, skipping state save');
-        this.isSaving = false;
-        return false;
-      }
-
+      // Always save state, even if there are no tabs (to clear previous state)
       console.log('[StateManager] Saving state:', {
         tabCount: state.tabs.length,
         activeTabId: state.activeTabId,

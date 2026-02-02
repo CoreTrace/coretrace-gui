@@ -1377,6 +1377,7 @@ class UIController {
     window.toggleToolsPanel = () => this.toggleToolsPanel();
     window.showToolsPanel = () => this.showToolsPanel();
     window.hideToolsPanel = () => this.hideToolsPanel();
+    window.openCtracePanel = () => this.openCtracePanel();
   window.openAssistantPanel = () => this.openAssistantPanel();
 
     // Visualyzer operations
@@ -1666,15 +1667,54 @@ class UIController {
 
   openAssistantPanel() {
     const toolsPanel = document.getElementById('toolsPanel');
+    
+    // If already in assistant mode and panel is visible, hide it
+    if (this._toolsPanelMode === 'assistant' && toolsPanel && toolsPanel.classList.contains('active')) {
+      this.hideToolsPanel();
+      return;
+    }
+    
     // Ensure assistant is configured at least once before opening
     const ensure = this.ensureAssistantConfigured();
     Promise.resolve(ensure).then(() => {
       if (toolsPanel) {
+        // Mark that we're in assistant mode
+        this._toolsPanelMode = 'assistant';
         this.showToolsPanel();
         // Inject assistant chat UI into tools panel
         this.renderAssistantUI();
       }
     });
+  }
+
+  /**
+   * Open CTrace Tools panel with original content
+   */
+  openCtracePanel() {
+    const toolsPanel = document.getElementById('toolsPanel');
+    
+    // If already in ctrace mode and panel is visible, hide it
+    if (this._toolsPanelMode === 'ctrace' && toolsPanel && toolsPanel.classList.contains('active')) {
+      this.hideToolsPanel();
+      return;
+    }
+    
+    if (toolsPanel) {
+      // Mark that we're in ctrace mode
+      this._toolsPanelMode = 'ctrace';
+      // Restore original CTrace content if we have it saved
+      if (this._toolsPanelOriginal) {
+        const header = toolsPanel.querySelector('.tools-panel-header');
+        const content = toolsPanel.querySelector('.tools-panel-content');
+        if (header && this._toolsPanelOriginal.headerHTML) {
+          header.innerHTML = this._toolsPanelOriginal.headerHTML;
+        }
+        if (content && this._toolsPanelOriginal.contentHTML) {
+          content.innerHTML = this._toolsPanelOriginal.contentHTML;
+        }
+      }
+      this.showToolsPanel();
+    }
   }
 
   /**
