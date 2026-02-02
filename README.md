@@ -15,6 +15,7 @@ CTrace GUI provides an intuitive interface for analyzing C/C++ source code using
 - **CTrace Integration**: Run static analysis directly from the GUI
 - **Search**: Global search across workspace files
 - **Notifications**: User-friendly notification system
+- **Work Loss Prevention**: Automatic session saving and restoration - never lose your work again! (see [WORK_LOSS_PREVENTION.md](WORK_LOSS_PREVENTION.md))
 
 ## Architecture
 
@@ -26,6 +27,8 @@ The application follows a modular architecture with separate managers for differ
 - **EditorManager**: Controls the code editor functionality
 - **SearchManager**: Handles search operations
 - **NotificationManager**: Manages user notifications
+- **StateManager**: Handles work loss prevention and session persistence
+- **DiagnosticsManager**: Manages CTrace analysis results and visualization
 
 ## Getting Started
 

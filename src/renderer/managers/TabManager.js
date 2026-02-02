@@ -64,6 +64,16 @@ class TabManager {
      */
     this.tabsContainer = document.getElementById('tabs-container');
     
+    // Create inner wrapper for proper scrolling
+    if (this.tabsContainer && !this.tabsContainer.querySelector('.tabs-inner-wrapper')) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'tabs-inner-wrapper';
+      this.tabsContainer.appendChild(wrapper);
+      this.tabsInnerWrapper = wrapper;
+    } else {
+      this.tabsInnerWrapper = this.tabsContainer.querySelector('.tabs-inner-wrapper');
+    }
+    
     /**
      * Welcome screen DOM element
      * @type {HTMLElement}
@@ -137,7 +147,8 @@ class TabManager {
       }
     });
     
-    this.tabsContainer.appendChild(tabElement);
+    const targetContainer = this.tabsInnerWrapper || this.tabsContainer;
+    targetContainer.appendChild(tabElement);
     return tabId;
   }
 
@@ -472,6 +483,42 @@ class TabManager {
       const currentIndex = tabIds.indexOf(this.activeTabId);
       const nextIndex = (currentIndex + 1) % tabIds.length;
       this.switchToTab(tabIds[nextIndex]);
+      this.scrollTabIntoView(tabIds[nextIndex]);
+    }
+  }
+
+  /**
+   * Switch to previous tab
+   */
+  switchToPreviousTab() {
+    const tabIds = Array.from(this.openTabs.keys());
+    if (tabIds.length > 0 && this.activeTabId) {
+      const currentIndex = tabIds.indexOf(this.activeTabId);
+      const previousIndex = (currentIndex - 1 + tabIds.length) % tabIds.length;
+      this.switchToTab(tabIds[previousIndex]);
+      this.scrollTabIntoView(tabIds[previousIndex]);
+    }
+  }
+
+  /**
+   * Scroll a tab into view
+   * @param {string} tabId - Tab ID to scroll into view
+   */
+  scrollTabIntoView(tabId) {
+    const tabElement = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (tabElement && this.tabsContainer) {
+      // Get positions relative to the container
+      const containerRect = this.tabsContainer.getBoundingClientRect();
+      const tabRect = tabElement.getBoundingClientRect();
+      
+      // Calculate scroll position to center the tab
+      const scrollLeft = tabElement.offsetLeft - (this.tabsContainer.offsetWidth / 2) + (tabElement.offsetWidth / 2);
+      
+      // Smooth scroll within the tabs container only
+      this.tabsContainer.scrollTo({
+        left: scrollLeft,
+        behavior: 'smooth'
+      });
     }
   }
 
