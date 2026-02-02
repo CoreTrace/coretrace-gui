@@ -24,19 +24,11 @@
   <link rel="stylesheet" href="styles/titlebar.css">
   <link rel="stylesheet" href="styles/diagnostics.css">
   
-  <!-- Font loading for cross-platform emoji support -->
+  <!-- Use system fonts only for better performance -->
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI+Emoji&display=swap');
-    
-    /* Fallback emoji font stack for cross-platform support */
-    .emoji-font {
-      font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji', 'Twemoji Mozilla', system-ui, sans-serif;
-    }
-    
-    /* Apply emoji fonts globally */
+    /* Apply system fonts globally */
     body, * {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Noto Color Emoji', 'Segoe UI Emoji', 'Apple Color Emoji';
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
     }
   </style>
   
@@ -88,8 +80,8 @@
     window.syntaxHighlighter = syntaxHighlighter;
   </script>
   
-  <!-- D3.js for interactive graph visualization -->
-  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- D3.js for interactive graph visualization (deferred for faster startup) -->
+  <script src="https://d3js.org/d3.v7.min.js" defer></script>
 </head>
 <body>
   <!-- Custom Title Bar -->
@@ -163,7 +155,7 @@
             </button>
           </div>
           <div id="workspace-folder" style="display: none;">
-            <div style="color: #7d8590; font-size: 11px; margin-bottom: 8px; font-weight: 600;" id="workspace-name"></div>
+            <div style="color: #7d8590; font-size: 11px; margin-bottom: 8px; font-weight: 600; cursor: context-menu; user-select: none;" id="workspace-name" title="Right-click to close workspace"></div>
             <div id="file-tree" class="file-tree"></div>
           </div>
           <div id="no-workspace">
@@ -201,6 +193,9 @@
             <div class="dropdown-item" onclick="openWorkspace(); hideAllMenus();">
               <span>Open Folder...</span>
               <span class="shortcut">Ctrl+Shift+O</span>
+            </div>
+            <div class="dropdown-item" onclick="closeWorkspace(); hideAllMenus();">
+              <span>Close Folder</span>
             </div>
             <div class="dropdown-separator"></div>
             <div class="dropdown-item" onclick="saveFile(); hideAllMenus();">

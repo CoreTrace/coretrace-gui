@@ -121,15 +121,12 @@ function shouldIgnoreTreeEntry(name) {
 }
 
 /**
- * Build file tree for directory
+ * Build file tree for directory (lazy loading - only loads one level)
  * @param {string} dirPath - Directory path
- * @param {number} maxDepth - Maximum depth to traverse
- * @param {number} currentDepth - Current depth (internal use)
+ * @param {boolean} loadChildren - Whether to load subdirectories (for backward compatibility)
  * @returns {Array} - File tree structure
  */
-async function buildFileTree(dirPath, maxDepth = 3, currentDepth = 0) {
-  if (currentDepth > maxDepth) return null;
-  
+async function buildFileTree(dirPath, loadChildren = false) {
   try {
     const dirents = await fs.readdir(dirPath, { withFileTypes: true });
     const tree = [];
@@ -153,22 +150,13 @@ async function buildFileTree(dirPath, maxDepth = 3, currentDepth = 0) {
       const itemPath = path.join(dirPath, name);
 
       if (dirent.isDirectory()) {
-        let children = [];
-        try {
-          children = (await buildFileTree(itemPath, maxDepth, currentDepth + 1)) || [];
-        } catch (childError) {
-          if (childError && (childError.code === 'EPERM' || childError.code === 'EACCES' || childError.code === 'ENOENT')) {
-            children = [];
-          } else {
-            throw childError;
-          }
-        }
-
+        // For lazy loading, don't load children immediately
         tree.push({
           name,
           path: itemPath,
           type: 'directory',
-          children
+          hasChildren: true, // Mark that it has potential children
+          children: null // Children not loaded yet
         });
       } else if (dirent.isFile()) {
         tree.push({

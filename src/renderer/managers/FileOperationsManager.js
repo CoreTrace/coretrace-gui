@@ -90,6 +90,42 @@ class FileOperationsManager {
   }
 
   /**
+   * Close the current workspace
+   * Clears the workspace path and resets the file tree UI.
+   * 
+   * @example
+   * fileOpsManager.closeWorkspace();
+   */
+  closeWorkspace() {
+    if (!this.currentWorkspacePath) {
+      this.notificationManager.showWarning('No workspace is currently open');
+      return;
+    }
+
+    const workspaceName = this.currentWorkspacePath.split(/[/\\]/).pop();
+    this.currentWorkspacePath = null;
+
+    // Clear workspace UI
+    const workspaceFolder = document.getElementById('workspace-folder');
+    const noWorkspace = document.getElementById('no-workspace');
+    const fileTreeElement = document.getElementById('file-tree');
+
+    if (workspaceFolder) {
+      workspaceFolder.style.display = 'none';
+    }
+
+    if (noWorkspace) {
+      noWorkspace.style.display = 'block';
+    }
+
+    if (fileTreeElement) {
+      fileTreeElement.innerHTML = '';
+    }
+
+    this.notificationManager.showSuccess(`Workspace "${workspaceName}" closed`);
+  }
+
+  /**
    * Open single file
    */
   async openFile() {
@@ -434,7 +470,13 @@ class FileOperationsManager {
         const childContainer = document.createElement('div');
         childContainer.setAttribute('data-parent-path', item.path);
         itemElement.parentNode.insertBefore(childContainer, itemElement.nextSibling);
-        this.renderFileTree(item.children || [], childContainer, (parseInt(itemElement.getAttribute('data-level') || '0', 10) + 1));
+        
+        // Lazy load directory contents if not already loaded
+        if (!item.children) {
+          this.loadDirectoryContents(item, childContainer, itemElement);
+        } else {
+          this.renderFileTree(item.children, childContainer, (parseInt(itemElement.getAttribute('data-level') || '0', 10) + 1));
+        }
 
         const icon = itemElement.querySelector('.icon');
         if (icon) icon.textContent = '📂';
@@ -461,6 +503,53 @@ class FileOperationsManager {
         itemElement.classList.add('selected');
         this._selectedFileTreeItem = itemElement;
       });
+    }
+  }
+
+  /**
+   * Load directory contents on demand (lazy loading)
+   * @param {Object} item - Directory item
+   * @param {Element} container - Container to render into
+   * @param {Element} itemElement - The directory element
+   */
+  async loadDirectoryContents(item, container, itemElement) {
+    const level = parseInt(itemElement.getAttribute('data-level') || '0', 10) + 1;
+    
+    // Show loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.style.marginLeft = (level * 16) + 'px';
+    loadingDiv.style.color = '#7d8590';
+    loadingDiv.style.fontSize = '11px';
+    loadingDiv.style.padding = '2px 8px';
+    loadingDiv.textContent = 'Loading...';
+    container.appendChild(loadingDiv);
+    
+    try {
+      const result = await window.ipcRenderer.invoke('get-directory-contents', item.path);
+      
+      // Remove loading indicator
+      loadingDiv.remove();
+      
+      if (result.success) {
+        // Store children in the item
+        item.children = result.contents;
+        
+        // Render the children
+        this.renderFileTree(result.contents, container, level);
+        
+        // Update icon
+        const icon = itemElement.querySelector('.icon');
+        if (icon) icon.textContent = '📂';
+        itemElement.setAttribute('data-expanded', 'true');
+      } else {
+        // Show error
+        loadingDiv.textContent = 'Error loading directory';
+        loadingDiv.style.color = '#f85149';
+      }
+    } catch (error) {
+      console.error('Failed to load directory contents:', error);
+      loadingDiv.textContent = 'Error: ' + error.message;
+      loadingDiv.style.color = '#f85149';
     }
   }
 

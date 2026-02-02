@@ -776,15 +776,33 @@ class UIController {
    * Setup a custom context menu for the explorer file tree.
    *
    * Requirements:
-   * - Right click on empty area: New File.. / New Folder..
+   * - Right click on empty area: New File.. / New Folder.. / Close Folder
    * - Right click on folder: New File.. / New Folder.. / Rename / Delete
    * - Right click on file: Rename / Delete
+   * - Right click on workspace name: Close Folder
    */
   setupFileTreeContextMenu() {
     const workspaceFolderEl = document.getElementById('workspace-folder');
     const fileTreeElement = document.getElementById('file-tree');
+    const workspaceNameEl = document.getElementById('workspace-name');
     const targetEl = workspaceFolderEl || fileTreeElement;
     if (!targetEl) return;
+
+    // Context menu for workspace name
+    if (workspaceNameEl) {
+      workspaceNameEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+        if (!workspacePath) return;
+
+        this.showFileTreeContextMenu(e.clientX, e.clientY, [{
+          label: 'Close Folder',
+          action: () => this.fileOpsManager.closeWorkspace()
+        }]);
+      });
+    }
 
     targetEl.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -813,6 +831,14 @@ class UIController {
         menuItems.push({
           label: 'New folder..',
           action: () => this.createFolderInDirectory(workspacePath)
+        });
+        menuItems.push({
+          label: 'Close Folder',
+          action: () => this.fileOpsManager.closeWorkspace()
+        });
+        menuItems.push({
+          label: 'Close Folder',
+          action: () => this.fileOpsManager.closeWorkspace()
         });
       } else if (itemType === 'directory') {
         // Folder menu
@@ -1339,6 +1365,7 @@ class UIController {
     window.createNewFile = () => this.tabManager.createNewFile();
     window.openFile = () => this.fileOpsManager.openFile();
     window.openWorkspace = () => this.openWorkspace();
+    window.closeWorkspace = () => this.fileOpsManager.closeWorkspace();
     window.saveFile = () => this.fileOpsManager.saveFile();
     window.saveAsFile = () => this.fileOpsManager.saveAsFile();
     window.autoSave = () => this.toggleAutoSave();
@@ -2737,7 +2764,7 @@ class UIController {
    * Initializes state restoration and auto-save mechanisms
    */
   setupStateManagement() {
-    // Restore state on startup
+    // Restore state on startup with minimal delay
     setTimeout(async () => {
       try {
         const restored = await this.stateManager.restoreState();
@@ -2749,7 +2776,7 @@ class UIController {
       } catch (error) {
         console.error('[StateManagement] Error restoring state:', error);
       }
-    }, 500); // Delay to ensure UI is fully initialized
+    }, 100); // Reduced from 500ms to 100ms for faster perceived startup
 
     // Start auto-save for state
     this.stateManager.startAutoSave();
