@@ -72,10 +72,43 @@ function buildToolErrorDiagnostics(textChunks, inputFile) {
       if (seen.has(msg)) continue;
       seen.add(msg);
 
+      // Try to extract tool name from the error message
+      let toolName = 'UnknownTool';
+      
+      // Check for common tool patterns
+      const toolPatterns = [
+        /(?:Running|Executing|Invoking|Error in|Failed to run)\s+([a-zA-Z0-9_\-]+)/i,
+        /^([a-zA-Z0-9_\-]+):\s*(?:error|ERROR|Error)/i,
+        /\[([a-zA-Z0-9_\-]+)\]/i,
+        /ctrace[_-]?([a-zA-Z0-9_\-]+)/i,
+      ];
+      
+      for (const toolRe of toolPatterns) {
+        const toolMatch = msg.match(toolRe);
+        if (toolMatch && toolMatch[1]) {
+          toolName = toolMatch[1];
+          break;
+        }
+      }
+      
+      // Check for Python traceback (indicates Python-based tool)
+      if (msg.includes('Traceback (most recent call last)')) {
+        toolName = 'PythonTool';
+        // Try to find the script name
+        const scriptMatch = msg.match(/File "([^"]+)"/);
+        if (scriptMatch) {
+          const scriptPath = scriptMatch[1];
+          const scriptName = scriptPath.split(/[/\\]/).pop();
+          if (scriptName && scriptName.endsWith('.py')) {
+            toolName = scriptName.replace('.py', '');
+          }
+        }
+      }
+
       diags.push({
         id: `tool-error-${seen.size}`,
         severity: 'ERROR',
-        ruleId: 'ToolExecutionError',
+        ruleId: `ToolExecutionError.${toolName}`,
         location: {
           file: inputFile || '',
           function: 'global',
