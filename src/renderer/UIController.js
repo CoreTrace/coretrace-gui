@@ -220,6 +220,9 @@ class UIController {
     
     // Set up WSL status listener
     this.setupWSLStatusListener();
+
+    // Set up updater status listener
+    this.setupUpdaterStatusListener();
   }
   /**
    * Refreshes the file tree in the explorer view.
@@ -378,6 +381,25 @@ class UIController {
 
     // Request initial WSL status check
     window.ipcRenderer.send('check-wsl-status');
+  }
+
+  /**
+   * Setup updater status listener for notifications coming from main process
+   */
+  setupUpdaterStatusListener() {
+    window.ipcRenderer.on('updater-status', (event, data) => {
+      if (!data || !data.type) return;
+
+      if (data.type === 'update-available') {
+        const version = data.info && data.info.version ? data.info.version : 'new version';
+        this.notificationManager.showInfo(`Update available: ${version}. Downloading...`);
+      } else if (data.type === 'update-downloaded') {
+        const version = data.info && data.info.version ? data.info.version : 'latest';
+        this.notificationManager.showSuccess(`Update ${version} downloaded. Restart to apply.`);
+      } else if (data.type === 'error') {
+        console.warn('[Updater] Error:', data.message);
+      }
+    });
   }
 
   /**
@@ -1369,6 +1391,7 @@ class UIController {
     window.saveFile = () => this.fileOpsManager.saveFile();
     window.saveAsFile = () => this.fileOpsManager.saveAsFile();
     window.autoSave = () => this.toggleAutoSave();
+    window.openUpdateSettings = () => this.openUpdateSettingsModal();
 
     // Setup auto save status bar click handler
     const autoSaveStatus = document.getElementById('autoSaveStatus');
@@ -1570,6 +1593,128 @@ class UIController {
     // Diagnostics manager reference for global access
     window.diagnosticsManager = this.diagnosticsManager;
     window.searchManager = this.searchManager;
+  }
+
+  /**
+   * Open update settings modal to configure release channel (main/beta)
+   */
+  async openUpdateSettingsModal() {
+    let currentChannel = 'main';
+
+    try {
+      const result = await window.ipcRenderer.invoke('updater-get-settings');
+      if (result && result.success && result.settings && result.settings.channel) {
+        currentChannel = result.settings.channel;
+      }
+    } catch (error) {
+      console.warn('Failed to load updater settings:', error);
+    }
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: #0d1117;
+      color: #f0f6fc;
+      padding: 20px;
+      border-radius: 10px;
+      width: 440px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 12px 0; font-size: 18px;">Update Settings</h3>
+      <div style="font-size: 12px; color: #8b949e; margin-bottom: 14px; line-height: 1.5;">
+        Choose which update stream to receive.
+      </div>
+
+      <label for="update-release-channel" style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Release channel</label>
+      <select id="update-release-channel" style="width:100%; padding:8px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; margin-bottom:8px;">
+        <option value="main">Main (stable)</option>
+        <option value="beta">Beta (pre-release)</option>
+      </select>
+
+      <div style="font-size: 11px; color: #8b949e; margin-bottom: 16px;">
+        Beta may include pre-release builds and unstable changes.
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="check-updates-now" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Check now</button>
+        <button id="close-update-settings" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Close</button>
+        <button id="save-update-settings" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const channelSelect = dialog.querySelector('#update-release-channel');
+    if (channelSelect) {
+      channelSelect.value = currentChannel === 'beta' ? 'beta' : 'main';
+    }
+
+    const closeModal = () => {
+      if (modal && modal.parentNode) {
+        modal.parentNode.removeChild(modal);
+      }
+    };
+
+    const closeBtn = dialog.querySelector('#close-update-settings');
+    if (closeBtn) {
+      closeBtn.onclick = closeModal;
+    }
+
+    const checkBtn = dialog.querySelector('#check-updates-now');
+    if (checkBtn) {
+      checkBtn.onclick = async () => {
+        try {
+          const result = await window.ipcRenderer.invoke('updater-check-now');
+          if (result && result.success) {
+            this.notificationManager.showInfo('Update check started. You will be notified if an update is available.');
+          } else {
+            this.notificationManager.showWarning(result && result.error ? result.error : 'Unable to check for updates.');
+          }
+        } catch (error) {
+          this.notificationManager.showError('Failed to check updates: ' + error.message);
+        }
+      };
+    }
+
+    const saveBtn = dialog.querySelector('#save-update-settings');
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        const selectedChannel = channelSelect ? channelSelect.value : 'main';
+
+        try {
+          const result = await window.ipcRenderer.invoke('updater-set-channel', selectedChannel);
+          if (result && result.success) {
+            this.notificationManager.showSuccess(`Update channel saved: ${selectedChannel}`);
+            closeModal();
+          } else {
+            this.notificationManager.showError(result && result.error ? result.error : 'Failed to save update channel');
+          }
+        } catch (error) {
+          this.notificationManager.showError('Failed to save update settings: ' + error.message);
+        }
+      };
+    }
+
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
   }
 
   /**
