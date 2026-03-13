@@ -182,6 +182,7 @@ class UIController {
    */
   init() {
     this.setupEventListeners();
+    this.updateAppVersionLabel();
     this.setupKeyboardShortcuts();
     this.setupResizing();
     this.setupMenus();
@@ -223,6 +224,23 @@ class UIController {
 
     // Set up updater status listener
     this.setupUpdaterStatusListener();
+  }
+
+  /**
+   * Update status bar app version label from package metadata.
+   */
+  updateAppVersionLabel() {
+    const versionEl = document.getElementById('tool_version');
+    if (!versionEl) return;
+
+    try {
+      const packageJson = require('../../package.json');
+      const appName = packageJson.productName || packageJson.name || 'CTraceGUI';
+      const appVersion = packageJson.version || '0.0.0';
+      versionEl.textContent = `${appName} v${appVersion}`;
+    } catch (error) {
+      console.warn('Failed to load app version from package.json:', error);
+    }
   }
   /**
    * Refreshes the file tree in the explorer view.
