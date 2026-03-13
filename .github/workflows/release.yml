@@ -3,7 +3,10 @@ name: Build Electron App
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   release:
@@ -26,7 +29,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # --- macOS-only: create entitlements + setup keychain/cert ---
       - name: Create entitlements (macOS only)
         if: matrix.os == 'macos-latest'
         run: |
@@ -48,15 +50,10 @@ jobs:
           </plist>
           PLIST
 
-          echo "== Entitlements file =="
-          ls -lah build/entitlements.mac.plist
-          head -n 10 build/entitlements.mac.plist
-          /usr/bin/plutil -lint build/entitlements.mac.plist
-
       - name: Setup macOS signing (macOS only)
         if: matrix.os == 'macos-latest'
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }} # base64 .p12
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
         run: |
@@ -70,39 +67,15 @@ jobs:
           security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # IMPORTANT: make the runner use this keychain
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
-
           security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-
-          # Allow codesign to access the keychain without UI prompts
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "== Available signing identities =="
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-
-      # --- Build ---
-      - name: Build
+      - name: Publish
         env:
-          # Notarization vars (only needed if you notarize; harmless otherwise)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run dist -- --publish=never
-
-      # --- Upload artifacts ---
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: electron-build-${{ matrix.os }}
-          if-no-files-found: warn
-          path: |
-            dist/*.exe
-            dist/*.dmg
-            dist/*.AppImage
-            dist/*.zip
-            dist/*.tar.gz
-            dist/latest*.yml
-            dist/*.blockmap
+        run: npm run dist -- --publish always
