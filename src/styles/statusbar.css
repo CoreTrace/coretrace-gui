@@ -22,3 +22,53 @@
   align-items: center;
   gap: 16px;
 }
+
+/* ── Update status indicator ─────────────────────────────────── */
+.update-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 1px 7px 1px 5px;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.update-status-indicator.checking {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.update-status-indicator.update-available {
+  background: rgba(227, 179, 65, 0.2);
+  color: #e3b341;
+  cursor: default;
+}
+
+.update-status-indicator.update-downloaded {
+  background: rgba(63, 185, 80, 0.2);
+  color: #3fb950;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.update-status-indicator.update-downloaded:hover {
+  background: rgba(63, 185, 80, 0.35);
+}
+
+/* Spinning ring for the "checking" state */
+.update-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  animation: updater-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes updater-spin {
+  to { transform: rotate(360deg); }
+}

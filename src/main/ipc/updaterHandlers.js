@@ -12,9 +12,47 @@ const path = require('path');
 
 let updaterInitialized = false;
 let mainWindowRef = null;
+const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+const UPDATER_LOG_FILE = 'updater.log';
 
 function getUpdaterSettingsPath() {
   return path.join(app.getPath('userData'), 'updater-settings.json');
+}
+
+function getUpdaterLogPath() {
+  return path.join(app.getPath('userData'), UPDATER_LOG_FILE);
+}
+
+function formatLogMeta(meta) {
+  if (meta == null) return '';
+  if (typeof meta === 'string') return meta;
+  try {
+    return JSON.stringify(meta);
+  } catch (_) {
+    return String(meta);
+  }
+}
+
+function writeUpdaterLog(level, message, meta) {
+  const timestamp = new Date().toISOString();
+  const details = formatLogMeta(meta);
+  const line = `[${timestamp}] [${level}] ${message}${details ? ` | ${details}` : ''}\n`;
+  fs.appendFile(getUpdaterLogPath(), line, 'utf8').catch(() => {});
+}
+
+function logUpdaterInfo(message, meta) {
+  console.log('[UpdaterHandlers]', message, ...(meta == null ? [] : [meta]));
+  writeUpdaterLog('INFO', message, meta);
+}
+
+function logUpdaterWarn(message, meta) {
+  console.warn('[UpdaterHandlers]', message, ...(meta == null ? [] : [meta]));
+  writeUpdaterLog('WARN', message, meta);
+}
+
+function logUpdaterError(message, meta) {
+  console.error('[UpdaterHandlers]', message, ...(meta == null ? [] : [meta]));
+  writeUpdaterLog('ERROR', message, meta);
 }
 
 function normalizeChannel(channel) {
@@ -90,6 +128,7 @@ function setupUpdaterHandlers(mainWindow) {
 
   ipcMain.handle('updater-check-now', async () => {
     if (!app.isPackaged) {
+      logUpdaterWarn('Manual update check rejected in development mode');
       return {
         success: false,
         error: 'Auto updates are only available in packaged builds.'
@@ -97,18 +136,24 @@ function setupUpdaterHandlers(mainWindow) {
     }
 
     try {
+      logUpdaterInfo('Manual update check requested');
       const result = await autoUpdater.checkForUpdates();
+      logUpdaterInfo('Manual update check completed', {
+        updateInfo: result?.updateInfo || null
+      });
       return {
         success: true,
         updateInfo: result?.updateInfo || null
       };
     } catch (error) {
+      logUpdaterError('Manual update check failed', error?.message || String(error));
       return { success: false, error: error.message };
     }
   });
 
   ipcMain.handle('updater-install-update', async () => {
     if (!app.isPackaged) {
+      logUpdaterWarn('Install update rejected in development mode');
       return {
         success: false,
         error: 'Install update is only available in packaged builds.'
@@ -116,14 +161,16 @@ function setupUpdaterHandlers(mainWindow) {
     }
 
     try {
+      logUpdaterInfo('Install update requested, app will quit and install');
       setImmediate(() => autoUpdater.quitAndInstall());
       return { success: true };
     } catch (error) {
+      logUpdaterError('Install update failed', error?.message || String(error));
       return { success: false, error: error.message };
     }
   });
 
-  console.log('[UpdaterHandlers] Updater IPC handlers registered');
+  logUpdaterInfo('Updater IPC handlers registered', { logPath: getUpdaterLogPath() });
 }
 
 async function setupAutoUpdater(mainWindow) {
@@ -137,42 +184,77 @@ async function setupAutoUpdater(mainWindow) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  logUpdaterInfo('Auto updater initialized', {
+    activeChannel,
+    logPath: getUpdaterLogPath(),
+    isPackaged: app.isPackaged
+  });
+
   autoUpdater.on('checking-for-update', () => {
+    logUpdaterInfo('Checking for update');
     sendUpdaterEvent({ type: 'checking-for-update' });
   });
 
   autoUpdater.on('update-available', (info) => {
+    logUpdaterInfo('Update available', info);
     sendUpdaterEvent({ type: 'update-available', info });
   });
 
   autoUpdater.on('update-not-available', (info) => {
+    logUpdaterInfo('Update not available', info);
     sendUpdaterEvent({ type: 'update-not-available', info });
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
+    logUpdaterInfo('Update download progress', {
+      percent: progressObj?.percent,
+      transferred: progressObj?.transferred,
+      total: progressObj?.total,
+      bytesPerSecond: progressObj?.bytesPerSecond
+    });
     sendUpdaterEvent({ type: 'download-progress', progress: progressObj });
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    logUpdaterInfo('Update downloaded', info);
     sendUpdaterEvent({ type: 'update-downloaded', info });
   });
 
   autoUpdater.on('error', (error) => {
+    logUpdaterError('Updater error event', error?.message || String(error));
     sendUpdaterEvent({ type: 'error', message: error?.message || String(error) });
   });
 
-  console.log('[UpdaterHandlers] Update channel:', activeChannel);
+  logUpdaterInfo('Update channel applied', { activeChannel });
 
   if (!app.isPackaged) {
-    console.log('[UpdaterHandlers] Skipping updater check in development mode');
+    logUpdaterInfo('Skipping updater check in development mode');
     return;
   }
 
-  setTimeout(() => {
+  const runUpdateCheck = () => {
+    logUpdaterInfo('Running update check');
     autoUpdater.checkForUpdates().catch((error) => {
-      console.warn('[UpdaterHandlers] Initial update check failed:', error.message);
+      logUpdaterWarn('Update check failed', error?.message || String(error));
     });
+  };
+
+  setTimeout(() => {
+    runUpdateCheck();
   }, 5000);
+
+  const interval = setInterval(() => {
+    runUpdateCheck();
+  }, UPDATE_CHECK_INTERVAL_MS);
+
+  logUpdaterInfo('Periodic update checks scheduled', {
+    startupDelayMs: 5000,
+    intervalMs: UPDATE_CHECK_INTERVAL_MS
+  });
+
+  if (typeof interval.unref === 'function') {
+    interval.unref();
+  }
 }
 
 module.exports = {

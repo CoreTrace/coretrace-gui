@@ -405,16 +405,62 @@ class UIController {
    * Setup updater status listener for notifications coming from main process
    */
   setupUpdaterStatusListener() {
+    const indicator = document.getElementById('update-status-indicator');
+
+    const showIndicator = (state, html, title = '') => {
+      if (!indicator) return;
+      indicator.className = `update-status-indicator ${state}`;
+      indicator.innerHTML = html;
+      indicator.title = title;
+      indicator.style.display = 'inline-flex';
+      indicator.onclick = null;
+    };
+
+    const hideIndicator = () => {
+      if (!indicator) return;
+      indicator.style.display = 'none';
+      indicator.className = 'update-status-indicator';
+      indicator.onclick = null;
+    };
+
     window.ipcRenderer.on('updater-status', (event, data) => {
       if (!data || !data.type) return;
 
-      if (data.type === 'update-available') {
-        const version = data.info && data.info.version ? data.info.version : 'new version';
-        this.notificationManager.showInfo(`Update available: ${version}. Downloading...`);
+      if (data.type === 'checking-for-update') {
+        showIndicator(
+          'checking',
+          '<span class="update-spinner"></span><span>Checking for updates…</span>',
+          'Checking for updates'
+        );
+      } else if (data.type === 'update-available') {
+        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
+        showIndicator(
+          'update-available',
+          `<span>↑</span><span>Update available${version} — downloading…</span>`,
+          `Update${version} is downloading in the background`
+        );
+      } else if (data.type === 'download-progress') {
+        const pct = data.percent != null ? ` ${Math.round(data.percent)}%` : '';
+        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
+        showIndicator(
+          'update-available',
+          `<span>↑</span><span>Downloading${version}${pct}…</span>`,
+          `Downloading update${version}`
+        );
+      } else if (data.type === 'update-not-available') {
+        hideIndicator();
       } else if (data.type === 'update-downloaded') {
-        const version = data.info && data.info.version ? data.info.version : 'latest';
-        this.notificationManager.showSuccess(`Update ${version} downloaded. Restart to apply.`);
+        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
+        showIndicator(
+          'update-downloaded',
+          `<span>✓</span><span>${version ? version.trim() : 'Update'} ready — restart to apply</span>`,
+          `Click to restart and install${version}`
+        );
+        indicator.onclick = () => {
+          window.ipcRenderer.invoke('updater-install-update').catch(() => {});
+        };
       } else if (data.type === 'error') {
+        hideIndicator();
         console.warn('[Updater] Error:', data.message);
       }
     });
