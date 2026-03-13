@@ -15,7 +15,7 @@ CTrace GUI provides an intuitive interface for analyzing C/C++ source code using
 - **CTrace Integration**: Run static analysis directly from the GUI
 - **Search**: Global search across workspace files
 - **Notifications**: User-friendly notification system
-- **Work Loss Prevention**: Automatic session saving and restoration - never lose your work again! (see [WORK_LOSS_PREVENTION.md](WORK_LOSS_PREVENTION.md))
+- **Work Loss Prevention**: Automatic session saving and restoration - never lose your work again!
 
 ## Architecture
 
