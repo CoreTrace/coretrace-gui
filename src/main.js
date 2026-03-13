@@ -24,6 +24,7 @@ const { setupEditorHandlers } = require('./main/ipc/editorHandlers');
 const { setupCtraceHandlers, shutdownCtraceServer } = require('./main/ipc/ctraceHandlers');
 const { setupAssistantHandlers } = require('./main/ipc/assistantHandlers');
 const { setupStateHandlers } = require('./main/ipc/stateHandlers');
+const { setupUpdaterHandlers, setupAutoUpdater } = require('./main/ipc/updaterHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -575,7 +576,9 @@ app.whenReady().then(async () => {
   setupCtraceHandlers();
   setupAssistantHandlers(mainWindow);
   setupStateHandlers();
+  setupUpdaterHandlers(mainWindow);
   setupWindowControls(mainWindow);
+  await setupAutoUpdater(mainWindow);
   
   // Preload CTrace server in background (don't block GUI startup)
   setTimeout(async () => {
