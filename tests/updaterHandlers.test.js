@@ -22,6 +22,7 @@ test('updater handlers load/save channel and gate checks in dev mode', async (t)
   const handlers = new Map();
   const readFileMock = t.mock.fn(async () => JSON.stringify({ channel: 'beta' }));
   const writeFileMock = t.mock.fn(async () => {});
+  const appendFileMock = t.mock.fn(async () => {});
 
   const autoUpdaterStub = {
     allowPrerelease: false,
@@ -47,7 +48,13 @@ test('updater handlers load/save channel and gate checks in dev mode', async (t)
   const { setupUpdaterHandlers } = withModuleMocks({
     electron: electronStub,
     'electron-updater': { autoUpdater: autoUpdaterStub },
-    fs: { promises: { readFile: (...args) => readFileMock(...args), writeFile: (...args) => writeFileMock(...args) } }
+    fs: {
+      promises: {
+        readFile: (...args) => readFileMock(...args),
+        writeFile: (...args) => writeFileMock(...args),
+        appendFile: (...args) => appendFileMock(...args)
+      }
+    }
   }, () => {
     delete require.cache[modulePath];
     return require(modulePath);
@@ -103,7 +110,13 @@ test('setupAutoUpdater runs initial check when packaged', async (t) => {
   const { setupAutoUpdater } = withModuleMocks({
     electron: electronStub,
     'electron-updater': { autoUpdater: autoUpdaterStub },
-    fs: { promises: { readFile: async () => JSON.stringify({ channel: 'main' }), writeFile: async () => {} } }
+    fs: {
+      promises: {
+        readFile: async () => JSON.stringify({ channel: 'main' }),
+        writeFile: async () => {},
+        appendFile: async () => {}
+      }
+    }
   }, () => {
     delete require.cache[modulePath];
     return require(modulePath);
