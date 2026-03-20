@@ -79,6 +79,7 @@ function testCTraceViaWSL() {
 
         let stdout = '';
         let stderr = '';
+        let resolved = false;
 
         child.stdout.on('data', (data) => {
           stdout += data.toString();
@@ -90,15 +91,29 @@ function testCTraceViaWSL() {
 
         child.on('error', (err) => {
           console.log(`CTrace test error: ${err.message}`);
-          resolve(false);
+          if (!resolved) {
+            resolved = true;
+            resolve(false);
+          }
         });
 
         child.on('close', (code) => {
           console.log(`CTrace --help exit code: ${code}`);
           if (stdout) console.log(`Stdout: ${stdout.substring(0, 200)}...`);
           if (stderr) console.log(`Stderr: ${stderr.substring(0, 200)}...`);
-          resolve(code === 0 || stdout.length > 0 || stderr.length > 0);
+          if (!resolved) {
+            resolved = true;
+            resolve(code === 0 || stdout.length > 0 || stderr.length > 0);
+          }
         });
+
+        setTimeout(() => {
+          child.kill();
+          if (!resolved) {
+            resolved = true;
+            resolve(false);
+          }
+        }, 5000);
       } catch (e) {
         console.log(`CTrace binary not accessible: ${e.message}`);
         resolve(false);
