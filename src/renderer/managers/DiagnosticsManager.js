@@ -154,31 +154,47 @@ class DiagnosticsManager {
       escapesVia: '',
       details: ''
     };
+
+    const normalizedMessage = String(message || '');
     
     // Extract variable name
-    const varMatch = message.match(/variable\s+'([^']+)'/i) || message.match(/variable\s+`([^`]+)`/i);
+    const varMatch = normalizedMessage.match(/variable\s+'([^']+)'/i) || normalizedMessage.match(/variable\s+`([^`]+)`/i);
     if (varMatch) {
       parsed.variable = varMatch[1];
     }
     
     // Extract problem type
-    if (message.includes('stack pointer escape')) {
+    if (normalizedMessage.includes('stack pointer escape')) {
       parsed.problem = 'Stack Pointer Escape';
-    } else if (message.includes('recursion')) {
+    } else if (normalizedMessage.includes('recursion')) {
       parsed.problem = 'Recursion Detected';
     } else {
       // Extract first line as problem
-      const firstLine = message.split('\n')[0];
-      parsed.problem = firstLine.replace(/^\s*\[!!\]\s*/i, '').trim();
+      const lines = normalizedMessage.split('\n');
+      const firstLine = lines[0] || '';
+      parsed.problem = firstLine
+        .replace(/^\s*\[[^\]]+\]\s*/i, '')
+        .trim();
+
+      // Capture remaining non-empty lines as additional details.
+      const detailLines = lines
+        .slice(1)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => line.replace(/^↳\s*/, ''));
+
+      if (detailLines.length > 0) {
+        parsed.details = detailLines.join('\n');
+      }
     }
     
     // Extract escape mechanism
-    const escapeMatch = message.match(/function\s+'([^']+)'|function\s+`([^`]+)`/);
+    const escapeMatch = normalizedMessage.match(/function\s+'([^']+)'|function\s+`([^`]+)`/);
     if (escapeMatch) {
       parsed.escapesVia = escapeMatch[1] || escapeMatch[2];
       
       // Extract additional context
-      const contextMatch = message.match(/\(([^)]+)\)/);
+      const contextMatch = normalizedMessage.match(/\(([^)]+)\)/);
       if (contextMatch) {
         parsed.details = contextMatch[1];
       }
@@ -472,9 +488,14 @@ class DiagnosticsManager {
    */
   formatDiagnosticHover(diag) {
     const parsed = this.parseMessage(diag.details.message);
+
+    const esc = (value) => this.escapeMarkdownText(value);
+    const rawMessage = (diag && diag.details && typeof diag.details.message === 'string')
+      ? diag.details.message.trim()
+      : '';
     
-    let message = `**[${diag.severity}] ${diag.ruleId}**\n\n`;
-    message += `**Function:** ${diag.location.function}\n\n`;
+    let message = `**[${esc(diag.severity)}] ${esc(diag.ruleId)}**\n\n`;
+    message += `**Function:** ${esc(diag.location.function)}\n\n`;
     message += `**Location:** Line ${diag.location.startLine}`;
     
     if (diag.location.startColumn) {
@@ -482,29 +503,44 @@ class DiagnosticsManager {
     }
     
     message += `\n\n---\n\n`;
-    
-    if (parsed.problem) {
-      message += `**Problem:** ${parsed.problem}\n\n`;
+
+    if (rawMessage) {
+      // Keep backend message intact and preserve line breaks in markdown hover.
+      message += `**Message:** ${esc(rawMessage).replace(/\n/g, '  \\n')}\n\n`;
     }
     
     if (parsed.variable) {
-      message += `**Variable:** \`${parsed.variable}\`\n\n`;
+      message += `**Variable:** \`${esc(parsed.variable)}\`\n\n`;
     }
     
     if (parsed.escapesVia) {
-      message += `**Escapes via:** \`${parsed.escapesVia}\``;
+      message += `**Escapes via:** \`${esc(parsed.escapesVia)}\``;
       if (parsed.details) {
-        message += ` _(${parsed.details})_`;
+        message += ` _(${esc(parsed.details)})_`;
       }
       message += `\n\n`;
     }
     
     if (diag.details.variableAliasing && diag.details.variableAliasing.length > 0) {
       message += `**Variable Aliasing:**\n\n`;
-      message += diag.details.variableAliasing.map(v => `• ${v}`).join('\n');
+      message += diag.details.variableAliasing.map(v => `• ${esc(v)}`).join('\n');
     }
     
     return message;
+  }
+
+  /**
+   * Utility: Escape markdown/HTML-sensitive characters for Monaco hover markdown.
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped markdown-safe text
+   */
+  escapeMarkdownText(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+      .replace(/\\/g, '\\\\')
+      .replace(/`/g, '\\`')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   /**
