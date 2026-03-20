@@ -121,12 +121,17 @@ function shouldIgnoreTreeEntry(name) {
 }
 
 /**
- * Build file tree for directory (lazy loading - only loads one level)
+ * Build file tree for directory.
+ *
+ * `loadChildren` supports two modes:
+ * - boolean: `true` loads one level of directory children, `false` keeps children lazy (`null`)
+ * - number: max depth to recursively load (0 = current level only)
+ *
  * @param {string} dirPath - Directory path
- * @param {boolean} loadChildren - Whether to load subdirectories (for backward compatibility)
+ * @param {boolean|number} loadChildren - Child loading mode or depth
  * @returns {Array} - File tree structure
  */
-async function buildFileTree(dirPath, loadChildren = false) {
+async function buildFileTree(dirPath, loadChildren = true) {
   try {
     const dirents = await fs.readdir(dirPath, { withFileTypes: true });
     const tree = [];
@@ -150,13 +155,24 @@ async function buildFileTree(dirPath, loadChildren = false) {
       const itemPath = path.join(dirPath, name);
 
       if (dirent.isDirectory()) {
-        // For lazy loading, don't load children immediately
+        let children = null;
+
+        // Backward compatibility: callers may pass a numeric depth.
+        if (typeof loadChildren === 'number') {
+          if (loadChildren > 0) {
+            children = await buildFileTree(itemPath, loadChildren - 1);
+          }
+        } else if (loadChildren === true) {
+          // Boolean true loads one level only.
+          children = await buildFileTree(itemPath, false);
+        }
+
         tree.push({
           name,
           path: itemPath,
           type: 'directory',
           hasChildren: true, // Mark that it has potential children
-          children: null // Children not loaded yet
+          children // `null` means lazily loaded
         });
       } else if (dirent.isFile()) {
         tree.push({
