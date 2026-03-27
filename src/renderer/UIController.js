@@ -242,6 +242,30 @@ class UIController {
       console.warn('Failed to load app version from package.json:', error);
     }
   }
+
+  /**
+   * Update status bar backend version label using latest known release tag.
+   * @param {string|null} releaseTag
+   * @param {string} [statusText='']
+   */
+  updateBackendVersionLabel(releaseTag, statusText = '') {
+    const backendEl = document.getElementById('backend_version');
+    if (!backendEl) return;
+
+    const normalizedTag = typeof releaseTag === 'string' && releaseTag.trim()
+      ? releaseTag.trim()
+      : null;
+
+    if (normalizedTag) {
+      backendEl.textContent = `CoreTrace latest: ${normalizedTag}`;
+      backendEl.title = `Latest CoreTrace backend release: ${normalizedTag}`;
+      return;
+    }
+
+    const fallback = statusText && String(statusText).trim() ? String(statusText).trim() : 'unknown';
+    backendEl.textContent = `CoreTrace latest: ${fallback}`;
+    backendEl.title = 'Latest CoreTrace backend release tag';
+  }
   /**
    * Refreshes the file tree in the explorer view.
    * 
@@ -407,6 +431,36 @@ class UIController {
   setupUpdaterStatusListener() {
     const indicator = document.getElementById('update-status-indicator');
 
+    // Initial placeholder until the first backend update event arrives.
+    this.updateBackendVersionLabel(null, 'checking...');
+
+    const applyBackendStatus = (status) => {
+      if (!status || !status.type) return;
+
+      if (status.type === 'backend-checking-for-update') {
+        this.updateBackendVersionLabel(null, 'checking...');
+        return;
+      }
+
+      if (status.type === 'backend-update-not-available' || status.type === 'backend-update-installed') {
+        const releaseTag = status.info && status.info.releaseTag ? status.info.releaseTag : null;
+        this.updateBackendVersionLabel(releaseTag, releaseTag ? '' : 'up to date');
+        return;
+      }
+
+      if (status.type === 'backend-error') {
+        this.updateBackendVersionLabel(null, 'unavailable');
+      }
+    };
+
+    window.ipcRenderer.invoke('backend-get-status')
+      .then((res) => {
+        if (res && res.success && res.status) {
+          applyBackendStatus(res.status);
+        }
+      })
+      .catch(() => {});
+
     const showIndicator = (state, html, title = '') => {
       if (!indicator) return;
       indicator.className = `update-status-indicator ${state}`;
@@ -425,6 +479,14 @@ class UIController {
 
     window.ipcRenderer.on('updater-status', (event, data) => {
       if (!data || !data.type) return;
+
+      if (data.type === 'backend-checking-for-update' || data.type === 'backend-update-not-available' || data.type === 'backend-update-installed' || data.type === 'backend-error') {
+        applyBackendStatus(data);
+        if (data.type === 'backend-error') {
+          console.warn('[BackendUpdater] Error:', data.message);
+        }
+        return;
+      }
 
       if (data.type === 'checking-for-update') {
         showIndicator(

@@ -5,6 +5,8 @@ const path = require('path');
 
 const { callApi, ensureServerRunning, shutdownServer, resolveBinaryPath, getCapturedSince, waitForCapturedJson } = require('../utils/ctraceServeClient');
 
+const DEBUG_BACKEND_REQUESTS = process.env.CTRACE_GUI_DEBUG_BACKEND === '1' || process.env.NODE_ENV === 'development';
+
 function parseBoolean(value) {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return Boolean(value);
@@ -295,6 +297,13 @@ function setupCtraceHandlers() {
     try {
       const params = argsToRunAnalysisParams(args);
       const cwd = deriveCwdFromInputPath(Array.isArray(params.input) ? params.input[0] : null);
+
+      if (DEBUG_BACKEND_REQUESTS) {
+        console.log('[ctrace debug] run-ctrace args:', JSON.stringify(args));
+        console.log('[ctrace debug] run-ctrace params:', JSON.stringify(params));
+        console.log('[ctrace debug] run-ctrace cwd:', cwd || '(empty)');
+      }
+
       await ensureServerRunning({ cwd });
       const captureSince = Date.now();
       const apiRes = await callApi('run_analysis', params);

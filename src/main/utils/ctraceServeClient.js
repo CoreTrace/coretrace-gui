@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const crypto = require('crypto');
+const fsSync = require('fs');
 const fs = require('fs/promises');
 const http = require('http');
 const net = require('net');
@@ -8,6 +9,7 @@ const path = require('path');
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8080;
+const DEBUG_BACKEND_REQUESTS = process.env.CTRACE_GUI_DEBUG_BACKEND === '1' || process.env.NODE_ENV === 'development';
 
 /**
  * @typedef {Object} CtraceServerInfo
@@ -175,6 +177,20 @@ async function waitForCapturedJson(predicate, { sinceTs, timeoutMs = 30000, poll
 
 function resolveBinaryPath() {
   const binaryName = 'ctrace';
+
+  // Prefer an updated, user-managed binary if present.
+  try {
+    const electronModule = require('electron');
+    const electronApp = electronModule && electronModule.app;
+    if (electronApp && typeof electronApp.getPath === 'function') {
+      const managedPath = path.join(electronApp.getPath('userData'), 'bin', binaryName);
+      if (fsSync.existsSync(managedPath)) {
+        return managedPath;
+      }
+    }
+  } catch (_) {
+    // Ignore; fallback to packaged/development binary path.
+  }
 
   if (process.resourcesPath) {
     return path.join(process.resourcesPath, 'bin', binaryName);
@@ -370,6 +386,12 @@ async function callApi(method, params) {
   };
 
   const url = `http://${info.host}:${info.port}/api`;
+
+  if (DEBUG_BACKEND_REQUESTS) {
+    console.log('[ctrace debug] backend url:', url);
+    console.log('[ctrace debug] backend request:', JSON.stringify(request));
+  }
+
   const res = await httpPostJson(url, { body: request });
 
   let parsed;

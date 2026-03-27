@@ -1,6 +1,6 @@
 {
   "name": "ctrace-gui",
-  "version": "4.1.1",
+  "version": "4.2.1",
   "description": "A modern Electron-based GUI for CTrace static analysis tool",
   "main": "src/main.js",
   "scripts": {
@@ -32,6 +32,7 @@
     "electron-updater": "^6.8.3",
     "monaco-editor": "^0.55.1",
     "node-llama-cpp": "^3.14.2",
+    "tar": "^7.5.12",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
