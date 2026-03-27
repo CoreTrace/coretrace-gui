@@ -23,6 +23,11 @@
   gap: 16px;
 }
 
+#backend_version {
+  opacity: 0.95;
+  white-space: nowrap;
+}
+
 /* ── Update status indicator ─────────────────────────────────── */
 .update-status-indicator {
   display: inline-flex;

@@ -12,6 +12,7 @@ const path = require('path');
 
 let updaterInitialized = false;
 let mainWindowRef = null;
+let lastBackendStatus = null;
 const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const UPDATER_LOG_FILE = 'updater.log';
 
@@ -170,6 +171,13 @@ function setupUpdaterHandlers(mainWindow) {
     }
   });
 
+  ipcMain.handle('backend-get-status', async () => {
+    return {
+      success: true,
+      status: lastBackendStatus
+    };
+  });
+
   logUpdaterInfo('Updater IPC handlers registered', { logPath: getUpdaterLogPath() });
 }
 
@@ -227,8 +235,75 @@ async function setupAutoUpdater(mainWindow) {
 
   logUpdaterInfo('Update channel applied', { activeChannel });
 
+  let backendCheckInFlight = false;
+  const runBackendCheck = () => {
+    if (backendCheckInFlight) return;
+    backendCheckInFlight = true;
+
+    let checkAndUpdateBackendBinary;
+    try {
+      ({ checkAndUpdateBackendBinary } = require('../utils/backendUpdater'));
+    } catch (error) {
+      logUpdaterWarn('Backend updater module unavailable; skipping backend check', error?.message || String(error));
+      backendCheckInFlight = false;
+      return;
+    }
+
+    logUpdaterInfo('Running backend binary update check');
+    lastBackendStatus = { type: 'backend-checking-for-update', at: Date.now() };
+    sendUpdaterEvent({ type: 'backend-checking-for-update' });
+
+    checkAndUpdateBackendBinary({
+      log: (message, meta) => logUpdaterInfo(`[BackendUpdater] ${message}`, meta)
+    })
+      .then((result) => {
+        if (!result?.success) {
+          const message = result?.error || 'Unknown backend updater failure';
+          logUpdaterWarn('Backend binary update check failed', { message });
+          lastBackendStatus = { type: 'backend-error', message, at: Date.now() };
+          sendUpdaterEvent({ type: 'backend-error', message });
+          return;
+        }
+
+        if (result.updated) {
+          logUpdaterInfo('Backend binary updated successfully', result);
+          lastBackendStatus = { type: 'backend-update-installed', info: result, at: Date.now() };
+          sendUpdaterEvent({ type: 'backend-update-installed', info: result });
+          return;
+        }
+
+        logUpdaterInfo('Backend binary already up to date', result);
+        lastBackendStatus = { type: 'backend-update-not-available', info: result, at: Date.now() };
+        sendUpdaterEvent({ type: 'backend-update-not-available', info: result });
+      })
+      .catch((error) => {
+        const message = error?.message || String(error);
+        logUpdaterWarn('Backend binary update check exception', message);
+        lastBackendStatus = { type: 'backend-error', message, at: Date.now() };
+        sendUpdaterEvent({ type: 'backend-error', message });
+      })
+      .finally(() => {
+        backendCheckInFlight = false;
+      });
+  };
+
+  // Backend binary checks should run on startup and periodically in all modes.
+  runBackendCheck();
+
+  const backendInterval = setInterval(() => {
+    runBackendCheck();
+  }, UPDATE_CHECK_INTERVAL_MS);
+
+  if (typeof backendInterval.unref === 'function') {
+    backendInterval.unref();
+  }
+
   if (!app.isPackaged) {
-    logUpdaterInfo('Skipping updater check in development mode');
+    logUpdaterInfo('Skipping app updater check in development mode');
+    logUpdaterInfo('Backend updater scheduled', {
+      startup: 'immediate',
+      intervalMs: UPDATE_CHECK_INTERVAL_MS
+    });
     return;
   }
 
@@ -243,17 +318,19 @@ async function setupAutoUpdater(mainWindow) {
     runUpdateCheck();
   }, 5000);
 
-  const interval = setInterval(() => {
+  const appInterval = setInterval(() => {
     runUpdateCheck();
   }, UPDATE_CHECK_INTERVAL_MS);
 
-  logUpdaterInfo('Periodic update checks scheduled', {
-    startupDelayMs: 5000,
+  logUpdaterInfo('Updater schedules active', {
+    backendStartup: 'immediate',
+    backendIntervalMs: UPDATE_CHECK_INTERVAL_MS,
+    appStartupDelayMs: 5000,
     intervalMs: UPDATE_CHECK_INTERVAL_MS
   });
 
-  if (typeof interval.unref === 'function') {
-    interval.unref();
+  if (typeof appInterval.unref === 'function') {
+    appInterval.unref();
   }
 }
 
