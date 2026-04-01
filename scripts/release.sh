@@ -38,9 +38,21 @@ echo "Running tests..."
 npm test
 
 NORMALIZED_RELEASE="${RELEASE_INPUT#v}"
+CURRENT_VERSION="$(node -p "require('./package.json').version")"
+TARGET_TAG="v${NORMALIZED_RELEASE}"
 
-echo "Bumping/tagging release with npm version: $NORMALIZED_RELEASE"
-npm version "$NORMALIZED_RELEASE" -m "chore(release): %s"
+if [ "$NORMALIZED_RELEASE" = "$CURRENT_VERSION" ]; then
+  echo "Requested release equals current package version (${CURRENT_VERSION})."
+  if git rev-parse "$TARGET_TAG" >/dev/null 2>&1; then
+    echo "Tag ${TARGET_TAG} already exists; skipping tag creation."
+  else
+    echo "Creating tag ${TARGET_TAG} on current commit..."
+    git tag "$TARGET_TAG"
+  fi
+else
+  echo "Bumping/tagging release with npm version: $NORMALIZED_RELEASE"
+  npm version "$NORMALIZED_RELEASE" -m "chore(release): %s"
+fi
 
 echo "Pushing commit(s) and tag(s) to origin/main..."
 git push origin main --follow-tags
