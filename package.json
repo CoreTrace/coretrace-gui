@@ -7,6 +7,7 @@
     "test": "node --test",
     "test:wsl": "node src/main/utils/wslTest.js",
     "start": "electron .",
+    "release:ship": "bash ./scripts/release.sh",
     "dist": "electron-builder",
     "dist:publish": "electron-builder --publish always",
     "dist:win": "electron-builder --win",
