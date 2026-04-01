@@ -47,14 +47,19 @@ if [ "$NORMALIZED_RELEASE" = "$CURRENT_VERSION" ]; then
     echo "Tag ${TARGET_TAG} already exists; skipping tag creation."
   else
     echo "Creating tag ${TARGET_TAG} on current commit..."
-    git tag "$TARGET_TAG"
+    git tag -a "$TARGET_TAG" -m "release: ${TARGET_TAG}"
   fi
 else
   echo "Bumping/tagging release with npm version: $NORMALIZED_RELEASE"
   npm version "$NORMALIZED_RELEASE" -m "chore(release): %s"
 fi
 
-echo "Pushing commit(s) and tag(s) to origin/main..."
+echo "Pushing commit(s) to origin/main..."
 git push origin main --follow-tags
+
+if git rev-parse "$TARGET_TAG" >/dev/null 2>&1; then
+  echo "Pushing tag ${TARGET_TAG} to origin..."
+  git push origin "$TARGET_TAG"
+fi
 
 echo "Release push complete. GitHub Actions should now build and publish artifacts for this tag."
