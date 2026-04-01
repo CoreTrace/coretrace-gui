@@ -207,6 +207,7 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
   const archTag = getTargetArchTag();
   const userDataPath = getUserDataPath();
   const managedBinaryPath = getManagedBinaryPath();
+  const state = await readBackendUpdaterState();
 
   if (!platformTag || !archTag) {
     return {
@@ -224,8 +225,32 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
     };
   }
 
-  const release = await fetchJson(CORETRACE_REPO_API_LATEST);
-  const releaseTag = release?.tag_name || 'unknown';
+  let release;
+  let releaseTag = null;
+  try {
+    release = await fetchJson(CORETRACE_REPO_API_LATEST);
+    releaseTag = release?.tag_name || 'unknown';
+  } catch (error) {
+    const cachedReleaseTag = typeof state?.releaseTag === 'string' && state.releaseTag.trim()
+      ? state.releaseTag.trim()
+      : null;
+
+    if (cachedReleaseTag) {
+      log('Using cached backend release tag after fetch failure', {
+        cachedReleaseTag,
+        error: error?.message || String(error)
+      });
+      return {
+        success: true,
+        updated: false,
+        releaseTag: cachedReleaseTag,
+        stale: true,
+        reason: 'Using cached backend release tag after release metadata fetch failed'
+      };
+    }
+
+    throw error;
+  }
 
   const { tarAsset, shaAsset } = pickAssets(release, platformTag, archTag);
   if (!tarAsset || !shaAsset) {
@@ -237,8 +262,6 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
   }
 
   const currentBinaryPath = resolveBinaryPath();
-  const state = await readBackendUpdaterState();
-
   let currentBinarySha = null;
   if (await fileExists(currentBinaryPath)) {
     currentBinarySha = await sha256File(currentBinaryPath);
