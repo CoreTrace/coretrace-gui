@@ -127,3 +127,76 @@ test('setupAutoUpdater runs initial check when packaged', async (t) => {
 
   timeoutMock.mock.restore();
 });
+
+test('setupAutoUpdater emits backend release tag when backend check uses cached data', async () => {
+  const sentEvents = [];
+  const backendUpdaterPath = path.join(__dirname, '../src/main/utils/backendUpdater.js');
+
+  const autoUpdaterStub = {
+    allowPrerelease: false,
+    channel: 'latest',
+    autoDownload: false,
+    autoInstallOnAppQuit: false,
+    on: () => {},
+    checkForUpdates: async () => ({ updateInfo: null }),
+    quitAndInstall: () => {}
+  };
+
+  const electronStub = {
+    ipcMain: {
+      handle: () => {}
+    },
+    app: {
+      isPackaged: false,
+      getPath: () => '/tmp/test-user-data'
+    }
+  };
+
+  require.cache[backendUpdaterPath] = {
+    id: backendUpdaterPath,
+    filename: backendUpdaterPath,
+    loaded: true,
+    exports: {
+      checkAndUpdateBackendBinary: async () => ({
+        success: true,
+        updated: false,
+        releaseTag: 'v1.2.3',
+        stale: true,
+        reason: 'cached'
+      })
+    }
+  };
+
+  const modulePath = path.join(__dirname, '../src/main/ipc/updaterHandlers.js');
+  const { setupAutoUpdater } = withModuleMocks({
+    electron: electronStub,
+    'electron-updater': { autoUpdater: autoUpdaterStub },
+    fs: {
+      promises: {
+        readFile: async () => JSON.stringify({ channel: 'main' }),
+        writeFile: async () => {},
+        appendFile: async () => {}
+      }
+    },
+  }, () => {
+    delete require.cache[modulePath];
+    return require(modulePath);
+  });
+
+  await setupAutoUpdater({
+    isDestroyed: () => false,
+    webContents: {
+      send: (_channel, payload) => {
+        sentEvents.push(payload);
+      }
+    }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const backendResultEvent = sentEvents.find((event) => event && event.type === 'backend-update-not-available');
+  assert.ok(backendResultEvent);
+  assert.equal(backendResultEvent.info.releaseTag, 'v1.2.3');
+
+  delete require.cache[backendUpdaterPath];
+});
