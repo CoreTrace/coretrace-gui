@@ -947,7 +947,9 @@ class VisualyzerManager {
   }
 }
 
-window.VisualyzerManager = VisualyzerManager;
+if (typeof window !== 'undefined') {
+  window.VisualyzerManager = VisualyzerManager;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = VisualyzerManager;
 }

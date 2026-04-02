@@ -602,7 +602,9 @@ class MonacoEditorManager {
   }
 }
 
-window.MonacoEditorManager = MonacoEditorManager;
+if (typeof window !== 'undefined') {
+  window.MonacoEditorManager = MonacoEditorManager;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = MonacoEditorManager;
 }
