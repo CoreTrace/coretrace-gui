@@ -1,3 +1,4 @@
+;(function() {
 /**
  * State Manager - Handles application state persistence for work loss prevention
  * 
@@ -218,7 +219,7 @@ class StateManager {
       });
 
       // Save to disk via IPC
-      const result = await window.ipcRenderer.invoke('save-app-state', state);
+      const result = await window.api.invoke('save-app-state', state);
       
       if (result.success) {
         this.lastSaveTime = new Date();
@@ -244,7 +245,7 @@ class StateManager {
     try {
       console.log('[StateManager] Attempting to restore state...');
       
-      const result = await window.ipcRenderer.invoke('load-app-state');
+      const result = await window.api.invoke('load-app-state');
       
       if (!result.success || !result.state) {
         console.log('[StateManager] No saved state found or load failed');
@@ -356,7 +357,7 @@ class StateManager {
         console.log('[StateManager] Restoring workspace:', state.workspacePath);
         try {
           // Use IPC to open the workspace
-          const result = await window.ipcRenderer.invoke('get-file-tree', state.workspacePath);
+          const result = await window.api.invoke('get-file-tree', state.workspacePath);
           if (result.success && window.uiController && window.uiController.fileOpsManager) {
             const folderName = state.workspacePath.split(/[\/\\]/).pop();
             window.uiController.fileOpsManager.currentWorkspacePath = state.workspacePath;
@@ -395,7 +396,7 @@ class StateManager {
   async clearState() {
     try {
       console.log('[StateManager] Clearing saved state...');
-      const result = await window.ipcRenderer.invoke('clear-app-state');
+      const result = await window.api.invoke('clear-app-state');
       
       if (result.success) {
         console.log('[StateManager] State cleared successfully');
@@ -416,7 +417,7 @@ class StateManager {
    */
   async getStateInfo() {
     try {
-      const result = await window.ipcRenderer.invoke('get-state-info');
+      const result = await window.api.invoke('get-state-info');
       return result.success ? result.info : null;
     } catch (error) {
       console.error('[StateManager] Error getting state info:', error);
@@ -425,7 +426,9 @@ class StateManager {
   }
 }
 
+window.StateManager = StateManager;
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = StateManager;
 }
+})();

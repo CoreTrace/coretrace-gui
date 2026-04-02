@@ -2,9 +2,12 @@
  * Editor Manager - Handles editor functionality like gutter, status bar, formatting
  */
 
-// Import syntax highlighter
-const { highlightCppSyntax, applySyntaxHighlight, shouldHighlight } = require('../utils/syntaxHighlighter');
-const { detectFileType } = require('../utils/fileTypeUtils');
+// Import syntax highlighter - use window globals when available (contextIsolation mode)
+const _syntaxHL = (typeof window !== 'undefined' && window.syntaxHighlighter) || (typeof require === 'function' ? require('../utils/syntaxHighlighter') : {});
+const highlightCppSyntax = _syntaxHL.highlightCppSyntax;
+const applySyntaxHighlight = _syntaxHL.applySyntaxHighlight;
+const shouldHighlight = _syntaxHL.shouldHighlight;
+const detectFileType = (typeof window !== 'undefined' && window.detectFileType) || (typeof require === 'function' ? require('../utils/fileTypeUtils').detectFileType : null);
 
 class EditorManager {
   constructor() {
@@ -575,4 +578,6 @@ class EditorManager {
   }
 }
 
-module.exports = EditorManager;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = EditorManager;
+}

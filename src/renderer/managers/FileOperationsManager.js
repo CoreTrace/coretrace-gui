@@ -1,3 +1,4 @@
+;(function() {
 /**
  * File Operations Manager - Handles all file operations via IPC communication.
  * 
@@ -69,7 +70,7 @@ class FileOperationsManager {
    */
   async openWorkspace() {
     try {
-      const result = await window.ipcRenderer.invoke('open-folder-dialog');
+      const result = await window.api.invoke('open-folder-dialog');
       
       if (result.success) {
         this.currentWorkspacePath = result.folderPath;
@@ -131,7 +132,7 @@ class FileOperationsManager {
   async openFile() {
     try {
       console.log('Opening file dialog...');
-      const result = await window.ipcRenderer.invoke('open-file-dialog');
+      const result = await window.api.invoke('open-file-dialog');
       console.log('Open file result:', result);
       
       if (result.success) {
@@ -146,7 +147,7 @@ class FileOperationsManager {
             return;
           } else if (userChoice === 'yes') {
             console.log('User chose to open file anyway');
-            const forceResult = await window.ipcRenderer.invoke('force-open-file', result.filePath);
+            const forceResult = await window.api.invoke('force-open-file', result.filePath);
             console.log('Force open result:', forceResult);
             
             if (forceResult.success) {
@@ -223,7 +224,7 @@ class FileOperationsManager {
       currentTab.content = this.tabManager.editorManager.getContent();
       
       if (currentTab.filePath) {
-        const result = await window.ipcRenderer.invoke('save-file', currentTab.filePath, currentTab.content);
+        const result = await window.api.invoke('save-file', currentTab.filePath, currentTab.content);
         if (result.success) {
           this.tabManager.markTabClean(this.tabManager.activeTabId);
           if (!options.silent) {
@@ -267,7 +268,7 @@ class FileOperationsManager {
         ? this.tabManager.editorManager.getContent()
         : tab.content;
 
-      const result = await window.ipcRenderer.invoke('save-file', tab.filePath, content);
+      const result = await window.api.invoke('save-file', tab.filePath, content);
       if (result.success) {
         tab.content = content;
         this.tabManager.markTabClean(tabId);
@@ -297,7 +298,7 @@ class FileOperationsManager {
       
       currentTab.content = this.tabManager.editorManager.getContent();
       
-      const result = await window.ipcRenderer.invoke('save-file-as', currentTab.content);
+      const result = await window.api.invoke('save-file-as', currentTab.content);
       if (result.success) {
         this.tabManager.updateTabFile(this.tabManager.activeTabId, result.filePath, result.fileName);
         this.tabManager.markTabClean(this.tabManager.activeTabId);
@@ -322,7 +323,7 @@ class FileOperationsManager {
   async readFileFromTree(filePath) {
     try {
       console.log('Reading file from tree:', filePath);
-      const result = await window.ipcRenderer.invoke('read-file', filePath);
+      const result = await window.api.invoke('read-file', filePath);
       console.log('File tree read result:', result);
       
       if (result.success) {
@@ -336,7 +337,7 @@ class FileOperationsManager {
             return;
           } else if (userChoice === 'yes') {
             console.log('File tree: User chose to open file anyway');
-            const forceResult = await window.ipcRenderer.invoke('force-open-file', filePath);
+            const forceResult = await window.api.invoke('force-open-file', filePath);
             console.log('File tree: Force open result:', forceResult);
             
             if (forceResult.success) {
@@ -382,7 +383,7 @@ class FileOperationsManager {
     
     try {
       this.notificationManager.showInfo('Loading full file...');
-      const result = await window.ipcRenderer.invoke('force-load-full-file', filePath);
+      const result = await window.api.invoke('force-load-full-file', filePath);
       
       if (result.success) {
         const currentTab = this.tabManager.getActiveTab();
@@ -525,7 +526,7 @@ class FileOperationsManager {
     container.appendChild(loadingDiv);
     
     try {
-      const result = await window.ipcRenderer.invoke('get-directory-contents', item.path);
+      const result = await window.api.invoke('get-directory-contents', item.path);
       
       // Remove loading indicator
       loadingDiv.remove();
@@ -666,4 +667,8 @@ class FileOperationsManager {
   }
 }
 
-module.exports = FileOperationsManager;
+window.FileOperationsManager = FileOperationsManager;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = FileOperationsManager;
+}
+})();
