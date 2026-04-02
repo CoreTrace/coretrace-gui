@@ -1,3 +1,4 @@
+;(function() {
 /**
  * Detect file type based on file extension
  * @param {string} filename - The filename to analyze
@@ -79,9 +80,12 @@ if (typeof window !== 'undefined') {
   window.formatFileSize = formatFileSize;
 }
 
-module.exports = {
-  detectFileType,
-  updateFileTypeStatus,
-  getFileIcon,
-  formatFileSize
-};
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    detectFileType,
+    updateFileTypeStatus,
+    getFileIcon,
+    formatFileSize
+  };
+}
+})();

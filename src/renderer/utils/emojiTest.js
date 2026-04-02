@@ -1,11 +1,13 @@
 // Emoji test utility for cross-platform rendering
-const os = require('os');
+const _platform = (typeof window !== 'undefined' && window.api && window.api.platform)
+  ? window.api.platform
+  : (typeof require === 'function' ? require('os').platform() : 'unknown');
 
 /**
  * Test emoji rendering and font availability
  */
 function testEmojiSupport() {
-  const platform = os.platform();
+  const platform = _platform;
   const testEmojis = ['📁', '📄', '🔄', '🔍', '⚙️', '💾', '🎨', '🐍', '☕', '🦀'];
   
   console.log(`Testing emoji support on ${platform}:`);

@@ -1,8 +1,9 @@
+;(function() {
 /**
  * Monaco Editor Manager - Handles Monaco editor integration and functionality
  */
 
-const { detectFileType } = require('../utils/fileTypeUtils');
+const detectFileType = (typeof window !== 'undefined' && window.detectFileType) || (typeof require === 'function' ? require('../utils/fileTypeUtils').detectFileType : null);
 
 class MonacoEditorManager {
   constructor() {
@@ -601,4 +602,10 @@ class MonacoEditorManager {
   }
 }
 
-module.exports = MonacoEditorManager;
+if (typeof window !== 'undefined') {
+  window.MonacoEditorManager = MonacoEditorManager;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = MonacoEditorManager;
+}
+})();

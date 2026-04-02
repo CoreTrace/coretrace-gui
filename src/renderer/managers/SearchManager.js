@@ -1,3 +1,4 @@
+;(function() {
 /**
  * Search Manager - Handles search functionality
  */
@@ -310,7 +311,7 @@ class SearchManager {
         searchResults.innerHTML = '<div style="color: #7d8590; padding: 12px; text-align: center;">Searching...</div>';
       }
       
-      const result = await window.ipcRenderer.invoke('search-in-files', searchTerm, this.currentWorkspacePath);
+      const result = await window.api.invoke('search-in-files', searchTerm, this.currentWorkspacePath);
       
       if (result.success) {
         this.displaySearchResults(result.results, searchTerm);
@@ -414,4 +415,10 @@ class SearchManager {
   }
 }
 
-module.exports = SearchManager;
+if (typeof window !== 'undefined') {
+  window.SearchManager = SearchManager;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = SearchManager;
+}
+})();

@@ -313,7 +313,13 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
     await tar.x({
       file: archivePath,
       cwd: extractDir,
-      strict: true
+      strict: true,
+      // On Windows, symlink creation requires admin privileges or Developer Mode.
+      // The archive contains Linux shared-library symlinks that aren't needed for
+      // the binary copy, so skip them to avoid EPERM failures.
+      filter: process.platform === 'win32'
+        ? (_path, entry) => entry.type !== 'SymbolicLink'
+        : undefined
     });
 
     const extractedBinaryPath = await findFileRecursive(extractDir, 'ctrace');

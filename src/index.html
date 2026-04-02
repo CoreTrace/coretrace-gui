@@ -32,20 +32,13 @@
     }
   </style>
   
-  <!-- Make ipcRenderer available globally -->
-  <script>
-    const { ipcRenderer } = require('electron');
-    window.ipcRenderer = ipcRenderer;
-  </script>
-  
   <!-- Monaco Editor Loader -->
   <script>
-    const path = require('path');
-    const monacoBasePath = path.join(__dirname, '../node_modules/monaco-editor/min/vs');
+    const monacoBasePath = window.api.getMonacoBasePath();
     
     // Load Monaco's AMD loader
     const loaderScript = document.createElement('script');
-    loaderScript.src = path.join(monacoBasePath, 'loader.js');
+    loaderScript.src = monacoBasePath + '/loader.js';
     loaderScript.onload = () => {
       // Configure AMD loader paths
       require.config({ paths: { 'vs': monacoBasePath } });
@@ -69,16 +62,17 @@
     document.head.appendChild(loaderScript);
   </script>
   
-  <!-- Load modular JavaScript -->
-  <script>
-    // Since we're in a renderer process, we need to handle module loading differently
-    // We'll load the UIController which will handle everything
-    const UIController = require('./renderer/UIController');
-    
-    // Load syntax highlighter utility
-    const syntaxHighlighter = require('./renderer/utils/syntaxHighlighter');
-    window.syntaxHighlighter = syntaxHighlighter;
-  </script>
+  <!-- Load renderer modules (dependency order: utils -> managers -> controller) -->
+  <script src="renderer/utils/fileTypeUtils.js"></script>
+  <script src="renderer/utils/syntaxHighlighter.js"></script>
+  <script src="renderer/managers/NotificationManager.js"></script>
+  <script src="renderer/managers/MonacoEditorManager.js"></script>
+  <script src="renderer/managers/TabManager.js"></script>
+  <script src="renderer/managers/SearchManager.js"></script>
+  <script src="renderer/managers/FileOperationsManager.js"></script>
+  <script src="renderer/managers/DiagnosticsManager.js"></script>
+  <script src="renderer/managers/StateManager.js"></script>
+  <script src="renderer/UIController.js"></script>
   
   <!-- D3.js for interactive graph visualization (deferred for faster startup) -->
   <script src="https://d3js.org/d3.v7.min.js" defer></script>
