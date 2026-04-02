@@ -660,7 +660,9 @@ class DiagnosticsManager {
   }
 }
 
-window.DiagnosticsManager = DiagnosticsManager;
+if (typeof window !== 'undefined') {
+  window.DiagnosticsManager = DiagnosticsManager;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = DiagnosticsManager;
 }

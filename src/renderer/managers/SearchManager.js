@@ -415,7 +415,9 @@ class SearchManager {
   }
 }
 
-window.SearchManager = SearchManager;
+if (typeof window !== 'undefined') {
+  window.SearchManager = SearchManager;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = SearchManager;
 }

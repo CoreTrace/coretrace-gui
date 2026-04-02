@@ -667,7 +667,9 @@ class FileOperationsManager {
   }
 }
 
-window.FileOperationsManager = FileOperationsManager;
+if (typeof window !== 'undefined') {
+  window.FileOperationsManager = FileOperationsManager;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = FileOperationsManager;
 }
