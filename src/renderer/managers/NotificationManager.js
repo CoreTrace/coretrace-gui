@@ -243,7 +243,9 @@ class NotificationManager {
   }
 }
 
-window.NotificationManager = NotificationManager;
+if (typeof window !== 'undefined') {
+  window.NotificationManager = NotificationManager;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = NotificationManager;
 }
