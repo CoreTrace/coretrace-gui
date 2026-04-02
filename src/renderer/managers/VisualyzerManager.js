@@ -1,3 +1,4 @@
+;(function() {
 /**
  * Visualyzer Manager - Interactive Graph Visualization
  * Uses D3.js for force-directed graph rendering
@@ -946,4 +947,8 @@ class VisualyzerManager {
   }
 }
 
-module.exports = VisualyzerManager;
+window.VisualyzerManager = VisualyzerManager;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = VisualyzerManager;
+}
+})();

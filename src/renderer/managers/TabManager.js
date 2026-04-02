@@ -1,3 +1,4 @@
+;(function() {
 /**
  * Tab Manager - Handles all tab operations including creation, switching, and closing.
  * 
@@ -531,4 +532,8 @@ class TabManager {
   }
 }
 
-module.exports = TabManager;
+window.TabManager = TabManager;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TabManager;
+}
+})();

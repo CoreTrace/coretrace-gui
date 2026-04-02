@@ -51,8 +51,10 @@ function createWindow () {
     icon: iconApp,
     frame: false,               // Custom frame for consistency across platforms
     webPreferences: {
-      nodeIntegration: true,      // allows require() in renderer
-      contextIsolation: false,    // disables security isolation
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
       webSecurity: false          // For loading local fonts
     }
   });
@@ -89,8 +91,10 @@ function createVisualizerWindow() {
     backgroundColor: '#0d1117',
     autoHideMenuBar: true,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
       webSecurity: false
     }
   });

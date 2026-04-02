@@ -1,3 +1,4 @@
+;(function() {
 /**
  * Notification Manager - Handles user notifications and messages
  */
@@ -242,4 +243,8 @@ class NotificationManager {
   }
 }
 
-module.exports = NotificationManager;
+window.NotificationManager = NotificationManager;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = NotificationManager;
+}
+})();

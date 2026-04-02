@@ -1,10 +1,13 @@
+;(function() {
 /**
  * Scalable Syntax Highlighter for C/C++ code
  * Provides real-time syntax highlighting with optimized performance for large files
  */
 
 // Load syntax configuration
-const syntaxConfig = require('./syntax-config.json');
+const syntaxConfig = (typeof window !== 'undefined' && window.api && window.api.syntaxConfig)
+  ? window.api.syntaxConfig
+  : (typeof require === 'function' ? require('./syntax-config.json') : {});
 
 // Cache for language configurations
 let languageCache = {};
@@ -295,3 +298,4 @@ if (typeof window !== 'undefined') {
     tokensToHtml
   };
 }
+})();
