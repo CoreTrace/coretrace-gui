@@ -1,3 +1,4 @@
+;(function() {
 /**
  * Diagnostics Manager - Handles CTrace diagnostics visualization
  * Manages parsing, display, filtering, and Monaco editor integration
@@ -659,4 +660,10 @@ class DiagnosticsManager {
   }
 }
 
-module.exports = DiagnosticsManager;
+if (typeof window !== 'undefined') {
+  window.DiagnosticsManager = DiagnosticsManager;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = DiagnosticsManager;
+}
+})();

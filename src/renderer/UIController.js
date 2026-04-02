@@ -1,14 +1,8 @@
-// Import manager classes
-const NotificationManager = require('./managers/NotificationManager');
-const MonacoEditorManager = require('./managers/MonacoEditorManager');
-const TabManager = require('./managers/TabManager');
-const SearchManager = require('./managers/SearchManager');
-const FileOperationsManager = require('./managers/FileOperationsManager');
-const DiagnosticsManager = require('./managers/DiagnosticsManager');
-const StateManager = require('./managers/StateManager');
-
-// Import utilities
-const fileTypeUtils = require('./utils/fileTypeUtils');
+;(function() {
+// Manager classes and utilities are loaded via <script> tags in index.html
+// and are available as globals: NotificationManager, MonacoEditorManager,
+// TabManager, SearchManager, FileOperationsManager, DiagnosticsManager,
+// StateManager, fileTypeUtils (window.detectFileType, etc.)
 
 /**
  * Main UI Controller - Coordinates all managers and components
@@ -234,9 +228,8 @@ class UIController {
     if (!versionEl) return;
 
     try {
-      const packageJson = require('../../package.json');
-      const appName = packageJson.productName || packageJson.name || 'CTraceGUI';
-      const appVersion = packageJson.version || '0.0.0';
+      const appName = window.api.appInfo.name;
+      const appVersion = window.api.appInfo.version;
       versionEl.textContent = `${appName} v${appVersion}`;
     } catch (error) {
       console.warn('Failed to load app version from package.json:', error);
@@ -290,7 +283,7 @@ class UIController {
     }
     // Request updated file tree from main process
     try {
-      const result = await window.ipcRenderer.invoke('get-file-tree', workspacePath);
+      const result = await window.api.invoke('get-file-tree', workspacePath);
       if (result.success) {
         const folderName = workspacePath.split(/[/\\]/).pop();
         this.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
@@ -314,7 +307,7 @@ class UIController {
     this._fileTreeWatcherInitialized = true;
 
     let refreshTimer = null;
-    window.ipcRenderer.on('workspace-changed', (event, data) => {
+    window.api.on('workspace-changed', (data) => {
       if (!data || !data.success) {
         if (data && data.error) {
           console.error('Error in workspace change notification:', data.error);
@@ -337,7 +330,7 @@ class UIController {
     this._workspaceLoadingNotification = null;
     this._workspaceLoadingRequestId = null;
 
-    window.ipcRenderer.on('workspace-loading', (event, data) => {
+    window.api.on('workspace-loading', (data) => {
       if (!data || !data.status) return;
 
       // Only react for the active workspace.
@@ -385,7 +378,7 @@ class UIController {
    */
   setupWSLStatusListener() {
     // Listen for WSL status updates from main process
-    window.ipcRenderer.on('wsl-status', (event, data) => {
+    window.api.on('wsl-status', (data) => {
       this.wslAvailable = data.available && data.hasDistros;
       
       if (this.platform === 'win32') {
@@ -409,7 +402,7 @@ class UIController {
     });
 
     // Listen for WSL installation dialog responses
-    window.ipcRenderer.on('wsl-install-response', (event, data) => {
+    window.api.on('wsl-install-response', (data) => {
       if (data.action === 'install') {
         this.notificationManager.showInfo(
           'WSL installation initiated. Please follow the installation prompts and restart the application when complete.'
@@ -422,7 +415,7 @@ class UIController {
     });
 
     // Request initial WSL status check
-    window.ipcRenderer.send('check-wsl-status');
+    window.api.send('check-wsl-status');
   }
 
   /**
@@ -453,7 +446,7 @@ class UIController {
       }
     };
 
-    window.ipcRenderer.invoke('backend-get-status')
+    window.api.invoke('backend-get-status')
       .then((res) => {
         if (res && res.success && res.status) {
           applyBackendStatus(res.status);
@@ -477,7 +470,7 @@ class UIController {
       indicator.onclick = null;
     };
 
-    window.ipcRenderer.on('updater-status', (event, data) => {
+    window.api.on('updater-status', (data) => {
       if (!data || !data.type) return;
 
       if (data.type === 'backend-checking-for-update' || data.type === 'backend-update-not-available' || data.type === 'backend-update-installed' || data.type === 'backend-error') {
@@ -519,7 +512,7 @@ class UIController {
           `Click to restart and install${version}`
         );
         indicator.onclick = () => {
-          window.ipcRenderer.invoke('updater-install-update').catch(() => {});
+          window.api.invoke('updater-install-update').catch(() => {});
         };
       } else if (data.type === 'error') {
         hideIndicator();
@@ -704,7 +697,7 @@ class UIController {
     const autoInstallBtn = document.getElementById('auto-install-wsl');
     if (autoInstallBtn) {
       autoInstallBtn.onclick = () => {
-        window.ipcRenderer.send('install-wsl');
+        window.api.send('install-wsl');
         closeDialog();
         this.notificationManager.showInfo('WSL installation started. Please follow any prompts that appear.');
       };
@@ -713,7 +706,7 @@ class UIController {
     const installUbuntuBtn = document.getElementById('install-ubuntu');
     if (installUbuntuBtn) {
       installUbuntuBtn.onclick = () => {
-        window.ipcRenderer.send('install-wsl-distro', 'Ubuntu');
+        window.api.send('install-wsl-distro', 'Ubuntu');
         closeDialog();
         this.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
       };
@@ -730,79 +723,33 @@ class UIController {
    * @private
    */
   setupTitleBarControls() {
-    const { remote } = require('electron');
-    const currentWindow = remote ? remote.getCurrentWindow() : require('electron').remote?.getCurrentWindow();
-    
-    // If remote is not available, use IPC
-    if (!currentWindow) {
-      // Setup IPC-based window controls
-      const minimizeBtn = document.getElementById('minimize-btn');
-      const maximizeBtn = document.getElementById('maximize-btn');
-      const closeBtn = document.getElementById('close-btn');
-      
-      if (minimizeBtn) {
-        minimizeBtn.addEventListener('click', () => {
-          window.ipcRenderer.send('window-minimize');
-        });
-      }
-      
-      if (maximizeBtn) {
-        maximizeBtn.addEventListener('click', () => {
-          window.ipcRenderer.send('window-maximize-toggle');
-        });
-      }
-      
-      if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-          window.ipcRenderer.send('window-close');
-        });
-      }
-      
-      // Listen for window state changes
-      window.ipcRenderer.on('window-maximized', (event, isMaximized) => {
-        document.body.classList.toggle('window-maximized', isMaximized);
-      });
-      
-      return;
-    }
-    
-    // Direct window control (if remote is available)
+    // Setup IPC-based window controls (via secure preload bridge)
     const minimizeBtn = document.getElementById('minimize-btn');
     const maximizeBtn = document.getElementById('maximize-btn');
     const closeBtn = document.getElementById('close-btn');
     
     if (minimizeBtn) {
       minimizeBtn.addEventListener('click', () => {
-        currentWindow.minimize();
+        window.api.send('window-minimize');
       });
     }
     
     if (maximizeBtn) {
       maximizeBtn.addEventListener('click', () => {
-        if (currentWindow.isMaximized()) {
-          currentWindow.unmaximize();
-        } else {
-          currentWindow.maximize();
-        }
+        window.api.send('window-maximize-toggle');
       });
     }
     
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
-        currentWindow.close();
+        window.api.send('window-close');
       });
     }
     
-    // Update maximize button icon based on window state
-    const updateMaximizeButton = () => {
-      document.body.classList.toggle('window-maximized', currentWindow.isMaximized());
-    };
-    
-    currentWindow.on('maximize', updateMaximizeButton);
-    currentWindow.on('unmaximize', updateMaximizeButton);
-    
-    // Initial state
-    updateMaximizeButton();
+    // Listen for window state changes
+    window.api.on('window-maximized', (isMaximized) => {
+      document.body.classList.toggle('window-maximized', isMaximized);
+    });
   }
 
   /**
@@ -1162,7 +1109,7 @@ class UIController {
     if (!fileName) return;
 
     try {
-      const result = await window.ipcRenderer.invoke('create-file', directoryPath, fileName);
+      const result = await window.api.invoke('create-file', directoryPath, fileName);
       if (result.success) {
         this.notificationManager.showSuccess(`Created file "${result.name}"`);
         await this.refreshFileTree(true);
@@ -1179,7 +1126,7 @@ class UIController {
     if (!folderName) return;
 
     try {
-      const result = await window.ipcRenderer.invoke('create-folder', directoryPath, folderName);
+      const result = await window.api.invoke('create-folder', directoryPath, folderName);
       if (result.success) {
         this.notificationManager.showSuccess(`Created folder "${result.name}"`);
         await this.refreshFileTree(true);
@@ -1197,7 +1144,7 @@ class UIController {
     if (!newName) return;
 
     try {
-      const result = await window.ipcRenderer.invoke('rename-path', targetPath, newName);
+      const result = await window.api.invoke('rename-path', targetPath, newName);
       if (result.success) {
         // Update open tab if the renamed item is an open file
         if (result.isFile) {
@@ -1233,7 +1180,7 @@ class UIController {
     }
 
     try {
-      const result = await window.ipcRenderer.invoke('delete-path', targetPath);
+      const result = await window.api.invoke('delete-path', targetPath);
       if (result.success) {
         this.notificationManager.showSuccess('Deleted successfully');
         await this.refreshFileTree(true);
@@ -1621,7 +1568,7 @@ class UIController {
         
         console.log("invoke run-ctrace with WSL path:", wslFilePath);
         console.log("Custom arguments:", args);
-        const result = await window.ipcRenderer.invoke('run-ctrace', args);
+        const result = await window.api.invoke('run-ctrace', args);
         console.log("after exec result");
         console.log(result);
         if (result && result.success) {
@@ -1728,7 +1675,7 @@ class UIController {
     let currentChannel = 'main';
 
     try {
-      const result = await window.ipcRenderer.invoke('updater-get-settings');
+      const result = await window.api.invoke('updater-get-settings');
       if (result && result.success && result.settings && result.settings.channel) {
         currentChannel = result.settings.channel;
       }
@@ -1807,7 +1754,7 @@ class UIController {
     if (checkBtn) {
       checkBtn.onclick = async () => {
         try {
-          const result = await window.ipcRenderer.invoke('updater-check-now');
+          const result = await window.api.invoke('updater-check-now');
           if (result && result.success) {
             this.notificationManager.showInfo('Update check started. You will be notified if an update is available.');
           } else {
@@ -1825,7 +1772,7 @@ class UIController {
         const selectedChannel = channelSelect ? channelSelect.value : 'main';
 
         try {
-          const result = await window.ipcRenderer.invoke('updater-set-channel', selectedChannel);
+          const result = await window.api.invoke('updater-set-channel', selectedChannel);
           if (result && result.success) {
             this.notificationManager.showSuccess(`Update channel saved: ${selectedChannel}`);
             closeModal();
@@ -1944,7 +1891,7 @@ class UIController {
    */
   toggleVisualyzerPanel() {
     // Open visualyzer in a separate window
-    window.ipcRenderer.send('open-visualyzer');
+    window.api.send('open-visualyzer');
   }
 
   closeVisualyzer() {
@@ -2395,7 +2342,7 @@ class UIController {
 
       try {
         // All providers go through IPC (main process)
-        const result = await window.ipcRenderer.invoke('assistant-chat', {
+        const result = await window.api.invoke('assistant-chat', {
           provider: cfg.provider,
           message: fullMessage,
           config: cfg
@@ -2445,8 +2392,7 @@ class UIController {
           const code = decodeURIComponent(escape(atob(base64Code)));
           
           try {
-            const { clipboard } = require('electron');
-            clipboard.writeText(code);
+            window.api.clipboard.writeText(code);
             btn.textContent = 'Copied!';
             setTimeout(() => btn.textContent = 'Copy', 2000);
           } catch (_) {
@@ -2732,7 +2678,7 @@ class UIController {
           if (browseBtn) {
             browseBtn.onclick = async () => {
               try {
-                const result = await window.ipcRenderer.invoke('select-llm-file');
+                const result = await window.api.invoke('select-llm-file');
                 if (result && result.filePath) {
                   pathInput.value = result.filePath;
                 }
@@ -2880,7 +2826,7 @@ class UIController {
       // Persist and close
       this.saveAssistantConfig(cfg);
       // Notify main process in case it needs to warm things up
-      try { window.ipcRenderer.send('assistant-config-updated', cfg); } catch (_) {}
+      try { window.api.send('assistant-config-updated', cfg); } catch (_) {}
       closeModal(cfg);
     };
 
@@ -3054,7 +3000,7 @@ class UIController {
     console.log('[StateManagement] Auto-save started');
 
     // Listen for app-before-quit event from main process
-    window.ipcRenderer.on('app-before-quit', async () => {
+    window.api.on('app-before-quit', async () => {
       console.log('[StateManagement] Received app-before-quit, saving state...');
       await this.stateManager.saveStateDebounced(true); // Immediate save
     });
@@ -3085,7 +3031,7 @@ class UIController {
     if (result && result.success) {
       this.searchManager.setWorkspacePath(result.folderPath);
       try {
-        window.ipcRenderer.invoke('watch-workspace', result.folderPath);
+        window.api.invoke('watch-workspace', result.folderPath);
       } catch (_) {
         // Ignore watcher startup failures
       }
@@ -3103,7 +3049,7 @@ class UIController {
     try {
       const normalizedPath = filePath.replace(/\\\\/g, '\\');
       
-      const result = await window.ipcRenderer.invoke('read-file', normalizedPath);
+      const result = await window.api.invoke('read-file', normalizedPath);
       console.log('Search result read result:', result);
       
       if (result.success) {
@@ -3119,7 +3065,7 @@ class UIController {
             return;
           } else if (userChoice === 'yes') {
             console.log('Search result: User chose to open file anyway');
-            const forceResult = await window.ipcRenderer.invoke('force-open-file', normalizedPath);
+            const forceResult = await window.api.invoke('force-open-file', normalizedPath);
             console.log('Search result: Force open result:', forceResult);
             
             if (forceResult.success) {
@@ -3173,4 +3119,7 @@ if (typeof document !== 'undefined') {
   });
 }
 
-module.exports = UIController;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = UIController;
+}
+})();

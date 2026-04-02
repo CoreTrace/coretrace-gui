@@ -209,11 +209,10 @@
   <input type="file" id="visualyzer-file-input" accept=".dot,.gv" style="display: none;">
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="renderer/managers/VisualyzerManager.js"></script>
   <script>
     // Wait for D3 to load before initializing VisualyzerManager
     window.addEventListener('load', () => {
-      const VisualyzerManager = require('./renderer/managers/VisualyzerManager');
-      
       let visualyzerManager;
 
       // Initialize after a short delay to ensure D3 is fully loaded
