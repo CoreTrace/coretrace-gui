@@ -53,60 +53,107 @@ function looksLikeStackAnalyzerJson(json) {
   );
 }
 
-function buildToolErrorDiagnostics(textChunks, inputFile) {
-  const diags = [];
-  const joined = (textChunks || []).join('\n');
+function normalizeToolName(toolName) {
+  if (typeof toolName !== 'string') return '';
+  const trimmed = toolName.trim();
+  return trimmed || '';
+}
 
-  // Common execution failures we should not silently ignore.
-  const patterns = [
-    /can't open file[^\n]*/gi,
-    /No such file or directory[^\n]*/gi,
-    /Traceback \(most recent call last\):[\s\S]*?(?=\n\s*\n|$)/g,
-    /\bERROR\b[^\n]*/gi
+function inferToolNameFromMessage(message, fallbackToolName = '') {
+  const msg = String(message || '');
+  const normalizedFallback = normalizeToolName(fallbackToolName);
+
+  // Check for Python traceback (indicates Python-based tool)
+  if (msg.includes('Traceback (most recent call last)')) {
+    const scriptMatch = msg.match(/File "([^"]+)"/);
+    if (scriptMatch) {
+      const scriptPath = scriptMatch[1];
+      const scriptName = scriptPath.split(/[/\\]/).pop();
+      if (scriptName && scriptName.endsWith('.py')) {
+        return scriptName.replace('.py', '');
+      }
+    }
+    return normalizedFallback || 'PythonTool';
+  }
+
+  const toolPatterns = [
+    /(?:Running|Executing|Invoking|Error in|Failed to run)\s+([a-zA-Z0-9_\-]+)/i,
+    /^([a-zA-Z0-9_\-]+):\s*(?:error|ERROR|Error)/i,
+    /\[([a-zA-Z0-9_\-]+)\]/i,
+    /ctrace[_-]?([a-zA-Z0-9_\-]+)/i,
   ];
 
+  for (const toolRe of toolPatterns) {
+    const toolMatch = msg.match(toolRe);
+    if (toolMatch && toolMatch[1]) {
+      return toolMatch[1];
+    }
+  }
+
+  return normalizedFallback || 'UnknownTool';
+}
+
+function isLikelyExecutionFailureLine(line) {
+  if (typeof line !== 'string') return false;
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  const hardFailurePatterns = [
+    /can't open file/i,
+    /no such file or directory/i,
+    /unknown tool/i,
+    /failed to run/i,
+    /tool execution failed/i,
+    /\bexception\b/i,
+    /\btraceback\b/i
+  ];
+
+  if (hardFailurePatterns.some((re) => re.test(trimmed))) return true;
+
+  // Avoid turning diagnostic payloads or status lines into synthetic tool errors.
+  if (/^"?severity"?\s*[:=]/i.test(trimmed) || /"severity"\s*:\s*"(?:ERROR|WARNING|INFO)"/i.test(trimmed)) {
+    return false;
+  }
+  if (/^\{.*\}$/.test(trimmed) || /^\[.*\]$/.test(trimmed)) {
+    try {
+      JSON.parse(trimmed);
+      return false;
+    } catch (_) {
+      // Fall through for non-JSON lines that merely resemble JSON.
+    }
+  }
+
+  // Generic ERROR lines only count if they also include a strong failure keyword.
+  return /\bERROR\b/i.test(trimmed) && /\b(failed|failure|exception|unknown|invalid|missing|cannot|can't|unable|denied|unsupported)\b/i.test(trimmed);
+}
+
+function buildToolErrorDiagnostics(textEntries, inputFile) {
+  const diags = [];
   const seen = new Set();
-  for (const re of patterns) {
-    const matches = joined.match(re) || [];
-    for (const m of matches) {
-      const msg = String(m).trim();
-      if (!msg) continue;
-      if (seen.has(msg)) continue;
-      seen.add(msg);
+  for (const entry of textEntries || []) {
+    const message = typeof entry === 'string' ? entry : entry && entry.message;
+    const fallbackToolName = typeof entry === 'string' ? '' : entry && entry.toolName;
+    const msg = String(message || '').trim();
+    if (!msg) continue;
 
-      // Try to extract tool name from the error message
-      let toolName = 'UnknownTool';
-      
-      // Check for common tool patterns
-      const toolPatterns = [
-        /(?:Running|Executing|Invoking|Error in|Failed to run)\s+([a-zA-Z0-9_\-]+)/i,
-        /^([a-zA-Z0-9_\-]+):\s*(?:error|ERROR|Error)/i,
-        /\[([a-zA-Z0-9_\-]+)\]/i,
-        /ctrace[_-]?([a-zA-Z0-9_\-]+)/i,
-      ];
-      
-      for (const toolRe of toolPatterns) {
-        const toolMatch = msg.match(toolRe);
-        if (toolMatch && toolMatch[1]) {
-          toolName = toolMatch[1];
-          break;
+    const matches = [];
+    const tracebackMatch = msg.match(/Traceback \(most recent call last\):[\s\S]*?(?=\n\s*\n|$)/i);
+    if (tracebackMatch) {
+      matches.push(tracebackMatch[0].trim());
+    } else {
+      for (const line of msg.split('\n')) {
+        if (isLikelyExecutionFailureLine(line)) {
+          matches.push(line.trim());
         }
       }
-      
-      // Check for Python traceback (indicates Python-based tool)
-      if (msg.includes('Traceback (most recent call last)')) {
-        toolName = 'PythonTool';
-        // Try to find the script name
-        const scriptMatch = msg.match(/File "([^"]+)"/);
-        if (scriptMatch) {
-          const scriptPath = scriptMatch[1];
-          const scriptName = scriptPath.split(/[/\\]/).pop();
-          if (scriptName && scriptName.endsWith('.py')) {
-            toolName = scriptName.replace('.py', '');
-          }
-        }
-      }
+    }
 
+    for (const match of matches) {
+      if (seen.has(match)) continue;
+      seen.add(match);
+
+      const toolName = inferToolNameFromMessage(match, fallbackToolName);
+      const toolError = describeToolExecutionFailure(match, toolName);
       diags.push({
         id: `tool-error-${seen.size}`,
         severity: 'ERROR',
@@ -120,13 +167,60 @@ function buildToolErrorDiagnostics(textChunks, inputFile) {
           endColumn: 1
         },
         details: {
-          message: msg
+          message: toolError.summary,
+          rawMessage: msg,
+          failureKind: toolError.kind,
+          toolName,
+          suggestion: toolError.suggestion
         }
       });
     }
   }
 
   return diags;
+}
+
+function describeToolExecutionFailure(message, toolName) {
+  const normalizedTool = normalizeToolName(toolName) || 'requested tool';
+  const msg = String(message || '').trim();
+
+  if (/unknown tool/i.test(msg) || /not available/i.test(msg) || /unsupported tool/i.test(msg)) {
+    return {
+      kind: 'tool-unavailable',
+      summary: `${normalizedTool} was requested but is not available in this backend.`,
+      suggestion: `Check the requested tool name and confirm that ${normalizedTool} is installed and enabled.`
+    };
+  }
+
+  if (/no such file or directory/i.test(msg) || /can't open file/i.test(msg) || /cannot open shared object file/i.test(msg)) {
+    return {
+      kind: 'tool-startup-failed',
+      summary: `${normalizedTool} failed to start because a required file or runtime dependency is missing.`,
+      suggestion: `Verify that ${normalizedTool} and its required runtime files are installed on this system.`
+    };
+  }
+
+  if (/\btraceback\b/i.test(msg) || /\bexception\b/i.test(msg)) {
+    return {
+      kind: 'tool-crashed',
+      summary: `${normalizedTool} failed while running and reported an internal exception.`,
+      suggestion: `Inspect the tool output below for the stack trace and verify the tool's own runtime dependencies.`
+    };
+  }
+
+  if (/failed to run/i.test(msg) || /tool execution failed/i.test(msg) || /\bERROR\b/i.test(msg)) {
+    return {
+      kind: 'tool-execution-failed',
+      summary: `${normalizedTool} failed during execution.`,
+      suggestion: `Inspect the tool output below for the exact failure reported by ${normalizedTool}.`
+    };
+  }
+
+  return {
+    kind: 'tool-error',
+    summary: `${normalizedTool} reported an execution error.`,
+    suggestion: `Inspect the tool output below for more details from ${normalizedTool}.`
+  };
 }
 
 function isOutputsEnvelope(result) {
@@ -147,7 +241,13 @@ function extractAllTextMessagesFromOutputs(outputs) {
     if (!Array.isArray(entries)) continue;
     for (const e of entries) {
       if (!e) continue;
-      if (typeof e.message === 'string' && e.message.trim()) out.push(e.message);
+      if (typeof e.message === 'string' && e.message.trim()) {
+        out.push({
+          toolName,
+          stream: e.stream || '',
+          message: e.message
+        });
+      }
     }
   }
   return out;

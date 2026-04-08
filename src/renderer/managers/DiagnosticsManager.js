@@ -204,6 +204,45 @@ class DiagnosticsManager {
     return parsed;
   }
 
+  getDiagnosticPresentation(diag) {
+    const ruleId = String(diag?.ruleId || '');
+    const details = diag?.details || {};
+    const toolName = String(details.toolName || ruleId.replace(/^ToolExecutionError\./, '') || 'tool');
+    const friendlyToolName = toolName === 'UnknownTool' ? 'requested tool' : toolName;
+    const rawMessage = typeof details.rawMessage === 'string' ? details.rawMessage.trim() : '';
+    const suggestion = typeof details.suggestion === 'string' ? details.suggestion.trim() : '';
+    const primaryMessage = typeof details.message === 'string' ? details.message.trim() : '';
+
+    if (ruleId.startsWith('ToolExecutionError.')) {
+      const fallbackSummary = rawMessage
+        ? `${friendlyToolName} failed.`
+        : `${friendlyToolName} failed to run.`;
+      return {
+        title: `${friendlyToolName} execution failed`,
+        subtitle: primaryMessage || fallbackSummary,
+        note: suggestion || 'Open the tool output for the exact failure details.',
+        rawMessage
+      };
+    }
+
+    if (ruleId === 'Unknown.Tool') {
+      return {
+        title: 'Requested tool is not recognized',
+        subtitle: primaryMessage || 'The backend did not recognize one of the requested analysis tools.',
+        note: suggestion || 'Check the tool name and confirm it is supported by the installed backend.',
+        rawMessage
+      };
+    }
+
+    const parsed = this.parseMessage(primaryMessage || rawMessage);
+    return {
+      title: ruleId,
+      subtitle: parsed.problem || primaryMessage || rawMessage || 'No additional details were provided for this diagnostic.',
+      note: parsed.details || '',
+      rawMessage
+    };
+  }
+
   /**
    * Render metadata section
    * @returns {string} HTML string for metadata
@@ -275,7 +314,8 @@ class DiagnosticsManager {
     const diagnosticsHtml = filteredDiagnostics.map(diag => {
       const severityColor = this.severityColors[diag.severity] || '#7d8590';
       const icon = this.getSeverityIcon(diag.severity);
-      const parsed = this.parseMessage(diag.details.message);
+      const parsed = this.parseMessage((diag.details && (diag.details.message || diag.details.rawMessage)) || '');
+      const presentation = this.getDiagnosticPresentation(diag);
       
       return `
         <div class="diagnostic-item" data-diag-id="${this.escapeHtml(diag.id)}" onclick="window.diagnosticsManager.jumpToDiagnostic('${this.escapeHtml(diag.id)}')">
@@ -285,7 +325,7 @@ class DiagnosticsManager {
             </div>
             <div class="diagnostic-item-info">
               <div class="diagnostic-title">
-                <span class="diagnostic-rule">${this.escapeHtml(diag.ruleId)}</span>
+                <span class="diagnostic-rule">${this.escapeHtml(presentation.title)}</span>
                 <span class="diagnostic-separator">•</span>
                 <span class="diagnostic-function">${this.escapeHtml(diag.location.function)}</span>
               </div>
@@ -295,9 +335,11 @@ class DiagnosticsManager {
             </div>
           </div>
           <div class="diagnostic-item-details">
+            ${presentation.subtitle ? `<div class="detail-row detail-note">${this.escapeHtml(presentation.subtitle)}</div>` : ''}
             ${parsed.variable ? `<div class="detail-row"><span class="detail-label">Variable:</span> <code>${this.escapeHtml(parsed.variable)}</code></div>` : ''}
             ${parsed.escapesVia ? `<div class="detail-row"><span class="detail-label">Escapes via:</span> <code>${this.escapeHtml(parsed.escapesVia)}</code></div>` : ''}
-            ${parsed.details ? `<div class="detail-row detail-note">${this.escapeHtml(parsed.details)}</div>` : ''}
+            ${presentation.note ? `<div class="detail-row detail-note">${this.escapeHtml(presentation.note)}</div>` : ''}
+            ${presentation.rawMessage ? `<div class="detail-row detail-note">${this.escapeHtml(presentation.rawMessage)}</div>` : ''}
           </div>
         </div>
       `;
@@ -488,14 +530,15 @@ class DiagnosticsManager {
    * @returns {string} Formatted hover message
    */
   formatDiagnosticHover(diag) {
-    const parsed = this.parseMessage(diag.details.message);
+    const parsed = this.parseMessage((diag.details && (diag.details.message || diag.details.rawMessage)) || '');
+    const presentation = this.getDiagnosticPresentation(diag);
 
     const esc = (value) => this.escapeMarkdownText(value);
-    const rawMessage = (diag && diag.details && typeof diag.details.message === 'string')
+    const rawMessage = presentation.rawMessage || ((diag && diag.details && typeof diag.details.message === 'string')
       ? diag.details.message.trim()
-      : '';
+      : '');
     
-    let message = `**[${esc(diag.severity)}] ${esc(diag.ruleId)}**\n\n`;
+    let message = `**[${esc(diag.severity)}] ${esc(presentation.title)}**\n\n`;
     message += `**Function:** ${esc(diag.location.function)}\n\n`;
     message += `**Location:** Line ${diag.location.startLine}`;
     
@@ -505,9 +548,17 @@ class DiagnosticsManager {
     
     message += `\n\n---\n\n`;
 
+    if (presentation.subtitle) {
+      message += `**Summary:** ${esc(presentation.subtitle)}\n\n`;
+    }
+
+    if (presentation.note) {
+      message += `**Suggested action:** ${esc(presentation.note)}\n\n`;
+    }
+
     if (rawMessage) {
       // Keep backend message intact and preserve line breaks in markdown hover.
-      message += `**Message:** ${esc(rawMessage).replace(/\n/g, '  \\n')}\n\n`;
+      message += `**Tool output:** ${esc(rawMessage).replace(/\n/g, '  \\n')}\n\n`;
     }
     
     if (parsed.variable) {

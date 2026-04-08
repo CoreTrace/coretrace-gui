@@ -195,3 +195,110 @@ test('run-ctrace handler flattens result.outputs stack analyzer JSON', async (t)
   platformMock.mock.restore();
 });
 
+test('run-ctrace handler ignores generic ERROR text from normal tool output', async (t) => {
+  const handlers = new Map();
+  const electronStub = {
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler)
+    }
+  };
+
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    callApi: t.mock.fn(async () => ({
+      ok: true,
+      statusCode: 200,
+      json: {
+        result: {
+          outputs: {
+            ctrace_stack_analyzer: [
+              {
+                stream: 'stdout',
+                message: '{"severity":"ERROR","ruleId":"StackPointerEscape","message":"normal diagnostic payload"}'
+              }
+            ]
+          }
+        }
+      }
+    })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace'
+  };
+
+  const { setupCtraceHandlers } = withModuleMocks({
+    electron: electronStub,
+    '../utils/ctraceServeClient': serveClientStub
+  }, () => {
+    const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
+    delete require.cache[modulePath];
+    return require(modulePath);
+  });
+
+  const accessMock = t.mock.method(fsPromises, 'access', async () => {});
+  const platformMock = t.mock.method(os, 'platform', () => 'linux');
+
+  setupCtraceHandlers();
+  const response = await handlers.get('run-ctrace')(null, []);
+
+  assert.strictEqual(response.success, true);
+  assert.strictEqual(response.output.includes('ToolExecutionError.UnknownTool'), false);
+
+  accessMock.mock.restore();
+  platformMock.mock.restore();
+});
+
+test('run-ctrace handler preserves tool name for real unknown tool failures', async (t) => {
+  const handlers = new Map();
+  const electronStub = {
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler)
+    }
+  };
+
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    callApi: t.mock.fn(async () => ({
+      ok: true,
+      statusCode: 200,
+      json: {
+        result: {
+          outputs: {
+            ctrace_stack_analyzer: [
+              {
+                stream: 'stderr',
+                message: 'ERROR: unknown tool requested by backend'
+              }
+            ]
+          }
+        }
+      }
+    })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace'
+  };
+
+  const { setupCtraceHandlers } = withModuleMocks({
+    electron: electronStub,
+    '../utils/ctraceServeClient': serveClientStub
+  }, () => {
+    const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
+    delete require.cache[modulePath];
+    return require(modulePath);
+  });
+
+  const accessMock = t.mock.method(fsPromises, 'access', async () => {});
+  const platformMock = t.mock.method(os, 'platform', () => 'linux');
+
+  setupCtraceHandlers();
+  const response = await handlers.get('run-ctrace')(null, []);
+
+  assert.strictEqual(response.success, true);
+  const parsed = JSON.parse(response.output);
+  assert.ok(Array.isArray(parsed.diagnostics));
+  assert.strictEqual(parsed.diagnostics.length, 1);
+  assert.strictEqual(parsed.diagnostics[0].ruleId, 'ToolExecutionError.ctrace_stack_analyzer');
+
+  accessMock.mock.restore();
+  platformMock.mock.restore();
+});
+
