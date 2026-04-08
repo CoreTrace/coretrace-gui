@@ -25,6 +25,12 @@ function getManagedBinaryPath() {
   return path.join(userDataPath, 'bin', 'ctrace');
 }
 
+function getManagedLibPath() {
+  const userDataPath = getUserDataPath();
+  if (!userDataPath) return null;
+  return path.join(userDataPath, 'lib');
+}
+
 function getBackendStatePath() {
   const userDataPath = getUserDataPath();
   if (!userDataPath) return null;
@@ -202,11 +208,67 @@ async function installBinary(extractedBinaryPath, targetBinaryPath) {
   }
 }
 
+async function installDirectory(sourceDir, targetDir) {
+  await fs.rm(targetDir, { recursive: true, force: true }).catch(() => {});
+  await fs.mkdir(path.dirname(targetDir), { recursive: true });
+  await fs.cp(sourceDir, targetDir, {
+    recursive: true,
+    // Runtime archives use symlinked SONAME entries like libedit.so.2 -> libedit.so.2.0.72.
+    // Preserve the actual files at install time so the installed tree does not contain
+    // links back into the temporary extraction directory that is deleted after install.
+    dereference: true
+  });
+}
+
+async function findRuntimeLibDir(rootDir) {
+  const entries = await fs.readdir(rootDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(rootDir, entry.name);
+    if (!entry.isDirectory()) continue;
+
+    if (/^lib(?:64)?$/i.test(entry.name)) {
+      const nestedEntries = await fs.readdir(fullPath, { withFileTypes: true });
+      const hasSharedLibs = nestedEntries.some((nested) => (
+        nested.isFile() &&
+        /\.so(?:\.[0-9]+)*$/.test(nested.name)
+      ));
+      if (hasSharedLibs) return fullPath;
+    }
+
+    const nestedFound = await findRuntimeLibDir(fullPath);
+    if (nestedFound) return nestedFound;
+  }
+
+  return null;
+}
+
+async function isRuntimeLibDirHealthy(libDir) {
+  try {
+    const entries = await fs.readdir(libDir, { withFileTypes: true });
+    if (!entries.length) return false;
+
+    for (const entry of entries) {
+      const fullPath = path.join(libDir, entry.name);
+      try {
+        await fs.stat(fullPath);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    return entries.some((entry) => /^libedit\.so\.2(?:\..*)?$/.test(entry.name));
+  } catch (_) {
+    return false;
+  }
+}
+
 async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {}) {
   const platformTag = getTargetPlatformForBackend();
   const archTag = getTargetArchTag();
   const userDataPath = getUserDataPath();
   const managedBinaryPath = getManagedBinaryPath();
+  const managedLibPath = getManagedLibPath();
   const state = await readBackendUpdaterState();
 
   if (!platformTag || !archTag) {
@@ -217,7 +279,7 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
     };
   }
 
-  if (!userDataPath || !managedBinaryPath) {
+  if (!userDataPath || !managedBinaryPath || !managedLibPath) {
     return {
       success: true,
       skipped: true,
@@ -266,6 +328,7 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
   if (await fileExists(currentBinaryPath)) {
     currentBinarySha = await sha256File(currentBinaryPath);
   }
+  const runtimeLibsHealthy = await isRuntimeLibDirHealthy(managedLibPath);
 
   if (
     !force &&
@@ -274,7 +337,8 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
     state.arch === archTag &&
     state.platform === platformTag &&
     state.binarySha256 &&
-    state.binarySha256 === currentBinarySha
+    state.binarySha256 === currentBinarySha &&
+    runtimeLibsHealthy
   ) {
     return {
       success: true,
@@ -326,10 +390,11 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
     if (!extractedBinaryPath) {
       throw new Error(`Could not locate ctrace binary inside ${tarAsset.name}`);
     }
+    const extractedLibDir = await findRuntimeLibDir(extractDir);
 
     const downloadedBinarySha = await sha256File(extractedBinaryPath);
 
-    if (currentBinarySha && currentBinarySha === downloadedBinarySha) {
+    if (currentBinarySha && currentBinarySha === downloadedBinarySha && runtimeLibsHealthy) {
       await writeBackendUpdaterState({
         releaseTag,
         platform: platformTag,
@@ -351,6 +416,18 @@ async function checkAndUpdateBackendBinary({ log = () => {}, force = false } = {
       to: managedBinaryPath
     });
     await installBinary(extractedBinaryPath, managedBinaryPath);
+
+    if (extractedLibDir) {
+      log('Installing backend runtime libraries', {
+        from: extractedLibDir,
+        to: managedLibPath
+      });
+      await installDirectory(extractedLibDir, managedLibPath);
+    } else {
+      log('Backend archive did not include a runtime library directory', {
+        archive: tarAsset.name
+      });
+    }
 
     const installedBinarySha = await sha256File(managedBinaryPath);
     if (installedBinarySha !== downloadedBinarySha) {
