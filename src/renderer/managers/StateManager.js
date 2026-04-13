@@ -362,6 +362,9 @@ class StateManager {
             const folderName = state.workspacePath.split(/[\/\\]/).pop();
             window.uiController.fileOpsManager.currentWorkspacePath = state.workspacePath;
             window.uiController.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
+            if (window.uiController.searchManager) {
+              window.uiController.searchManager.setWorkspacePath(state.workspacePath);
+            }
             console.log('[StateManager] Workspace restored successfully');
           }
         } catch (error) {

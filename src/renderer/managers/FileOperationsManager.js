@@ -123,6 +123,11 @@ class FileOperationsManager {
       fileTreeElement.innerHTML = '';
     }
 
+    if (window.uiController && window.uiController.searchManager) {
+      window.uiController.searchManager.setWorkspacePath(null);
+      window.uiController.searchManager.clearSearchResults();
+    }
+
     this.notificationManager.showSuccess(`Workspace "${workspaceName}" closed`);
   }
 
