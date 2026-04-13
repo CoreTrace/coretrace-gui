@@ -31,8 +31,11 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   git add -A
   git commit -m "$COMMIT_MSG"
 else
-  echo "No local code changes to commit."
+echo "No local code changes to commit."
 fi
+
+echo "Building renderer bundle..."
+npm run build:renderer
 
 echo "Running tests..."
 npm test

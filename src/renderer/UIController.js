@@ -3125,9 +3125,6 @@ class UIController {
           this.notificationManager.showSuccess(`Opened ${result.fileName} at line ${lineNumber}`);
         }
         
-        // Switch to explorer view and wait for editor to be ready
-        this.showExplorer();
-        
         // Wait for the tab to switch and editor to update, then jump to line
         setTimeout(() => {
           this.editorManager.jumpToLine(lineNumber);

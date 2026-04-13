@@ -2367,6 +2367,11 @@ class FileOperationsManager {
       fileTreeElement.innerHTML = '';
     }
 
+    if (window.uiController && window.uiController.searchManager) {
+      window.uiController.searchManager.setWorkspacePath(null);
+      window.uiController.searchManager.clearSearchResults();
+    }
+
     this.notificationManager.showSuccess(`Workspace "${workspaceName}" closed`);
   }
 
@@ -4006,6 +4011,9 @@ class StateManager {
             const folderName = state.workspacePath.split(/[\/\\]/).pop();
             window.uiController.fileOpsManager.currentWorkspacePath = state.workspacePath;
             window.uiController.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
+            if (window.uiController.searchManager) {
+              window.uiController.searchManager.setWorkspacePath(state.workspacePath);
+            }
             console.log('[StateManager] Workspace restored successfully');
           }
         } catch (error) {
@@ -7204,9 +7212,6 @@ class UIController {
           
           this.notificationManager.showSuccess(`Opened ${result.fileName} at line ${lineNumber}`);
         }
-        
-        // Switch to explorer view and wait for editor to be ready
-        this.showExplorer();
         
         // Wait for the tab to switch and editor to update, then jump to line
         setTimeout(() => {
