@@ -1,9 +1,16 @@
 {
   "name": "ctrace-gui",
-  "version": "4.4.1",
+  "version": "4.5.0",
   "description": "A modern Electron-based GUI for CTrace static analysis tool",
   "main": "src/main.js",
   "scripts": {
+    "build:renderer": "node scripts/build-renderer-bundle.js",
+    "prestart": "npm run build:renderer",
+    "predist": "npm run build:renderer",
+    "predist:publish": "npm run build:renderer",
+    "predist:win": "npm run build:renderer",
+    "predist:mac": "npm run build:renderer",
+    "predist:linux": "npm run build:renderer",
     "test": "node --test",
     "test:wsl": "node src/main/utils/wslTest.js",
     "start": "electron .",
@@ -60,7 +67,7 @@
     "asarUnpack": [],
     "afterPack": "./scripts/remove-locales.js",
     "appId": "com.coretrace.ctracegui",
-    "compression": "maximum",
+    "compression": "normal",
     "productName": "CtraceGUI",
     "win": {
       "target": "nsis",
