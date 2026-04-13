@@ -1,25 +1,38 @@
 const { contextBridge, ipcRenderer, clipboard } = require('electron');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs/promises');
 
-// Read package.json for app info
-let appInfo = { name: 'CTraceGUI', version: '0.0.0' };
-try {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
-  appInfo = {
-    name: packageJson.productName || packageJson.name || 'CTraceGUI',
-    version: packageJson.version || '0.0.0',
-  };
-} catch (e) {
-  console.warn('Failed to load package.json in preload:', e);
+let appInfoPromise = null;
+let syntaxConfigPromise = null;
+
+function loadAppInfo() {
+  if (!appInfoPromise) {
+    appInfoPromise = fs.readFile(path.join(__dirname, '..', 'package.json'), 'utf-8')
+      .then((raw) => JSON.parse(raw))
+      .then((packageJson) => ({
+        name: packageJson.productName || packageJson.name || 'CTraceGUI',
+        version: packageJson.version || '0.0.0',
+      }))
+      .catch((error) => {
+        console.warn('Failed to load package.json in preload:', error);
+        return { name: 'CTraceGUI', version: '0.0.0' };
+      });
+  }
+
+  return appInfoPromise;
 }
 
-// Read syntax-config.json for the renderer's syntax highlighter
-let syntaxConfig = {};
-try {
-  syntaxConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'renderer', 'utils', 'syntax-config.json'), 'utf-8'));
-} catch (e) {
-  console.warn('Failed to load syntax-config.json in preload:', e);
+function loadSyntaxConfig() {
+  if (!syntaxConfigPromise) {
+    syntaxConfigPromise = fs.readFile(path.join(__dirname, 'renderer', 'utils', 'syntax-config.json'), 'utf-8')
+      .then((raw) => JSON.parse(raw))
+      .catch((error) => {
+        console.warn('Failed to load syntax-config.json in preload:', error);
+        return {};
+      });
+  }
+
+  return syntaxConfigPromise;
 }
 
 const monacoBasePath = path.join(__dirname, '..', 'node_modules', 'monaco-editor', 'min', 'vs').replace(/\\/g, '/');
@@ -64,6 +77,7 @@ const SEND_CHANNELS = [
   'window-maximize-toggle',
   'window-close',
   'open-visualyzer',
+  'startup-ready',
   'check-wsl-status',
   'install-wsl',
   'install-wsl-distro',
@@ -117,10 +131,10 @@ contextBridge.exposeInMainWorld('api', {
     writeText: (text) => clipboard.writeText(text),
   },
 
-  appInfo,
-  syntaxConfig,
   platform: process.platform,
 
+  getAppInfo: () => loadAppInfo(),
+  getSyntaxConfig: () => loadSyntaxConfig(),
   getMonacoBasePath: () => monacoBasePath,
 });
 
