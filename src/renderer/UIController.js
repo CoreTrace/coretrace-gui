@@ -4,6 +4,26 @@
 // TabManager, SearchManager, FileOperationsManager, DiagnosticsManager,
 // StateManager, fileTypeUtils (window.detectFileType, etc.)
 
+const appLaunchStartedAt = Date.now();
+const appLaunchPerfStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
+
+function formatStartupTimestamp(timestamp) {
+  return new Date(timestamp).toISOString();
+}
+
+function runAfterFirstPaint(callback) {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    setTimeout(callback, 0);
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    setTimeout(callback, 0);
+  });
+}
+
+console.log(`[StartupTiming] App launch detected at ${formatStartupTimestamp(appLaunchStartedAt)}`);
+
 /**
  * Main UI Controller - Coordinates all managers and components
  * 
@@ -176,7 +196,6 @@ class UIController {
    */
   init() {
     this.setupEventListeners();
-    this.updateAppVersionLabel();
     this.setupKeyboardShortcuts();
     this.setupResizing();
     this.setupMenus();
@@ -197,43 +216,39 @@ class UIController {
       });
     }
 
-    // Set up file system watcher for auto-refresh
-    this.setupFileTreeWatcher();
-
-    // Set up auto-save feature
-    this.loadAutoSaveState();
-    this.setupAutoSaveListener();
-
     // Set up state management for work loss prevention
     this.setupStateManagement();
-
-    // Set up explorer file tree context menu (right click)
-    this.setupFileTreeContextMenu();
-    
-    // Set up custom title bar controls
     this.setupTitleBarControls();
-    
-    // Set up WSL status listener
-    this.setupWSLStatusListener();
-
-    // Set up updater status listener
-    this.setupUpdaterStatusListener();
+    this.deferNonCriticalStartup();
   }
 
   /**
    * Update status bar app version label from package metadata.
    */
-  updateAppVersionLabel() {
+  async updateAppVersionLabel() {
     const versionEl = document.getElementById('tool_version');
     if (!versionEl) return;
 
     try {
-      const appName = window.api.appInfo.name;
-      const appVersion = window.api.appInfo.version;
+      const appInfo = await window.api.getAppInfo();
+      const appName = appInfo.name;
+      const appVersion = appInfo.version;
       versionEl.textContent = `${appName} v${appVersion}`;
     } catch (error) {
       console.warn('Failed to load app version from package.json:', error);
     }
+  }
+
+  deferNonCriticalStartup() {
+    runAfterFirstPaint(() => {
+      this.updateAppVersionLabel();
+      this.setupFileTreeWatcher();
+      this.loadAutoSaveState();
+      this.setupAutoSaveListener();
+      this.setupFileTreeContextMenu();
+      this.setupWSLStatusListener();
+      this.setupUpdaterStatusListener();
+    });
   }
 
   /**
@@ -2985,10 +3000,26 @@ class UIController {
     setTimeout(async () => {
       try {
         const restored = await this.stateManager.restoreState();
+        const sessionReadyAt = Date.now();
+        const elapsedMs = (typeof performance !== 'undefined' ? performance.now() : 0) - appLaunchPerfStartedAt;
         if (restored) {
           console.log('[StateManagement] Application state restored successfully');
+          console.log(
+            `[StartupTiming] Restored session ready at ${formatStartupTimestamp(sessionReadyAt)} ` +
+            `(${Math.round(elapsedMs)}ms since launch)`
+          );
+          window.api.send('startup-ready', {
+            restored: true,
+            timestamp: sessionReadyAt,
+            elapsedMs
+          });
         } else {
           console.log('[StateManagement] No previous state found or restoration failed');
+          window.api.send('startup-ready', {
+            restored: false,
+            timestamp: sessionReadyAt,
+            elapsedMs
+          });
         }
       } catch (error) {
         console.error('[StateManagement] Error restoring state:', error);

@@ -35,47 +35,39 @@
   <!-- Monaco Editor Loader -->
   <script>
     const monacoBasePath = window.api.getMonacoBasePath();
-    
-    // Load Monaco's AMD loader
-    const loaderScript = document.createElement('script');
-    loaderScript.src = monacoBasePath + '/loader.js';
-    loaderScript.onload = () => {
-      // Configure AMD loader paths
-      require.config({ paths: { 'vs': monacoBasePath } });
-      
-      // Set up Monaco environment - disable web workers for Electron
-      window.MonacoEnvironment = {
-        getWorker: function (workerId, label) {
-          // Return undefined to disable workers (simpler for Electron)
-          return undefined;
-        }
+
+    function loadMonacoEditor() {
+      const loaderScript = document.createElement('script');
+      loaderScript.src = monacoBasePath + '/loader.js';
+      loaderScript.onload = () => {
+        require.config({ paths: { 'vs': monacoBasePath } });
+
+        window.MonacoEnvironment = {
+          getWorker: function () {
+            return undefined;
+          }
+        };
+
+        require(['vs/editor/editor.main'], function() {
+          window.monaco = monaco;
+          console.log('Monaco Editor loaded successfully');
+          window.dispatchEvent(new Event('monaco-loaded'));
+        });
       };
-      
-      // Load Monaco Editor
-      require(['vs/editor/editor.main'], function() {
-        window.monaco = monaco;
-        console.log('Monaco Editor loaded successfully');
-        // Dispatch event to let other scripts know Monaco is ready
-        window.dispatchEvent(new Event('monaco-loaded'));
-      });
-    };
-    document.head.appendChild(loaderScript);
+      document.head.appendChild(loaderScript);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(loadMonacoEditor);
+      } else {
+        setTimeout(loadMonacoEditor, 0);
+      }
+    });
   </script>
   
-  <!-- Load renderer modules (dependency order: utils -> managers -> controller) -->
-  <script src="renderer/utils/fileTypeUtils.js"></script>
-  <script src="renderer/utils/syntaxHighlighter.js"></script>
-  <script src="renderer/managers/NotificationManager.js"></script>
-  <script src="renderer/managers/MonacoEditorManager.js"></script>
-  <script src="renderer/managers/TabManager.js"></script>
-  <script src="renderer/managers/SearchManager.js"></script>
-  <script src="renderer/managers/FileOperationsManager.js"></script>
-  <script src="renderer/managers/DiagnosticsManager.js"></script>
-  <script src="renderer/managers/StateManager.js"></script>
-  <script src="renderer/UIController.js"></script>
+  <script src="renderer/bundle.js" defer></script>
   
-  <!-- D3.js for interactive graph visualization (deferred for faster startup) -->
-  <script src="https://d3js.org/d3.v7.min.js" defer></script>
 </head>
 <body>
   <!-- Custom Title Bar -->
