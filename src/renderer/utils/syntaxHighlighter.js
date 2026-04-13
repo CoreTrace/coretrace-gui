@@ -4,10 +4,17 @@
  * Provides real-time syntax highlighting with optimized performance for large files
  */
 
-// Load syntax configuration
-const syntaxConfig = (typeof window !== 'undefined' && window.api && window.api.syntaxConfig)
-  ? window.api.syntaxConfig
-  : (typeof require === 'function' ? require('./syntax-config.json') : {});
+// Load syntax configuration lazily so preload does not block renderer startup.
+let syntaxConfig = {};
+const syntaxConfigReady = (typeof window !== 'undefined' && window.api && typeof window.api.getSyntaxConfig === 'function')
+  ? window.api.getSyntaxConfig()
+      .then((config) => {
+        syntaxConfig = config || {};
+        languageCache = {};
+        return syntaxConfig;
+      })
+      .catch(() => syntaxConfig)
+  : Promise.resolve(syntaxConfig);
 
 // Cache for language configurations
 let languageCache = {};
@@ -290,6 +297,7 @@ if (typeof module !== 'undefined' && module.exports) {
 // Make available globally
 if (typeof window !== 'undefined') {
   window.syntaxHighlighter = {
+    ready: syntaxConfigReady,
     highlightCppSyntax,
     applySyntaxHighlight,
     shouldHighlight,

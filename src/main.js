@@ -13,7 +13,29 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+const appLaunchStartedAt = Date.now();
+const appLaunchHrStartedAt = process.hrtime.bigint();
+
+function formatStartupTimestamp(timestamp) {
+  return new Date(timestamp).toISOString();
+}
+
+function getStartupElapsedMs() {
+  return Number(process.hrtime.bigint() - appLaunchHrStartedAt) / 1e6;
+}
+
+function logStartupMilestone(message) {
+  const now = Date.now();
+  console.log(
+    `[StartupTiming] ${message} at ${formatStartupTimestamp(now)} ` +
+    `(${Math.round(getStartupElapsedMs())}ms since process start)`
+  );
+}
+
+console.log(`[StartupTiming] Main process entry at ${formatStartupTimestamp(appLaunchStartedAt)}`);
+
 // Fix disk cache errors by disabling cache or using in-memory cache
+app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('disk-cache-size', '1');
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
@@ -40,15 +62,19 @@ const { setupUpdaterHandlers, setupAutoUpdater } = require('./main/ipc/updaterHa
  * const mainWindow = createWindow();
  */
 function createWindow () {
+  logStartupMilestone('createWindow start');
   const iconPath = path.join(__dirname, '../assets/ctrace.png');
   const iconApp = nativeImage.createFromPath(iconPath);
+  logStartupMilestone('Window icon loaded');
 
+  logStartupMilestone('Constructing BrowserWindow');
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
     icon: iconApp,
+    backgroundColor: '#0d1117',
     frame: false,               // Custom frame for consistency across platforms
     webPreferences: {
       nodeIntegration: false,
@@ -59,6 +85,17 @@ function createWindow () {
     }
   });
 
+  logStartupMilestone('BrowserWindow created');
+
+  win.once('ready-to-show', () => {
+    logStartupMilestone('Main window ready-to-show');
+  });
+
+  win.webContents.once('did-finish-load', () => {
+    logStartupMilestone('Renderer did-finish-load');
+  });
+
+  logStartupMilestone('Calling loadFile(src/index.html)');
   win.loadFile('src/index.html');
   
   // Custom window controls for frameless window
@@ -458,10 +495,12 @@ async function showLimitedFunctionalityDialog() {
 
 //hot reload
 try {
-  require('electron-reload')(__dirname, {
-  electron: require(path.join(__dirname, '../node_modules/electron')),
-  hardResetMethod: 'exit'
-  });
+  if (!app.isPackaged) {
+    require('electron-reload')(__dirname, {
+      electron: require(path.join(__dirname, '../node_modules/electron')),
+      hardResetMethod: 'exit'
+    });
+  }
 } catch (e) {
   console.log("electron-reload not active");
 }
@@ -537,10 +576,49 @@ function setupWindowControls(window) {
       await showWSLSetupDialog(wslStatus);
     }
   });
+
+  ipcMain.on('startup-ready', (_event, payload = {}) => {
+    const status = payload.restored ? 'restored-session-ready' : 'app-ready-without-restored-session';
+    const rendererTimestamp = payload.timestamp ? formatStartupTimestamp(payload.timestamp) : 'unknown';
+    const rendererElapsedMs = typeof payload.elapsedMs === 'number' ? Math.round(payload.elapsedMs) : 'unknown';
+    logStartupMilestone(
+      `${status}; rendererTimestamp=${rendererTimestamp}; rendererElapsedMs=${rendererElapsedMs}ms`
+    );
+    schedulePostStartupTasks(mainWindow);
+  });
 }
 
 // Global reference to main window
 let mainWindow;
+let postStartupTasksScheduled = false;
+
+function schedulePostStartupTasks(window) {
+  if (postStartupTasksScheduled || !window || window.isDestroyed()) return;
+  postStartupTasksScheduled = true;
+
+  logStartupMilestone('Scheduling post-startup background tasks');
+
+  setTimeout(async () => {
+    try {
+      logStartupMilestone('Starting deferred auto-updater setup');
+      await setupAutoUpdater(window);
+      logStartupMilestone('Deferred auto-updater setup complete');
+    } catch (error) {
+      console.warn('[Main] Deferred auto-updater setup failed:', error?.message || error);
+    }
+
+    setTimeout(async () => {
+      try {
+        console.log('[Main] Preloading CTrace server...');
+        const { ensureServerRunning } = require('./main/utils/ctraceServeClient');
+        await ensureServerRunning();
+        console.log('[Main] CTrace server preloaded successfully');
+      } catch (error) {
+        console.warn('[Main] CTrace server preload failed (will retry on first request):', error.message);
+      }
+    }, 1000);
+  }, 0);
+}
 
 let isQuitting = false;
 app.on('before-quit', async (event) => {
@@ -571,6 +649,7 @@ app.on('before-quit', async (event) => {
 });
 
 app.whenReady().then(async () => {
+  logStartupMilestone('app.whenReady resolved');
   // Create window first
   mainWindow = createWindow();
   
@@ -582,19 +661,9 @@ app.whenReady().then(async () => {
   setupStateHandlers();
   setupUpdaterHandlers(mainWindow);
   setupWindowControls(mainWindow);
-  await setupAutoUpdater(mainWindow);
-  
-  // Preload CTrace server in background (don't block GUI startup)
-  setTimeout(async () => {
-    try {
-      console.log('[Main] Preloading CTrace server...');
-      const { ensureServerRunning } = require('./main/utils/ctraceServeClient');
-      await ensureServerRunning();
-      console.log('[Main] CTrace server preloaded successfully');
-    } catch (error) {
-      console.warn('[Main] CTrace server preload failed (will retry on first request):', error.message);
-    }
-  }, 1000);
+  mainWindow.once('ready-to-show', () => {
+    schedulePostStartupTasks(mainWindow);
+  });
   
   // Check WSL status on Windows after window is ready
   if (os.platform() === 'win32') {
