@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 34px;
+  min-height: 28px;
   color: var(--text-primary);
   user-select: none;
   position: relative;
@@ -34,7 +34,7 @@
   align-items: center;
   min-width: 0;
   max-width: min(420px, 100%);
-  padding: 8px 16px;
+  padding: 4px 12px;
 }
 
 .title-bar-title {
@@ -76,7 +76,7 @@
 .title-bar-controls-pill {
   display: flex;
   align-items: center;
-  padding: 4px;
+  padding: 2px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
 }
@@ -88,8 +88,8 @@
 }
 
 .title-bar-control {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
@@ -124,7 +124,7 @@
   }
 
   .title-bar-brand-pill {
-    padding: 7px 14px;
+    padding: 3px 10px;
   }
 
   .title-bar-app-tag {

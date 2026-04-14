@@ -299,6 +299,7 @@ async function ensureServerRunning(options = {}) {
 
   startingPromise = (async () => {
     const binPath = resolveBinaryPath();
+    console.log(`[ctrace] binary path: ${binPath}`);
     try {
       await fs.access(binPath);
     } catch (e) {
@@ -321,8 +322,14 @@ async function ensureServerRunning(options = {}) {
         return `'${str.replace(/'/g, `'"'"'`)}'`;
       };
 
-      const cwd = options && typeof options.cwd === 'string' ? options.cwd : '';
-      const wslCwd = cwd ? toWslPath(cwd) : '';
+      // Default CWD: parent of the binary's containing directory (i.e. parent of bin/).
+      // This ensures ctrace always runs from the same relative location in both dev
+      // (coretrace-gui/) and production (resources/) so tool/model path resolution
+      // inside the binary is consistent regardless of where Electron was launched from.
+      const defaultCwd = path.dirname(path.dirname(binPath));
+      const cwdOverride = options && typeof options.cwd === 'string' ? options.cwd : '';
+      const resolvedCwd = cwdOverride || defaultCwd;
+      const wslCwd = toWslPath(resolvedCwd);
       const cmd = `${wslCwd ? `cd ${bashEscape(wslCwd)} && ` : ''}${bashEscape(wslBinPath)} ${args.map(bashEscape).join(' ')}`;
 
       // Use bash -lc so the environment is closer to interactive WSL runs

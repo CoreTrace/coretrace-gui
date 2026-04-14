@@ -358,6 +358,9 @@ function argsToRunAnalysisParams(args = []) {
   if (typeof out.dynamic_analysis === 'undefined') out.dynamic_analysis = false;
   if (typeof out.async === 'undefined') out.async = false;
 
+  // Default to full analysis profile so all functions (not just entry points) are analyzed.
+  if (typeof out.analysis_profile === 'undefined') out.analysis_profile = 'full';
+
   // `input` is required by the backend.
   if (out.input && !Array.isArray(out.input)) out.input = ensureArray(out.input);
 
@@ -383,6 +386,7 @@ function setupCtraceHandlers() {
   ipcMain.handle('run-ctrace', async (_event, args = []) => {
     // Validate binary presence early (for a clear error message).
     try {
+      console.log('[ctrace debug] Binary path:', resolveBinaryPath());
       await fs.access(resolveBinaryPath());
     } catch (e) {
       return { success: false, error: `ctrace binary not found: ${e.message}` };
@@ -396,15 +400,13 @@ function setupCtraceHandlers() {
 
     try {
       const params = argsToRunAnalysisParams(args);
-      const cwd = deriveCwdFromInputPath(Array.isArray(params.input) ? params.input[0] : null);
 
       if (DEBUG_BACKEND_REQUESTS) {
         console.log('[ctrace debug] run-ctrace args:', JSON.stringify(args));
         console.log('[ctrace debug] run-ctrace params:', JSON.stringify(params));
-        console.log('[ctrace debug] run-ctrace cwd:', cwd || '(empty)');
       }
 
-      await ensureServerRunning({ cwd });
+      await ensureServerRunning();
       const captureSince = Date.now();
       const apiRes = await callApi('run_analysis', params);
 
