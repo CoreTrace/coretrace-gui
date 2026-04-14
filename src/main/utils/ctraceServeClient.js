@@ -336,11 +336,13 @@ async function ensureServerRunning(options = {}) {
       // (and so `cd` works regardless of the default directory).
       proc = spawn('wsl', ['bash', '-lc', cmd], { stdio: 'pipe', windowsHide: true });
     } else {
-      const spawnOpts = { stdio: 'pipe' };
-      if (options && typeof options.cwd === 'string' && options.cwd) {
-        spawnOpts.cwd = options.cwd;
-      }
-      proc = spawn(binPath, args, spawnOpts);
+      // Linux / WSL-launched process: wrap in bash -lc to get a proper login
+      // environment (PATH, LLVM, etc.) consistent with interactive WSL sessions.
+      const bashEscapeLinux = (s) => `'${String(s ?? '').replace(/'/g, `'"'"'`)}'`;
+      const defaultCwdLinux = path.dirname(path.dirname(binPath));
+      const cwdLinux = (options && typeof options.cwd === 'string' && options.cwd) || defaultCwdLinux;
+      const cmd = `${cwdLinux ? `cd ${bashEscapeLinux(cwdLinux)} && ` : ''}${bashEscapeLinux(binPath)} ${args.map(bashEscapeLinux).join(' ')}`;
+      proc = spawn('bash', ['-lc', cmd], { stdio: 'pipe' });
     }
 
     proc.stdout.on('data', (d) => {
