@@ -2,3 +2,7 @@ dist
 .env
 node_modules
 .codex
+.claude
+.claw
+.claw-cache
+.claw-logs

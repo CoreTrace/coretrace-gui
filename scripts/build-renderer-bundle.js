@@ -14,6 +14,7 @@ const inputFiles = [
   'src/renderer/managers/FileOperationsManager.js',
   'src/renderer/managers/DiagnosticsManager.js',
   'src/renderer/managers/StateManager.js',
+  'src/renderer/managers/TerminalManager.js',
   'src/renderer/UIController.js',
 ];
 
