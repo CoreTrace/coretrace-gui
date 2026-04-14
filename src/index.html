@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="styles/resizers.css">
   <link rel="stylesheet" href="styles/titlebar.css">
   <link rel="stylesheet" href="styles/diagnostics.css">
+  <link rel="stylesheet" href="styles/terminal.css">
   
   <!-- Use system fonts only for better performance -->
   <style>
@@ -70,37 +71,45 @@
   
 </head>
 <body>
-  <!-- Custom Title Bar -->
-  <div class="title-bar">
-    <div class="title-bar-drag-region">
-      <div class="title-bar-title">
-        <img src="../assets/ctrace.png" alt="CTrace" class="title-bar-icon">
-        <span>CTrace GUI</span>
+  <div class="window-shell">
+    <!-- Custom Title Bar -->
+    <div class="title-bar">
+      <div class="title-bar-drag-region">
+        <div class="title-bar-pill title-bar-brand-pill">
+          <div class="title-bar-title">
+            <img src="../assets/ctrace.png" alt="CTrace" class="title-bar-icon">
+            <div class="title-bar-copy">
+              <span class="title-bar-app-name">Coretrace GUI</span>
+              <!-- <span class="title-bar-app-tag">Floating Workspace</span> -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="title-bar-pill title-bar-controls-pill">
+        <div class="title-bar-controls">
+          <button class="title-bar-control" id="minimize-btn" title="Minimize">
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <path d="M0,5 L10,5" stroke="currentColor" stroke-width="1"/>
+            </svg>
+          </button>
+          <button class="title-bar-control" id="maximize-btn" title="Maximize">
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <path d="M0,0 L10,0 L10,10 L0,10 Z" stroke="currentColor" stroke-width="1" fill="none"/>
+            </svg>
+          </button>
+          <button class="title-bar-control close" id="close-btn" title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <path d="M0,0 L10,10 M10,0 L0,10" stroke="currentColor" stroke-width="1"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
-    <div class="title-bar-controls">
-      <button class="title-bar-control" id="minimize-btn" title="Minimize">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M0,5 L10,5" stroke="currentColor" stroke-width="1"/>
-        </svg>
-      </button>
-      <button class="title-bar-control" id="maximize-btn" title="Maximize">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M0,0 L10,0 L10,10 L0,10 Z" stroke="currentColor" stroke-width="1" fill="none"/>
-        </svg>
-      </button>
-      <button class="title-bar-control close" id="close-btn" title="Close">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M0,0 L10,10 M10,0 L0,10" stroke="currentColor" stroke-width="1"/>
-        </svg>
-      </button>
-    </div>
-  </div>
-  
-  <div class="ide-container">
-    <!-- Main Content Area (Left Side) -->
-    <div class="main-content-area">
-      <!-- Activity Bar (Left) -->
+
+    <div class="ide-container">
+      <!-- Left Island -->
+      <div class="main-content-area app-surface">
+        <!-- Activity Bar (Left) -->
       <div class="activity-bar">
       <div class="activity-item active" id="explorer-activity" title="Explorer" onclick="showExplorer()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -112,11 +121,16 @@
           <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
         </svg>
       </div>
-      <!-- <div class="activity-item" title="Extensions" onclick="showExtensions()">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8.5 1a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z"/>
+
+      <!-- Spacer pushes terminal icon to the bottom -->
+      <div style="flex: 1;"></div>
+
+      <div class="activity-item" id="terminal-activity" title="Terminal (Ctrl+J)" onclick="toggleTerminalPanel()">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M6 9a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 6 9zM3.854 4.146a.5.5 0 1 0-.708.708L4.793 6.5 3.146 8.146a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708l-2-2z"/>
+          <path d="M2 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2H2zm12 1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h12z"/>
         </svg>
-      </div> -->
+      </div>
     </div>
 
     <!-- Sidebar -->
@@ -133,7 +147,7 @@
       <div class="sidebar-content">
         <div id="explorer-view">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="color: #7d8590; font-size: 11px; font-weight: 600;">WORKSPACE</div>
+            <div style="color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em;">WORKSPACE</div>
             <button id="refresh-file-tree" title="Refresh" style="background: none; border: none; cursor: pointer; padding: 2px;">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 1 .908-.418A4 4 0 1 0 8 4V1.5a.5.5 0 0 1 1 0v3A.5.5 0 0 1 8.5 5h-3a.5.5 0 0 1 0-1H8z"/>
@@ -141,13 +155,13 @@
             </button>
           </div>
           <div id="workspace-folder" style="display: none;">
-            <div style="color: #7d8590; font-size: 11px; margin-bottom: 8px; font-weight: 600; cursor: context-menu; user-select: none;" id="workspace-name" title="Right-click to close workspace"></div>
+            <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 8px; font-weight: 600; cursor: context-menu; user-select: none;" id="workspace-name" title="Right-click to close workspace"></div>
             <div id="file-tree" class="file-tree"></div>
           </div>
           <div id="no-workspace">
-            <div style="padding: 8px 12px; background: #21262d; border-radius: 6px; cursor: pointer; margin-bottom: 8px; transition: all 0.15s ease;" onclick="openWorkspace()">
+            <div style="padding: 10px 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; cursor: pointer; margin-bottom: 8px; transition: all 0.15s ease;" onclick="openWorkspace()">
               <div style="font-size: 12px; font-weight: 500;">📁 Open Folder</div>
-              <div style="font-size: 10px; color: #7d8590; margin-top: 2px;">Open a workspace or folder</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Open a workspace or folder</div>
             </div>
           </div>
         </div>
@@ -160,8 +174,10 @@
       </div>
     </div>
 
-    <!-- Main Editor Area -->
-    <div class="main">
+      </div>
+
+      <!-- Main Editor Area -->
+      <div class="main app-surface">
       <!-- Menu Bar -->
       <div class="menubar">
         <div class="menu-item" id="file-menu" onclick="toggleMenu('file-menu')">
@@ -246,6 +262,11 @@
               <span>Toggle Sidebar</span>
               <span class="shortcut">Ctrl+B</span>
             </div>
+            <div class="dropdown-separator"></div>
+            <div class="dropdown-item" onclick="toggleTerminalPanel(); hideAllMenus();">
+              <span>Terminal</span>
+              <span class="shortcut">Ctrl+J</span>
+            </div>
           </div>
         </div>
         
@@ -311,7 +332,7 @@
                 📁 Open Folder
               </button>
             </div>
-            <p style="font-size: 14px; color: #6e7681; margin-top: 24px;">
+            <p style="font-size: 14px; color: var(--text-muted); margin-top: 24px;">
               You can also use the <strong>File</strong> menu above to access all file operations.
             </p>
           </div>
@@ -330,7 +351,7 @@
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
               <p>Drag & Drop .dot file here</p>
-              <p style="font-size: 11px; color: #7d8590;">or click to browse</p>
+              <p style="font-size: 11px; color: var(--text-muted);">or click to browse</p>
               <input type="file" id="visualyzer-file-input" accept=".dot,.gv" style="display: none;">
             </div>
             
@@ -375,13 +396,64 @@
         </div>
       </div>
 
+      <!-- Terminal Panel (bottom, above status bar) -->
+      <div class="terminal-panel" id="terminalPanel">
+        <!-- Vertical drag-to-resize handle -->
+        <div class="terminal-resizer-top" id="terminal-resizer-top"></div>
+
+        <!-- Header: tabs + actions -->
+        <div class="terminal-header">
+          <div class="terminal-tabs-list" id="terminal-tabs-list"></div>
+
+          <div class="terminal-header-actions">
+            <!-- Shell selector -->
+            <button class="terminal-shell-btn" id="terminal-shell-btn" title="Select shell / New terminal" onclick="terminalToggleShellDropdown()">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5z"/>
+                <path d="M8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
+              </svg>
+              <span id="terminal-shell-label">Terminal</span>
+              <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/>
+              </svg>
+            </button>
+
+            <div class="terminal-divider"></div>
+
+            <!-- New terminal -->
+            <button class="terminal-action-btn" title="New Terminal" onclick="terminalNew()">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+              </svg>
+            </button>
+
+            <!-- Kill current process -->
+            <button class="terminal-action-btn" title="Kill Terminal (Ctrl+C)" onclick="terminalKill()">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+              </svg>
+            </button>
+
+            <!-- Close panel -->
+            <button class="terminal-action-btn" title="Close Terminal Panel" onclick="toggleTerminalPanel()">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal instances rendered here -->
+        <div class="terminal-body" id="terminal-body"></div>
+      </div>
+
       <!-- Status Bar -->
       <div class="statusbar">
         <div class="statusbar-left">
           <span id="lineCounter">Ln 1, Col 1</span>
           <span id="fileStatus">UTF-8</span>
           <span id="fileType">Plain Text</span>
-          <span id="autoSaveStatus" style="display: none; cursor: pointer; padding: 2px 6px; border-radius: 3px; background: rgba(30, 31, 34, 0.5);" title="Click to toggle auto save">💾 Auto Save: ON</span>
+          <span id="autoSaveStatus" style="display: none; cursor: pointer; padding: 2px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08);" title="Click to toggle auto save">Auto Save: ON</span>
         </div>
         <div class="statusbar-right">
           <span id="update-status-indicator" class="update-status-indicator" style="display:none;"></span>
@@ -389,11 +461,10 @@
           <span id="tool_version">CTraceGUI v0.1.0</span>
         </div>
       </div>
-    </div>
-    </div> <!-- End main-content-area -->
+      </div>
 
-    <!-- Ctrace Tools Panel (Right Side) -->
-    <div class="tools-panel" id="toolsPanel">
+      <!-- Ctrace Tools Panel (Right Side) -->
+      <div class="tools-panel app-surface" id="toolsPanel">
       <div class="resizer resizer-left" onmousedown="initToolsPanelResize(event)"></div>
       <div class="tools-panel-header">
         <span>Ctrace Tools</span>
@@ -403,7 +474,7 @@
         <!-- CTrace Configuration Section -->
         <div class="tools-section">
           <div class="section-header">
-            <span class="section-icon">⚙️</span>
+            <span class="section-icon" aria-hidden="true"></span>
             <span class="section-title">CTrace Configuration</span>
           </div>
           
@@ -432,7 +503,7 @@
         <!-- Diagnostics Results Area -->
         <div id="ctrace-results-area">
           <div class="ctrace-placeholder">
-            <div class="placeholder-icon">🔍</div>
+            <div class="placeholder-mark" aria-hidden="true"></div>
             <div class="placeholder-text">Run CTrace to analyze your code</div>
             <div class="placeholder-subtext">Configure arguments above and click Run</div>
           </div>
@@ -440,7 +511,5 @@
       </div>
     </div>
   </div>
-
-
 </body>
 </html>

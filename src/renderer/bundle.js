@@ -997,7 +997,8 @@ class MonacoEditorManager {
         showIcons: true,
         maxVisibleSuggestions: 12,
         filteredTypes: { 'keyword': false, 'snippet': true }
-      }
+      },
+      fixedOverflowWidgets: true
     });
 
     // Debugging for "blank" autocomplete dropdown.
@@ -1863,11 +1864,11 @@ class SearchManager {
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         const searchTerm = e.target.value.trim();
-        
+
         if (this.searchTimeout) {
           clearTimeout(this.searchTimeout);
         }
-        
+
         if (searchTerm.length >= 2 && this.currentWorkspacePath) {
           this.searchTimeout = setTimeout(() => {
             this.performWorkspaceSearch(searchTerm);
@@ -1917,7 +1918,7 @@ class SearchManager {
     }
 
     const text = this.editorManager.getContent();
-    
+
     if (!text) {
       this.updateSearchResults();
       return;
@@ -1926,15 +1927,14 @@ class SearchManager {
     try {
       const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       let match;
-      
+
       while ((match = regex.exec(text)) !== null) {
         this.currentSearchMatches.push({
           start: match.index,
           end: match.index + match[0].length,
           text: match[0]
         });
-        
-        // Prevent infinite loops with zero-length matches
+
         if (match.index === regex.lastIndex) {
           regex.lastIndex++;
         }
@@ -1956,7 +1956,7 @@ class SearchManager {
    */
   searchNext() {
     if (this.currentSearchMatches.length === 0) return;
-    
+
     this.currentMatchIndex = (this.currentMatchIndex + 1) % this.currentSearchMatches.length;
     this.highlightAllMatches();
     this.focusOnCurrentMatch();
@@ -1968,9 +1968,9 @@ class SearchManager {
    */
   searchPrev() {
     if (this.currentSearchMatches.length === 0) return;
-    
-    this.currentMatchIndex = this.currentMatchIndex <= 0 
-      ? this.currentSearchMatches.length - 1 
+
+    this.currentMatchIndex = this.currentMatchIndex <= 0
+      ? this.currentSearchMatches.length - 1
       : this.currentMatchIndex - 1;
     this.highlightAllMatches();
     this.focusOnCurrentMatch();
@@ -2024,11 +2024,9 @@ class SearchManager {
         }
       }
 
-      // Fallback to legacy textarea editor
       const editor = this.editorManager.editor;
       editor.focus();
       editor.setSelectionRange(match.start, match.end);
-      // Scroll to make the match visible
       const lines = editor.value.substring(0, match.start).split('\n');
       const lineNumber = lines.length;
       const approximateLineHeight = 20;
@@ -2062,14 +2060,13 @@ class SearchManager {
   showGoToLineDialog() {
     const dialog = document.getElementById('goto-dialog');
     const input = document.getElementById('goto-input');
-    
-    // Set max value based on current content
+
     const text = this.editorManager.getContent();
     if (text) {
       const lineCount = text.split('\n').length;
       input.max = lineCount;
     }
-    
+
     dialog.classList.add('visible');
     input.focus();
     input.select();
@@ -2088,28 +2085,28 @@ class SearchManager {
    */
   performGoToLine() {
     const input = document.getElementById('goto-input');
-    const lineNumber = parseInt(input.value);
-    
+    const lineNumber = parseInt(input.value, 10);
+
     if (!lineNumber || lineNumber < 1) {
       this.notificationManager.showError('Please enter a valid line number');
       return;
     }
-    
+
     const text = this.editorManager.getContent();
     if (text) {
       const lines = text.split('\n');
-      
+
       if (lineNumber > lines.length) {
         this.notificationManager.showError(`Line ${lineNumber} does not exist. Maximum line is ${lines.length}`);
         return;
       }
-      
+
       this.editorManager.jumpToLine(lineNumber);
       this.notificationManager.showSuccess(`Jumped to line ${lineNumber}`);
     } else {
       this.notificationManager.showError('No file is currently open');
     }
-    
+
     this.closeGoToLineDialog();
   }
 
@@ -2126,23 +2123,23 @@ class SearchManager {
     try {
       const searchResults = document.getElementById('search-results');
       if (searchResults) {
-        searchResults.innerHTML = '<div style="color: #7d8590; padding: 12px; text-align: center;">Searching...</div>';
+        searchResults.innerHTML = '<div class="search-results-state">Searching...</div>';
       }
-      
+
       const result = await window.api.invoke('search-in-files', searchTerm, this.currentWorkspacePath);
-      
+
       if (result.success) {
         this.displaySearchResults(result.results, searchTerm);
       } else {
         const searchResults = document.getElementById('search-results');
         if (searchResults) {
-          searchResults.innerHTML = '<div style="color: #f85149; padding: 12px;">Search failed: ' + result.error + '</div>';
+          searchResults.innerHTML = `<div class="search-results-state search-results-state-error">Search failed: ${this.escapeHtml(result.error || 'Unknown error')}</div>`;
         }
       }
     } catch (error) {
       const searchResults = document.getElementById('search-results');
       if (searchResults) {
-        searchResults.innerHTML = '<div style="color: #f85149; padding: 12px;">Search error: ' + error.message + '</div>';
+        searchResults.innerHTML = `<div class="search-results-state search-results-state-error">Search error: ${this.escapeHtml(error.message || 'Unknown error')}</div>`;
       }
     }
   }
@@ -2157,49 +2154,47 @@ class SearchManager {
     if (!searchResults) return;
 
     if (results.length === 0) {
-      searchResults.innerHTML = '<div style="color: #7d8590; padding: 12px; text-align: center;">No results found</div>';
+      searchResults.innerHTML = '<div class="search-results-state">No results found</div>';
       return;
     }
 
     const groupedResults = {};
-    results.forEach(result => {
+    results.forEach((result) => {
       if (!groupedResults[result.file]) {
         groupedResults[result.file] = [];
       }
       groupedResults[result.file].push(result);
     });
 
-    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-    
-    Object.keys(groupedResults).forEach(file => {
+    let html = '<div class="search-results-list">';
+
+    Object.keys(groupedResults).forEach((file) => {
       const fileResults = groupedResults[file];
       const fileName = file.split(/[/\\]/).pop();
       const relativePath = file.replace(this.currentWorkspacePath, '').replace(/^[/\\]/, '');
-      
-      // Escape the file path properly for onclick
       const escapedPath = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      
-      html += `<div class="search-result-item" style="display: flex; flex-direction: column;">`;
-      html += `<div class="search-result-file" onclick="window.searchManager.openSearchResult('${escapedPath}', ${fileResults[0].line})" style="margin-bottom: 4px;">${fileName}</div>`;
-      html += `<div class="search-result-line" style="margin-bottom: 6px;">${relativePath} • ${fileResults.length} result${fileResults.length > 1 ? 's' : ''}</div>`;
-      
-      // Show each line result individually in vertical layout
-      html += '<div style="display: flex; flex-direction: column; gap: 2px;">';
-      fileResults.forEach(result => {
-        const highlightedContent = result.content.replace(
+
+      html += '<div class="search-result-item">';
+      html += `<button class="search-result-file" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${fileResults[0].line})">${this.escapeHtml(fileName)}</button>`;
+      html += `<div class="search-result-line">${this.escapeHtml(relativePath)} • ${fileResults.length} result${fileResults.length > 1 ? 's' : ''}</div>`;
+      html += '<div class="search-result-matches">';
+
+      fileResults.forEach((result) => {
+        const highlightedContent = this.escapeHtml(result.content).replace(
           new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
-          match => `<span class="search-highlight">${match}</span>`
+          (match) => `<span class="search-highlight">${match}</span>`
         );
-        html += `<div class="search-result-content" onclick="window.searchManager.openSearchResult('${escapedPath}', ${result.line}); event.stopPropagation();" style="display: block; margin: 2px 0; padding: 4px 6px; cursor: pointer; border-radius: 3px; background: #161b22; border-left: 2px solid #1f6feb;" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#161b22'">`;
-        html += `<div style="color: #7d8590; font-size: 10px; margin-bottom: 2px;">Line ${result.line}:</div>`;
-        html += `<div style="font-family: monospace; font-size: 11px;">${highlightedContent}</div>`;
-        html += `</div>`;
+
+        html += `<button class="search-result-content" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${result.line}); event.stopPropagation();">`;
+        html += `<span class="search-result-line-number">Line ${result.line}</span>`;
+        html += `<span class="search-result-snippet">${highlightedContent}</span>`;
+        html += '</button>';
       });
+
       html += '</div>';
-      
       html += '</div>';
     });
-    
+
     html += '</div>';
     searchResults.innerHTML = html;
   }
@@ -2212,6 +2207,16 @@ class SearchManager {
     if (searchResults) {
       searchResults.innerHTML = '';
     }
+  }
+
+  escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**
@@ -3181,15 +3186,15 @@ class DiagnosticsManager {
     return `
       <div class="ctrace-metadata-compact">
         <div class="metadata-header">
-          <span class="metadata-icon">📊</span>
+          <span class="metadata-accent" aria-hidden="true"></span>
           <span class="metadata-file-name" title="${this.escapeHtml(meta.inputFile || 'N/A')}">${this.escapeHtml(this.getFileName(meta.inputFile))}</span>
           <span class="metadata-mode-badge">${this.escapeHtml(meta.mode || 'N/A')}</span>
         </div>
         <div class="metadata-stats">
-          <span class="stat-item" title="Tool Used">🔧 ${this.escapeHtml(meta.tool || 'ctrace')}</span>
-          <span class="stat-item" title="Functions Analyzed">⚡ ${this.currentFunctions.length} functions</span>
-          <span class="stat-item" title="Analysis Time">${meta.analysisTimeMs >= 0 ? '⏱️ ' + meta.analysisTimeMs + ' ms' : ''}</span>
-          <span class="stat-item" title="Stack Limit">💾 ${meta.stackLimit ? this.formatBytes(meta.stackLimit) : 'N/A'}</span>
+          <span class="stat-item" title="Tool Used"><span class="stat-label">Tool</span><span class="stat-value">${this.escapeHtml(meta.tool || 'ctrace')}</span></span>
+          <span class="stat-item" title="Functions Analyzed"><span class="stat-label">Functions</span><span class="stat-value">${this.currentFunctions.length}</span></span>
+          <span class="stat-item" title="Analysis Time"><span class="stat-label">Time</span><span class="stat-value">${meta.analysisTimeMs >= 0 ? meta.analysisTimeMs + ' ms' : 'Pending'}</span></span>
+          <span class="stat-item" title="Stack Limit"><span class="stat-label">Stack</span><span class="stat-value">${meta.stackLimit ? this.formatBytes(meta.stackLimit) : 'N/A'}</span></span>
         </div>
       </div>
     `;
@@ -3205,12 +3210,11 @@ class DiagnosticsManager {
         <div class="diagnostics-container">
           <div class="diagnostics-toolbar">
             <div class="diagnostics-count">
-              <span class="count-icon">✅</span>
+              <span class="count-badge count-badge-clear">Clear</span>
               <span class="count-text">No Issues Found</span>
             </div>
           </div>
           <div class="diagnostics-empty">
-            <div class="empty-icon">🎉</div>
             <div class="empty-text">All clear! No diagnostics reported.</div>
           </div>
         </div>
@@ -3247,18 +3251,16 @@ class DiagnosticsManager {
       return `
         <div class="diagnostic-item" data-diag-id="${this.escapeHtml(diag.id)}" onclick="window.diagnosticsManager.jumpToDiagnostic('${this.escapeHtml(diag.id)}')">
           <div class="diagnostic-item-header">
-            <div class="diagnostic-severity-icon" style="background: ${severityColor};">
+            <div class="diagnostic-severity-icon diagnostic-severity-icon-${String(diag.severity || '').toLowerCase()}" style="background: ${severityColor};">
               ${icon}
             </div>
             <div class="diagnostic-item-info">
               <div class="diagnostic-title">
                 <span class="diagnostic-rule">${this.escapeHtml(presentation.title)}</span>
-                <span class="diagnostic-separator">•</span>
+                <span class="diagnostic-separator">·</span>
                 <span class="diagnostic-function">${this.escapeHtml(diag.location.function)}</span>
               </div>
-              <div class="diagnostic-location">
-                📍 Line ${diag.location.startLine}${diag.location.startColumn ? ':' + diag.location.startColumn : ''}
-              </div>
+              <div class="diagnostic-location">Line ${diag.location.startLine}${diag.location.startColumn ? ':' + diag.location.startColumn : ''}</div>
             </div>
           </div>
           <div class="diagnostic-item-details">
@@ -3276,7 +3278,7 @@ class DiagnosticsManager {
       <div class="diagnostics-container">
         <div class="diagnostics-toolbar">
           <div class="diagnostics-count">
-            <span class="count-icon">🔍</span>
+            <span class="count-badge">${this.currentSeverityFilter === 'ALL' ? 'Overview' : this.escapeHtml(this.currentSeverityFilter)}</span>
             <span class="count-text">${summaryText}</span>
           </div>
           ${this.renderFilterDropdown()}
@@ -3296,10 +3298,10 @@ class DiagnosticsManager {
     return `
       <div class="severity-filter">
         <select id="severity-filter-select" onchange="window.diagnosticsManager.changeSeverityFilter(this.value)">
-          <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>🔍 All Issues</option>
-          <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>❌ Errors</option>
-          <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>⚠️ Warnings</option>
-          <option value="INFO" ${this.currentSeverityFilter === 'INFO' ? 'selected' : ''}>ℹ️ Info</option>
+          <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>All issues</option>
+          <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>Errors</option>
+          <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>Warnings</option>
+          <option value="INFO" ${this.currentSeverityFilter === 'INFO' ? 'selected' : ''}>Info</option>
         </select>
       </div>
     `;
@@ -3529,9 +3531,9 @@ class DiagnosticsManager {
    */
   getSeverityIcon(severity) {
     switch (severity) {
-      case 'ERROR': return '❌';
-      case 'WARNING': return '⚠️';
-      case 'INFO': return 'ℹ️';
+      case 'ERROR': return 'E';
+      case 'WARNING': return 'W';
+      case 'INFO': return 'I';
       default: return '•';
     }
   }
@@ -3583,7 +3585,7 @@ class DiagnosticsManager {
     if (resultsArea) {
       resultsArea.innerHTML = `
         <div class="ctrace-placeholder">
-          <div class="placeholder-icon">🔍</div>
+          <div class="placeholder-mark" aria-hidden="true"></div>
           <div class="placeholder-text">Run CTrace to analyze your code</div>
           <div class="placeholder-subtext">Click the button above to start</div>
         </div>
@@ -4085,6 +4087,597 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 })();
 
+// ----- src/renderer/managers/TerminalManager.js -----
+/**
+ * TerminalManager - Integrated terminal panel for CTraceGUI.
+ *
+ * Manages multiple terminal sessions inside the bottom panel.
+ * Each session tracks its own cwd, command history, and shell type.
+ * Commands are executed via IPC (main process spawns the child process).
+ */
+class TerminalManager {
+  constructor() {
+    this.terminals = new Map();   // id -> terminal state
+    this.activeId   = null;
+    this.counter    = 0;
+
+    this.shells         = [];
+    this.currentShellId = null;
+    this.currentShellPath = null;
+
+    this._dataUnsub = null;
+    this._doneUnsub = null;
+    this._shellDropdownOpen = false;
+
+    // Autocomplete state
+    this._lastTabTime = 0;  // for double-tap detection
+  }
+
+  // ─── Init ────────────────────────────────────────────────────────────────
+
+  async init() {
+    try {
+      this.shells = await window.api.invoke('terminal-get-shells');
+    } catch {
+      this.shells = [{ id: 'cmd', name: 'Command Prompt', icon: 'cmd' }];
+    }
+    if (this.shells.length) {
+      this.currentShellId   = this.shells[0].id;
+      this.currentShellPath = this.shells[0].path || null;
+    }
+
+    // IPC listeners
+    this._dataUnsub = window.api.on('terminal-data', ({ terminalId, data }) => {
+      this._appendOutput(terminalId, data);
+    });
+    this._doneUnsub = window.api.on('terminal-command-done', ({ terminalId, code }) => {
+      const term = this.terminals.get(terminalId);
+      if (!term) return;
+      term.running = false;
+      this._setInputEnabled(terminalId, true);
+      this._scrollBottom(terminalId);
+    });
+
+    // Close shell dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (
+        this._shellDropdownOpen &&
+        !e.target.closest('#terminal-shell-dropdown') &&
+        !e.target.closest('#terminal-shell-btn')
+      ) {
+        this._closeShellDropdown();
+      }
+    });
+
+    this._setupTerminalResizer();
+  }
+
+  // ─── Panel visibility ────────────────────────────────────────────────────
+
+  show() {
+    const panel = document.getElementById('terminalPanel');
+    if (!panel) return;
+    panel.style.display = 'flex';
+    panel.offsetHeight; // reflow
+    panel.classList.add('active');
+
+    // Auto-create first terminal
+    if (this.terminals.size === 0) {
+      this.createTerminal();
+    } else if (this.activeId !== null) {
+      setTimeout(() => this._focusInput(this.activeId), 60);
+    }
+  }
+
+  hide() {
+    const panel = document.getElementById('terminalPanel');
+    if (!panel) return;
+    panel.classList.remove('active');
+    setTimeout(() => {
+      if (!panel.classList.contains('active')) panel.style.display = 'none';
+    }, 200);
+  }
+
+  toggle() {
+    const panel = document.getElementById('terminalPanel');
+    if (!panel) return;
+    if (panel.classList.contains('active')) this.hide();
+    else this.show();
+  }
+
+  isVisible() {
+    const panel = document.getElementById('terminalPanel');
+    return panel ? panel.classList.contains('active') : false;
+  }
+
+  // ─── Terminal lifecycle ──────────────────────────────────────────────────
+
+  async createTerminal(shellId, shellPath) {
+    const sid   = shellId   || this.currentShellId;
+    const spath = shellPath || this.currentShellPath;
+    const shell = this.shells.find(s => s.id === sid) || this.shells[0] || { id: 'cmd', name: 'Terminal' };
+
+    // Get initial cwd from the app's working directory
+    let cwd = '';
+    try { cwd = await window.api.invoke('terminal-get-initial-cwd'); } catch {
+      try { cwd = await window.api.invoke('terminal-get-home'); } catch { cwd = ''; }
+    }
+
+    const id = ++this.counter;
+    this.terminals.set(id, {
+      shell,
+      shellPath: spath,
+      cwd: cwd,
+      history: [],
+      historyIndex: -1,
+      running: false,
+    });
+
+    this._renderTab(id);
+    this._renderInstance(id);
+    this._activate(id);
+
+    this._appendOutput(id,
+      `\u001b[32m${shell.name}\u001b[0m  \u001b[2m${cwd}\u001b[0m\r\n`,
+      true
+    );
+    return id;
+  }
+
+  closeTerminal(id) {
+    const term = this.terminals.get(id);
+    if (!term) return;
+
+    window.api.invoke('terminal-kill-current', id).catch(() => {});
+
+    document.getElementById(`terminal-tab-${id}`)?.remove();
+    document.getElementById(`terminal-inst-${id}`)?.remove();
+    this.terminals.delete(id);
+
+    if (this.activeId === id) {
+      this.activeId = null;
+      const remaining = [...this.terminals.keys()];
+      if (remaining.length) {
+        this._activate(remaining[remaining.length - 1]);
+      } else {
+        this.hide();
+      }
+    }
+  }
+
+  // ─── Rendering ───────────────────────────────────────────────────────────
+
+  _renderTab(id) {
+    const term = this.terminals.get(id);
+    const list = document.getElementById('terminal-tabs-list');
+    if (!list) return;
+
+    const tab = document.createElement('div');
+    tab.className = 'terminal-tab';
+    tab.id = `terminal-tab-${id}`;
+    tab.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0">
+        <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5zM8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
+      </svg>
+      <span>${this._escHtml(term.shell.name)}</span>
+      <span class="terminal-tab-close" title="Close">×</span>
+    `;
+
+    tab.addEventListener('click', (e) => {
+      if (e.target.closest('.terminal-tab-close')) {
+        e.stopPropagation();
+        this.closeTerminal(id);
+      } else if (!e.target.closest('svg')) {
+        this._activate(id);
+      }
+    });
+
+    list.appendChild(tab);
+  }
+
+  _renderInstance(id) {
+    const body = document.getElementById('terminal-body');
+    if (!body) return;
+    const term = this.terminals.get(id);
+
+    const el = document.createElement('div');
+    el.className = 'terminal-instance';
+    el.id = `terminal-inst-${id}`;
+    el.innerHTML = `
+      <div class="terminal-output" id="terminal-out-${id}"></div>
+      <div class="terminal-input-row">
+        <span class="terminal-prompt-cwd" id="terminal-cwd-${id}" title="${this._escHtml(term.cwd)}"></span>
+        <span class="terminal-prompt-symbol">$</span>
+        <div class="terminal-running-indicator" id="terminal-spinner-${id}"></div>
+        <input
+          class="terminal-input"
+          id="terminal-in-${id}"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="type a command..."
+        />
+      </div>
+    `;
+    body.appendChild(el);
+
+    this._updateCwd(id);
+
+    const input = el.querySelector(`#terminal-in-${id}`);
+    input.addEventListener('keydown', (e) => this._onKey(e, id));
+  }
+
+  _activate(id) {
+    if (this.activeId !== null) {
+      document.getElementById(`terminal-tab-${this.activeId}`)?.classList.remove('active');
+      document.getElementById(`terminal-inst-${this.activeId}`)?.classList.remove('active');
+    }
+    this.activeId = id;
+    document.getElementById(`terminal-tab-${id}`)?.classList.add('active');
+    document.getElementById(`terminal-inst-${id}`)?.classList.add('active');
+    setTimeout(() => this._focusInput(id), 40);
+  }
+
+  _updateCwd(id) {
+    const term = this.terminals.get(id);
+    const el   = document.getElementById(`terminal-cwd-${id}`);
+    if (!el || !term) return;
+    // Show full path
+    el.textContent = term.cwd || '~';
+    el.title = term.cwd;
+  }
+
+  // ─── Input handling ──────────────────────────────────────────────────────
+
+  _onKey(e, id) {
+    const term = this.terminals.get(id);
+    if (!term) return;
+
+    switch (e.key) {
+      case 'Enter': {
+        e.preventDefault();
+        const raw = e.target.value.trim();
+        if (!raw) return;
+
+        // If a process is running, send input to it instead of executing a new command
+        if (term.running) {
+          window.api.invoke('terminal-send-input', { terminalId: id, input: raw }).catch(() => {});
+          this._appendOutput(id, `${this._escHtml(raw)}\r\n`, true);
+          e.target.value = '';
+          term.historyIndex = -1;
+        } else {
+          // Normal command execution
+          term.history.unshift(raw);
+          if (term.history.length > 100) term.history.pop();
+          term.historyIndex = -1;
+          e.target.value = '';
+          this._execute(id, raw);
+        }
+        break;
+      }
+      case 'Tab': {
+        e.preventDefault();
+        this._onTab(e.target, id);
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        if (term.historyIndex < term.history.length - 1) {
+          term.historyIndex++;
+          e.target.value = term.history[term.historyIndex] || '';
+        }
+        break;
+      }
+      case 'ArrowDown': {
+        e.preventDefault();
+        if (term.historyIndex > 0) {
+          term.historyIndex--;
+          e.target.value = term.history[term.historyIndex] || '';
+        } else {
+          term.historyIndex = -1;
+          e.target.value = '';
+        }
+        break;
+      }
+      case 'c': {
+        if (e.ctrlKey && term.running) {
+          e.preventDefault();
+          window.api.invoke('terminal-kill-current', id).catch(() => {});
+          this._appendOutput(id, '\u001b[31m^C\u001b[0m\r\n', true);
+          term.running = false;
+          this._setInputEnabled(id, true);
+        }
+        break;
+      }
+      case 'l': {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          const out = document.getElementById(`terminal-out-${id}`);
+          if (out) out.innerHTML = '';
+        }
+        break;
+      }
+    }
+  }
+
+  async _onTab(input, id) {
+    const term = this.terminals.get(id);
+    if (!term) return;
+
+    const partial = input.value;
+    if (!partial.trim()) return;
+
+    try {
+      const matches = await window.api.invoke('terminal-get-completions', {
+        cwd: term.cwd,
+        partial,
+      });
+
+      if (matches.length === 0) {
+        // No matches, do nothing
+        return;
+      } else if (matches.length === 1) {
+        // Single match: auto-complete
+        const trimmed = partial.trim();
+        const lastSpace = trimmed.lastIndexOf(' ');
+        const prefix = lastSpace === -1 ? '' : trimmed.substring(0, lastSpace + 1);
+        input.value = prefix + matches[0].value;
+      } else {
+        // Multiple matches: show them
+        this._appendOutput(id, `\u001b[2m${matches.map(m => m.label).join('  ')}\u001b[0m\r\n`, true);
+        this._scrollBottom(id);
+      }
+    } catch {}
+  }
+
+  async _execute(id, command) {
+    const term = this.terminals.get(id);
+    if (!term || term.running) return;
+
+    // Echo the command
+    this._appendOutput(id,
+      `\u001b[2m${this._escPrompt(term.cwd)}\u001b[0m \u001b[1m${this._escHtml(command)}\u001b[0m\r\n`,
+      true
+    );
+
+    // Handle `cd` locally — update cwd, then bail (no subprocess needed)
+    const cdMatch = command.match(/^cd(?:\s+(.+))?$/i);
+    if (cdMatch) {
+      const target = (cdMatch[1] || '').trim().replace(/^["']|["']$/g, '');
+      if (!target || target === '~') {
+        try { term.cwd = await window.api.invoke('terminal-get-home'); } catch {}
+      } else {
+        term.cwd = this._joinPath(term.cwd, target);
+      }
+      this._updateCwd(id);
+      return;
+    }
+
+    // Handle `clear` / `cls`
+    if (/^(clear|cls)$/i.test(command)) {
+      const out = document.getElementById(`terminal-out-${id}`);
+      if (out) out.innerHTML = '';
+      return;
+    }
+
+    term.running = true;
+    this._setInputEnabled(id, false);
+
+    try {
+      await window.api.invoke('terminal-execute', {
+        terminalId: id,
+        shellId:    term.shell.id,
+        shellPath:  term.shellPath || null,
+        command,
+        cwd:        term.cwd,
+      });
+    } catch (err) {
+      this._appendOutput(id, `\u001b[31mError: ${err.message}\u001b[0m\r\n`, true);
+      term.running = false;
+      this._setInputEnabled(id, true);
+    }
+  }
+
+  _joinPath(base, rel) {
+    if (!rel) return base;
+    // Absolute paths (Windows or Unix)
+    if (/^[A-Za-z]:[\\/]/.test(rel) || rel.startsWith('/')) return rel;
+    if (rel === '..') {
+      const parts = base.replace(/\\/g, '/').split('/');
+      parts.pop();
+      return parts.join('/') || base;
+    }
+    const sep = base.includes('\\') ? '\\' : '/';
+    return base.replace(/[\\/]+$/, '') + sep + rel;
+  }
+
+  // ─── Output rendering ────────────────────────────────────────────────────
+
+  _appendOutput(id, text, raw = false) {
+    const out = document.getElementById(`terminal-out-${id}`);
+    if (!out) return;
+
+    const span = document.createElement('span');
+    span.innerHTML = this._ansiToHtml(text);
+    out.appendChild(span);
+    this._scrollBottom(id);
+  }
+
+  _ansiToHtml(text) {
+    if (!text) return '';
+
+    // Normalise line endings
+    let s = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // Strip all ANSI escape sequences except SGR color/style codes.
+    s = s.replace(
+      /\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g,
+      (m) => /^\x1b\[[0-9;]*m$/.test(m) ? m : ''
+    );
+
+    // Escape HTML special chars (before inserting spans)
+    const escHtml = (t) => t
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const fgMap = {
+      '30':'a-black','31':'a-red','32':'a-green','33':'a-yellow',
+      '34':'a-blue','35':'a-magenta','36':'a-cyan','37':'a-white',
+      '90':'a-Bblack','91':'a-Bred','92':'a-Bgreen','93':'a-Byellow',
+      '94':'a-Bblue','95':'a-Bmagenta','96':'a-Bcyan','97':'a-Bwhite',
+    };
+
+    let result = '';
+    let openSpans = 0;
+
+    // Split on SGR sequences (\x1b[...m)
+    const parts = s.split(/(\x1b\[[0-9;]*m)/g);
+    for (const part of parts) {
+      if (/^\x1b\[/.test(part)) {
+        // Close open spans on any SGR
+        while (openSpans > 0) { result += '</span>'; openSpans--; }
+        const code = part.slice(2, -1);
+        if (code === '0' || code === '') continue; // reset
+        const classes = [];
+        for (const c of code.split(';')) {
+          if (c === '1')  classes.push('a-bold');
+          if (c === '2')  classes.push('a-dim');
+          if (fgMap[c])   classes.push(fgMap[c]);
+        }
+        if (classes.length) { result += `<span class="${classes.join(' ')}"`; result += '>'; openSpans++; }
+      } else {
+        result += escHtml(part);
+      }
+    }
+    while (openSpans > 0) { result += '</span>'; openSpans--; }
+    return result;
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  _scrollBottom(id) {
+    const out = document.getElementById(`terminal-out-${id}`);
+    if (out) out.scrollTop = out.scrollHeight;
+  }
+
+  _setInputEnabled(id, enabled) {
+    const spinner = document.getElementById(`terminal-spinner-${id}`);
+    if (spinner) spinner.classList.toggle('visible', !enabled);
+    // Keep input always enabled so user can respond to interactive prompts (sudo, password, etc.)
+  }
+
+  _focusInput(id) {
+    document.getElementById(`terminal-in-${id}`)?.focus();
+  }
+
+  _escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  _escPrompt(cwd) {
+    const parts = (cwd || '').replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : '~';
+  }
+
+  // ─── Shell selector dropdown ─────────────────────────────────────────────
+
+  toggleShellDropdown() {
+    if (this._shellDropdownOpen) {
+      this._closeShellDropdown();
+    } else {
+      this._openShellDropdown();
+    }
+  }
+
+  _openShellDropdown() {
+    this._closeShellDropdown();
+
+    const btn  = document.getElementById('terminal-shell-btn');
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+
+    const dd = document.createElement('div');
+    dd.className = 'terminal-shell-dropdown';
+    dd.id = 'terminal-shell-dropdown';
+    dd.style.cssText = `bottom:${window.innerHeight - rect.top + 4}px; left:${rect.left}px;`;
+
+    dd.innerHTML = this.shells.map(s => `
+      <div class="terminal-shell-option ${s.id === this.currentShellId ? 'current' : ''}" data-id="${s.id}" data-path="${s.path || ''}">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5z"/>
+          <path d="M8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
+        </svg>
+        ${this._escHtml(s.name)}
+      </div>
+    `).join('');
+
+    dd.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-id]');
+      if (!item) return;
+      const sid   = item.dataset.id;
+      const spath = item.dataset.path || null;
+      this.currentShellId   = sid;
+      this.currentShellPath = spath;
+      const btnLabel = document.getElementById('terminal-shell-label');
+      const s = this.shells.find(x => x.id === sid);
+      if (btnLabel && s) btnLabel.textContent = s.name;
+      this._closeShellDropdown();
+      this.createTerminal(sid, spath || null);
+    });
+
+    document.body.appendChild(dd);
+    this._shellDropdownOpen = true;
+  }
+
+  _closeShellDropdown() {
+    document.getElementById('terminal-shell-dropdown')?.remove();
+    this._shellDropdownOpen = false;
+  }
+
+  // ─── Vertical resize ─────────────────────────────────────────────────────
+
+  _setupTerminalResizer() {
+    const handle = document.getElementById('terminal-resizer-top');
+    const panel  = document.getElementById('terminalPanel');
+    if (!handle || !panel) return;
+
+    let startY = 0;
+    let startH = 0;
+
+    const onMove = (e) => {
+      const dy = startY - e.clientY;
+      const newH = Math.max(120, Math.min(window.innerHeight * 0.72, startH + dy));
+      panel.style.height = newH + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      startH = panel.offsetHeight;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+
+  destroy() {
+    if (this._dataUnsub) window.api.removeListener('terminal-data', this._dataUnsub);
+    if (this._doneUnsub) window.api.removeListener('terminal-command-done', this._doneUnsub);
+  }
+}
+
 // ----- src/renderer/UIController.js -----
 ;(function() {
 // Manager classes and utilities are loaded via <script> tags in index.html
@@ -4184,6 +4777,13 @@ class UIController {
     this.stateManager = new StateManager(this.tabManager, this.editorManager, this.diagnosticsManager);
 
     /**
+     * Terminal manager instance
+     * @type {TerminalManager}
+     * @private
+     */
+    this.terminalManager = new TerminalManager();
+
+    /**
      * Flag indicating if UI is being resized
      * @type {boolean}
      * @private
@@ -4245,6 +4845,25 @@ class UIController {
      * @private
      */
     this.platform = 'unknown';
+
+    this.performanceHud = null;
+    this.performanceHudVisible = false;
+    this.performanceHudAnimationFrame = null;
+    this.performanceObserver = null;
+    this.performanceSampleStartedAt = 0;
+    this.performanceLastFrameAt = 0;
+    this.performanceRuntimeInfo = { hardwareAcceleration: 'unknown' };
+    this.liteEffectsEnabled = false;
+    this.performanceStats = {
+      fps: 0,
+      frameMs: 0,
+      maxFrameMs: 0,
+      frameCount: 0,
+      longTasks: 0,
+      lastLongTaskMs: 0,
+      domNodes: 0,
+      memoryMb: null
+    };
 
     this.init();
   }
@@ -4330,13 +4949,218 @@ class UIController {
   deferNonCriticalStartup() {
     runAfterFirstPaint(() => {
       this.updateAppVersionLabel();
+      this.setupPerformanceMonitor();
       this.setupFileTreeWatcher();
       this.loadAutoSaveState();
       this.setupAutoSaveListener();
       this.setupFileTreeContextMenu();
       this.setupWSLStatusListener();
       this.setupUpdaterStatusListener();
+      this.terminalManager.init();
     });
+  }
+
+  setupPerformanceMonitor() {
+    if (typeof document === 'undefined' || !document.body || this.performanceHud) return;
+
+    try {
+      this.liteEffectsEnabled = localStorage.getItem('liteEffectsEnabled') === 'true';
+    } catch (_) {
+      this.liteEffectsEnabled = false;
+    }
+
+    this.applyLiteEffects(this.liteEffectsEnabled, false);
+
+    if (window.api && typeof window.api.getRuntimeInfo === 'function') {
+      try {
+        this.performanceRuntimeInfo = window.api.getRuntimeInfo() || this.performanceRuntimeInfo;
+      } catch (_) {
+        this.performanceRuntimeInfo = { hardwareAcceleration: 'unknown' };
+      }
+    }
+
+    const hud = document.createElement('aside');
+    hud.className = 'performance-hud';
+    hud.innerHTML = `
+      <div class="performance-hud-header">
+        <span class="performance-hud-title">Performance</span>
+        <div class="performance-hud-actions">
+          <button type="button" class="performance-hud-btn" data-action="effects">Lite effects</button>
+          <button type="button" class="performance-hud-btn" data-action="hide">Hide</button>
+        </div>
+      </div>
+      <div class="performance-hud-grid">
+        <div class="performance-hud-card"><span class="performance-hud-label">FPS</span><span class="performance-hud-value" data-metric="fps">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Frame</span><span class="performance-hud-value" data-metric="frame">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Long tasks</span><span class="performance-hud-value" data-metric="longTasks">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DOM nodes</span><span class="performance-hud-value" data-metric="domNodes">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">JS heap</span><span class="performance-hud-value" data-metric="memory">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">GPU</span><span class="performance-hud-value" data-metric="gpu">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Effects</span><span class="performance-hud-value" data-metric="effects">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DPR</span><span class="performance-hud-value" data-metric="dpr">--</span></div>
+      </div>
+      <div class="performance-hud-note">Toggle with Ctrl+Alt+P. If Lite effects makes the UI feel much faster, the slowdown is likely compositing and blur related.</div>
+    `;
+
+    hud.querySelector('[data-action="effects"]').addEventListener('click', () => {
+      this.applyLiteEffects(!this.liteEffectsEnabled);
+    });
+    hud.querySelector('[data-action="hide"]').addEventListener('click', () => {
+      this.togglePerformanceHud(false);
+    });
+
+    document.body.appendChild(hud);
+    this.performanceHud = hud;
+    this.performanceHudMetrics = {
+      fps: hud.querySelector('[data-metric="fps"]'),
+      frame: hud.querySelector('[data-metric="frame"]'),
+      longTasks: hud.querySelector('[data-metric="longTasks"]'),
+      domNodes: hud.querySelector('[data-metric="domNodes"]'),
+      memory: hud.querySelector('[data-metric="memory"]'),
+      gpu: hud.querySelector('[data-metric="gpu"]'),
+      effects: hud.querySelector('[data-metric="effects"]'),
+      dpr: hud.querySelector('[data-metric="dpr"]')
+    };
+    this.performanceHudEffectsButton = hud.querySelector('[data-action="effects"]');
+    this.renderPerformanceHud();
+  }
+
+  togglePerformanceHud(forceVisible) {
+    if (!this.performanceHud) {
+      this.setupPerformanceMonitor();
+    }
+    if (!this.performanceHud) return;
+
+    const nextVisible = typeof forceVisible === 'boolean' ? forceVisible : !this.performanceHudVisible;
+    this.performanceHudVisible = nextVisible;
+    this.performanceHud.classList.toggle('visible', nextVisible);
+
+    if (nextVisible) {
+      this.startPerformanceSampling();
+    } else {
+      this.stopPerformanceSampling();
+    }
+  }
+
+  startPerformanceSampling() {
+    if (this.performanceHudAnimationFrame || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      this.renderPerformanceHud();
+      return;
+    }
+
+    this.performanceStats.fps = 0;
+    this.performanceStats.frameMs = 0;
+    this.performanceStats.maxFrameMs = 0;
+    this.performanceStats.frameCount = 0;
+    this.performanceStats.longTasks = 0;
+    this.performanceStats.lastLongTaskMs = 0;
+    this.performanceSampleStartedAt = performance.now();
+    this.performanceLastFrameAt = 0;
+
+    if (typeof window.PerformanceObserver === 'function') {
+      try {
+        this.performanceObserver = new window.PerformanceObserver((list) => {
+          const entries = list.getEntries();
+          entries.forEach((entry) => {
+            this.performanceStats.longTasks += 1;
+            this.performanceStats.lastLongTaskMs = Math.max(this.performanceStats.lastLongTaskMs, entry.duration || 0);
+          });
+        });
+        this.performanceObserver.observe({ entryTypes: ['longtask'] });
+      } catch (_) {
+        this.performanceObserver = null;
+      }
+    }
+
+    const sample = (timestamp) => {
+      if (!this.performanceHudVisible) {
+        this.performanceHudAnimationFrame = null;
+        return;
+      }
+
+      if (this.performanceLastFrameAt) {
+        const frameMs = timestamp - this.performanceLastFrameAt;
+        this.performanceStats.frameMs = frameMs;
+        this.performanceStats.maxFrameMs = Math.max(this.performanceStats.maxFrameMs, frameMs);
+        this.performanceStats.frameCount += 1;
+      }
+      this.performanceLastFrameAt = timestamp;
+
+      const elapsed = timestamp - this.performanceSampleStartedAt;
+      if (elapsed >= 500) {
+        this.performanceStats.fps = this.performanceStats.frameCount > 0
+          ? (this.performanceStats.frameCount * 1000) / elapsed
+          : 0;
+        this.renderPerformanceHud();
+        this.performanceSampleStartedAt = timestamp;
+        this.performanceStats.frameCount = 0;
+        this.performanceStats.maxFrameMs = this.performanceStats.frameMs;
+        this.performanceStats.longTasks = 0;
+        this.performanceStats.lastLongTaskMs = 0;
+      }
+
+      this.performanceHudAnimationFrame = window.requestAnimationFrame(sample);
+    };
+
+    this.performanceHudAnimationFrame = window.requestAnimationFrame(sample);
+  }
+
+  stopPerformanceSampling() {
+    if (this.performanceHudAnimationFrame && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this.performanceHudAnimationFrame);
+    }
+    this.performanceHudAnimationFrame = null;
+
+    if (this.performanceObserver) {
+      try {
+        this.performanceObserver.disconnect();
+      } catch (_) {
+        // ignore observer shutdown failures
+      }
+      this.performanceObserver = null;
+    }
+  }
+
+  applyLiteEffects(enabled, persist = true) {
+    this.liteEffectsEnabled = !!enabled;
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('lite-effects', this.liteEffectsEnabled);
+    }
+
+    if (persist) {
+      try {
+        localStorage.setItem('liteEffectsEnabled', JSON.stringify(this.liteEffectsEnabled));
+      } catch (_) {
+        // ignore persistence failures
+      }
+    }
+
+    if (this.performanceHudEffectsButton) {
+      this.performanceHudEffectsButton.textContent = this.liteEffectsEnabled ? 'Full effects' : 'Lite effects';
+    }
+
+    this.renderPerformanceHud();
+  }
+
+  renderPerformanceHud() {
+    if (!this.performanceHudMetrics || typeof document === 'undefined') return;
+
+    const domNodes = document.getElementsByTagName('*').length;
+    const memoryInfo = typeof performance !== 'undefined' ? performance.memory : null;
+    const memoryMb = memoryInfo && typeof memoryInfo.usedJSHeapSize === 'number'
+      ? (memoryInfo.usedJSHeapSize / (1024 * 1024)).toFixed(1)
+      : null;
+
+    this.performanceHudMetrics.fps.textContent = this.performanceStats.fps ? `${Math.round(this.performanceStats.fps)}` : '--';
+    this.performanceHudMetrics.frame.textContent = this.performanceStats.frameMs ? `${this.performanceStats.frameMs.toFixed(1)} ms` : '--';
+    this.performanceHudMetrics.longTasks.textContent = this.performanceStats.lastLongTaskMs
+      ? `${this.performanceStats.longTasks} / ${Math.round(this.performanceStats.lastLongTaskMs)} ms`
+      : '0';
+    this.performanceHudMetrics.domNodes.textContent = `${domNodes}`;
+    this.performanceHudMetrics.memory.textContent = memoryMb ? `${memoryMb} MB` : 'n/a';
+    this.performanceHudMetrics.gpu.textContent = String(this.performanceRuntimeInfo.hardwareAcceleration || 'unknown').toUpperCase();
+    this.performanceHudMetrics.effects.textContent = this.liteEffectsEnabled ? 'Lite' : 'Full';
+    this.performanceHudMetrics.dpr.textContent = `${window.devicePixelRatio || 1}`;
   }
 
   /**
@@ -5305,6 +6129,12 @@ class UIController {
       const isSearchVisible = searchWidget.classList.contains('visible');
       const isGotoVisible = gotoDialog.classList.contains('visible');
 
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        this.togglePerformanceHud();
+        return;
+      }
+
       // Handle Enter key
       if (e.key === 'Enter') {
         if (isSearchVisible) {
@@ -5419,6 +6249,12 @@ class UIController {
         e.preventDefault();
         this.toggleToolsPanel();
       }
+
+      if (e.ctrlKey && e.key === 'j') {
+        e.preventDefault();
+        this.terminalManager.toggle();
+        this._syncTerminalActivityIcon();
+      }
       
       if (e.ctrlKey && e.shiftKey && e.key === 'F') {
         e.preventDefault();
@@ -5438,6 +6274,8 @@ class UIController {
   setupResizing() {
     const sidebar = document.getElementById('sidebar');
     const toolsPanel = document.getElementById('toolsPanel');
+    this.boundDoResize = this.boundDoResize || this.doResize.bind(this);
+    this.boundStopResize = this.boundStopResize || this.stopResize.bind(this);
 
     const startResize = (e, type) => {
       this.isResizing = true;
@@ -5449,8 +6287,8 @@ class UIController {
         toolsPanel.style.transition = 'none';
       }
       
-      document.addEventListener('mousemove', this.doResize.bind(this));
-      document.addEventListener('mouseup', this.stopResize.bind(this));
+      document.addEventListener('mousemove', this.boundDoResize);
+      document.addEventListener('mouseup', this.boundStopResize);
       e.preventDefault();
       
       document.body.style.userSelect = 'none';
@@ -5468,8 +6306,8 @@ class UIController {
     
     requestAnimationFrame(() => {
       if (this.resizeType === 'sidebar') {
-        const containerRect = sidebar.parentElement.getBoundingClientRect();
-        const newWidth = e.clientX - containerRect.left;
+        const sidebarRect = sidebar.getBoundingClientRect();
+        const newWidth = e.clientX - sidebarRect.left;
         const minWidth = 180;
         const maxWidth = window.innerWidth * 0.5;
         
@@ -5503,8 +6341,8 @@ class UIController {
     
     document.body.style.userSelect = '';
     
-    document.removeEventListener('mousemove', this.doResize.bind(this));
-    document.removeEventListener('mouseup', this.stopResize.bind(this));
+    document.removeEventListener('mousemove', this.boundDoResize);
+    document.removeEventListener('mouseup', this.boundStopResize);
     
     this.resizeType = null;
   }
@@ -5604,7 +6442,24 @@ class UIController {
     window.showToolsPanel = () => this.showToolsPanel();
     window.hideToolsPanel = () => this.hideToolsPanel();
     window.openCtracePanel = () => this.openCtracePanel();
-  window.openAssistantPanel = () => this.openAssistantPanel();
+    window.openAssistantPanel = () => this.openAssistantPanel();
+
+    // Terminal panel
+    window.toggleTerminalPanel = () => {
+      this.terminalManager.toggle();
+      this._syncTerminalActivityIcon();
+    };
+    window.terminalNew = () => this.terminalManager.createTerminal();
+    window.terminalKill = () => {
+      const id = this.terminalManager.activeId;
+      if (id !== null) {
+        const term = this.terminalManager.terminals.get(id);
+        if (term && term.running) {
+          window.api.invoke('terminal-kill-current', id).catch(() => {});
+        }
+      }
+    };
+    window.terminalToggleShellDropdown = () => this.terminalManager.toggleShellDropdown();
 
     // Visualyzer operations
     window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
@@ -5919,6 +6774,10 @@ class UIController {
     if (sidebar && sidebar.style.display === 'none') {
       sidebar.style.display = 'flex';
     }
+    if (sidebar && sidebar.style.width === '0px') {
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    }
   }
 
   showSearch() {
@@ -5935,6 +6794,10 @@ class UIController {
     if (sidebar && sidebar.style.display === 'none') {
       sidebar.style.display = 'flex';
     }
+    if (sidebar && sidebar.style.width === '0px') {
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    }
     setTimeout(() => searchInput && searchInput.focus(), 100);
   }
 
@@ -5946,13 +6809,29 @@ class UIController {
     if (!sidebar) return;
 
     if (sidebar.style.width === '0px' || sidebar.style.display === 'none') {
-      sidebar.style.width = '280px';
       sidebar.style.display = 'flex';
+      sidebar.offsetHeight; // Force reflow so the transition fires
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
     } else {
+      sidebar.style.minWidth = '0px';
       sidebar.style.width = '0px';
       setTimeout(() => {
         sidebar.style.display = 'none';
       }, 200);
+    }
+  }
+
+  /**
+   * Sync the terminal activity bar icon active state with panel visibility.
+   */
+  _syncTerminalActivityIcon() {
+    const icon = document.getElementById('terminal-activity');
+    if (!icon) return;
+    if (this.terminalManager.isVisible()) {
+      icon.classList.add('active');
+    } else {
+      icon.classList.remove('active');
     }
   }
 
@@ -6956,7 +7835,7 @@ class UIController {
     if (statusElement) {
       if (this.autoSaveEnabled) {
         statusElement.style.display = 'inline-block';
-        statusElement.textContent = '💾 Auto Save: ON';
+        statusElement.textContent = 'Auto Save: ON';
         statusElement.style.background = 'rgba(31, 111, 235, 0.15)';
         statusElement.style.color = '#58a6ff';
       } else {

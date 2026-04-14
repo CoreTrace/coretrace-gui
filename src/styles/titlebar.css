@@ -1,128 +1,133 @@
-/* Custom Title Bar Styles for Frameless Window */
+/* Custom title bar styles for frameless window */
 
 .title-bar {
   display: flex;
-  height: 30px;
-  background: #0d1117;
-  border-bottom: 1px solid #21262d;
-  color: #f0f6fc;
-  font-size: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  color: var(--text-primary);
   user-select: none;
   position: relative;
   z-index: 1000;
+}
+
+.title-bar-pill {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(18, 22, 30, 0.62);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
 .title-bar-drag-region {
   flex: 1;
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  -webkit-app-region: drag; /* Allow dragging the window */
+  min-width: 0;
+  -webkit-app-region: drag;
+}
+
+.title-bar-brand-pill {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(420px, 100%);
+  padding: 8px 16px;
 }
 
 .title-bar-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 500;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title-bar-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title-bar-app-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.title-bar-app-tag {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  line-height: 1.1;
+  margin-top: 2px;
 }
 
 .title-bar-icon {
   width: 16px;
   height: 16px;
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+.title-bar-controls-pill {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
 }
 
 .title-bar-controls {
   display: flex;
-  -webkit-app-region: no-drag; /* Prevent dragging on controls */
+  align-items: center;
+  gap: 4px;
 }
 
 .title-bar-control {
-  width: 46px;
-  height: 30px;
-  border: none;
-  background: transparent;
-  color: #f0f6fc;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  border-radius: 999px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .title-bar-control:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .title-bar-control.close:hover {
-  background: #e81123;
-  color: white;
+  background: rgba(255, 107, 107, 0.18);
+  border-color: rgba(255, 107, 107, 0.3);
+  color: #fff6f6;
 }
 
 .title-bar-control:focus {
   outline: none;
 }
 
-/* Adjust main container for title bar */
-.ide-container {
-  height: calc(100vh - 30px);
-  display: flex;
-}
-
-/* Platform-specific adjustments */
-@media (platform: windows) {
-  .title-bar-control {
-    width: 46px;
-  }
-}
-
-@media (platform: darwin) {
+@media (max-width: 900px) {
   .title-bar {
-    height: 28px;
+    gap: 8px;
   }
-  
-  .title-bar-controls {
-    order: -1;
-    padding-left: 8px;
-  }
-  
-  .title-bar-drag-region {
-    justify-content: center;
-  }
-  
-  .title-bar-control {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    margin: 0 4px;
-  }
-  
-  .title-bar-control:nth-child(1) {
-    background: #ff5f57;
-  }
-  
-  .title-bar-control:nth-child(2) {
-    background: #ffbd2e;
-  }
-  
-  .title-bar-control:nth-child(3) {
-    background: #28ca42;
-  }
-}
 
-/* Linux styling */
-@media (platform: linux) {
-  .title-bar-control {
-    width: 40px;
+  .title-bar-brand-pill {
+    padding: 7px 14px;
   }
-}
 
-/* Maximized window state */
-.window-maximized .title-bar-control svg {
-  transform: scale(0.9);
-}
-
-.window-maximized #maximize-btn svg {
-  /* Show restore icon when maximized */
-  d: path("M2,2 L8,2 L8,8 L2,8 Z M0,0 L6,0 L6,6");
+  .title-bar-app-tag {
+    display: none;
+  }
 }

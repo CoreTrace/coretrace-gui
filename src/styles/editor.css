@@ -3,7 +3,12 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #0d1117;
+  margin: 10px 12px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(15, 20, 29, 0.88) 0%, rgba(10, 14, 21, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   position: relative;
   overflow: hidden;
 }
@@ -27,7 +32,7 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: #0d1117;
+  background: var(--editor-bg);
   position: relative;
   width: 100%;
   height: 100%;
@@ -42,48 +47,45 @@
   overflow: hidden;
 }
 
-/* Monaco Editor custom theme overrides */
-.monaco-editor {
-  background-color: #0d1117 !important;
-}
-
-.monaco-editor .margin {
-  background-color: #0d1117 !important;
-}
-
+.monaco-editor,
+.monaco-editor .margin,
 .monaco-editor .gutter {
-  background-color: #0d1117 !important;
+  background-color: var(--editor-bg) !important;
 }
 
 .monaco-editor .current-line {
-  border-color: #21262d !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .monaco-editor .line-numbers {
-  color: #6e7681 !important;
+  color: rgba(127, 139, 160, 0.72) !important;
 }
 
 .monaco-editor .line-numbers.active-line-number {
-  color: #f0f6fc !important;
+  color: #f5f8ff !important;
 }
 
-/* Fix: autocomplete dropdown shows but text is invisible in some setups.
-   Ensure suggest widget has explicit foreground/background colors. */
+.monaco-editor .view-overlays .current-line-exact {
+  border: 1px solid rgba(214, 222, 237, 0.08) !important;
+  border-radius: 6px;
+}
+
 .monaco-editor .suggest-widget {
-  background: #1e1e1e !important;
-  color: #cccccc !important;
-  border: 1px solid #3e3e42 !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.5) !important;
+  background: rgba(20, 23, 31, 0.96) !important;
+  color: #d9e2f1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42) !important;
   z-index: 100000 !important;
   pointer-events: auto !important;
   min-width: 450px !important;
   max-width: min(650px, calc(100vw - 40px)) !important;
   max-height: min(340px, calc(100vh - 120px)) !important;
-  border-radius: 8px !important;
+  border-radius: 12px !important;
   overflow: hidden !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
 }
 
-/* Ensure Monaco overlay widgets paint above editor text. */
 .monaco-editor .overlayWidgets,
 .monaco-editor .overflowingContentWidgets {
   z-index: 100000 !important;
@@ -94,38 +96,29 @@
   pointer-events: auto !important;
 }
 
-/* Avoid forcing text paint on *every* descendant; it can make text look
-   doubled/ugly in Electron on Windows. Apply foreground at row level only. */
 .monaco-editor .suggest-widget .monaco-list-row {
-  color: #cccccc !important;
+  color: #d9e2f1 !important;
   padding: 0 8px !important;
   transition: background-color 0.1s ease !important;
-}
-
-.monaco-editor .suggest-widget .monaco-list-row.focused {
-  background: #37373d !important;
-  color: #ffffff !important;
-}
-
-/* Subtle hover state for better UX */
-.monaco-editor .suggest-widget .monaco-list-row:hover:not(.focused) {
-  background: #2a2a2d !important;
-}
-
-/* VS Code-like layout: make sure the label text column has room to render */
-.monaco-editor .suggest-widget .monaco-list-row {
   display: flex !important;
   align-items: center !important;
   box-sizing: border-box !important;
 }
 
-/* List container typography (prevents clipped ascenders/descenders) */
+.monaco-editor .suggest-widget .monaco-list-row.focused {
+  background: rgba(214, 222, 237, 0.14) !important;
+  color: #ffffff !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row:hover:not(.focused) {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
 .monaco-editor .suggest-widget .monaco-list,
 .monaco-editor .suggest-widget .monaco-list * {
   font-size: 12px !important;
 }
 
-/* Clean list container */
 .monaco-editor .suggest-widget .monaco-list-rows {
   padding: 6px 0 !important;
 }
@@ -135,16 +128,14 @@
 }
 
 .monaco-editor .suggest-widget .monaco-scrollable-element > .scrollbar > .slider {
-  background: rgba(121, 121, 121, 0.4) !important;
-  border-radius: 3px !important;
+  background: rgba(214, 222, 237, 0.24) !important;
+  border-radius: 999px !important;
 }
 
 .monaco-editor .suggest-widget .monaco-scrollable-element > .scrollbar > .slider:hover {
-  background: rgba(121, 121, 121, 0.7) !important;
+  background: rgba(214, 222, 237, 0.44) !important;
 }
 
-/* Monaco often wraps row content in a `.contents` container; make that the flex layout
-   to avoid accidental overlays where the icon stretches over the label area. */
 .monaco-editor .suggest-widget .monaco-list-row > .contents {
   display: flex !important;
   align-items: center !important;
@@ -152,7 +143,6 @@
   min-width: 0 !important;
 }
 
-/* Constrain the icon column so it can't cover the label text. */
 .monaco-editor .suggest-widget .suggest-icon,
 .monaco-editor .suggest-widget .monaco-list-row .suggest-icon,
 .monaco-editor .suggest-widget .monaco-list-row > .contents > .suggest-icon {
@@ -163,7 +153,7 @@
   max-width: 18px !important;
   margin-right: 10px !important;
   pointer-events: none !important;
-  color: #858585 !important;
+  color: rgba(214, 222, 237, 0.7) !important;
   opacity: 0.9 !important;
   display: flex !important;
   align-items: center !important;
@@ -173,7 +163,7 @@
 }
 
 .monaco-editor .suggest-widget .monaco-list-row.focused .suggest-icon {
-  color: #cccccc !important;
+  color: #f3f7ff !important;
   opacity: 1 !important;
 }
 
@@ -199,7 +189,7 @@
   z-index: 1 !important;
   text-shadow: none !important;
   -webkit-text-stroke: 0 transparent !important;
-  -webkit-text-fill-color: #cccccc !important;
+  -webkit-text-fill-color: #d9e2f1 !important;
   font-weight: 400 !important;
   letter-spacing: 0.01em !important;
 }
@@ -209,12 +199,10 @@
   font-weight: 500 !important;
 }
 
-/* Monaco sometimes renders the visible text inside a highlighted-label span.
-   Force text fill so it can't end up effectively transparent. */
 .monaco-editor .suggest-widget .monaco-highlighted-label,
 .monaco-editor .suggest-widget .monaco-highlighted-label * {
-  color: #0097fb !important;
-  -webkit-text-fill-color: #0097fb !important;
+  color: #9ec2ff !important;
+  -webkit-text-fill-color: #9ec2ff !important;
   opacity: 1 !important;
   visibility: visible !important;
   text-shadow: none !important;
@@ -232,22 +220,22 @@
   max-width: 40% !important;
   text-shadow: none !important;
   -webkit-text-stroke: 0 transparent !important;
-  -webkit-text-fill-color: #888888 !important;
+  -webkit-text-fill-color: rgba(185, 197, 214, 0.74) !important;
   font-size: 11px !important;
   opacity: 0.85 !important;
 }
 
 .monaco-editor .suggest-widget .monaco-list-row.focused .label-description {
-  -webkit-text-fill-color: #aaaaaa !important;
+  -webkit-text-fill-color: rgba(233, 240, 251, 0.9) !important;
   opacity: 1 !important;
 }
 
 .monaco-editor .suggest-widget .monaco-list-row .highlight {
-  color: #0097fb !important;
+  color: #9ec2ff !important;
   font-weight: 600 !important;
 }
 
 .monaco-editor .suggest-widget .details-label,
 .monaco-editor .suggest-widget .details-label * {
-  color: #888888 !important;
+  color: rgba(185, 197, 214, 0.72) !important;
 }

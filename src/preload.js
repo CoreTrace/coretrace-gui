@@ -5,6 +5,11 @@ const fs = require('fs/promises');
 let appInfoPromise = null;
 let syntaxConfigPromise = null;
 
+function getAdditionalArgumentValue(prefix) {
+  const arg = process.argv.find((entry) => typeof entry === 'string' && entry.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : null;
+}
+
 function loadAppInfo() {
   if (!appInfoPromise) {
     appInfoPromise = fs.readFile(path.join(__dirname, '..', 'package.json'), 'utf-8')
@@ -70,6 +75,13 @@ const INVOKE_CHANNELS = [
   'updater-install-update',
   'backend-get-status',
   'watch-workspace',
+  'terminal-get-shells',
+  'terminal-execute',
+  'terminal-kill-current',
+  'terminal-get-home',
+  'terminal-get-completions',
+  'terminal-get-initial-cwd',
+  'terminal-send-input',
 ];
 
 const SEND_CHANNELS = [
@@ -93,6 +105,8 @@ const RECEIVE_CHANNELS = [
   'updater-status',
   'window-maximized',
   'app-before-quit',
+  'terminal-data',
+  'terminal-command-done',
 ];
 
 contextBridge.exposeInMainWorld('api', {
@@ -132,6 +146,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   platform: process.platform,
+  getRuntimeInfo: () => ({
+    platform: process.platform,
+    hardwareAcceleration: getAdditionalArgumentValue('--ctrace-hardware-acceleration=') || 'unknown',
+    pid: process.pid
+  }),
 
   getAppInfo: () => loadAppInfo(),
   getSyntaxConfig: () => loadSyntaxConfig(),

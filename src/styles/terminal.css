@@ -1,0 +1,399 @@
+/* Terminal Panel */
+.terminal-panel {
+  display: none;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(11, 14, 20, 0.96) 0%, rgba(9, 12, 18, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  margin: 0 12px 0;
+  height: 240px;
+  min-height: 120px;
+  max-height: 70vh;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.terminal-panel.active {
+  display: flex;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Vertical drag handle */
+.terminal-resizer-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 20;
+}
+
+.terminal-resizer-top:hover,
+.terminal-resizer-top:active {
+  background: rgba(214, 222, 237, 0.12);
+}
+
+/* Header */
+.terminal-header {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.02);
+  gap: 2px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.terminal-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+}
+
+.terminal-tabs-list::-webkit-scrollbar { display: none; }
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color 0.13s ease, color 0.13s ease;
+}
+
+.terminal-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.terminal-tab.active {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+}
+
+.terminal-tab-close {
+  width: 13px;
+  height: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity 0.13s ease, background-color 0.13s ease;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab.active .terminal-tab-close {
+  opacity: 0.55;
+}
+
+.terminal-tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1 !important;
+  color: var(--text-primary);
+}
+
+/* Header action buttons */
+.terminal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.terminal-action-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  transition: background-color 0.13s ease, color 0.13s ease;
+}
+
+.terminal-action-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+.terminal-shell-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  font-size: 11px;
+  transition: background-color 0.13s ease, color 0.13s ease;
+  white-space: nowrap;
+  height: 24px;
+}
+
+.terminal-shell-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.terminal-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* Body */
+.terminal-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-instance {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-instance.active {
+  display: flex;
+}
+
+/* Output area */
+.terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 14px 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #c5d0de;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.terminal-output::-webkit-scrollbar {
+  width: 5px;
+}
+
+.terminal-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-output::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.terminal-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Input row */
+.terminal-input-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 14px 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.048);
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.terminal-prompt-cwd {
+  color: #60a5fa;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  opacity: 0.75;
+  flex-shrink: 0;
+  user-select: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-prompt-symbol {
+  color: #6ee7b7;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.terminal-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: #eef4ff;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  caret-color: #6ee7b7;
+  min-width: 0;
+}
+
+.terminal-input::placeholder {
+  color: rgba(255, 255, 255, 0.18);
+}
+
+.terminal-input:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+
+/* Running spinner */
+.terminal-running-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(110, 231, 183, 0.4);
+  border-top-color: #6ee7b7;
+  animation: terminal-spin 0.6s linear infinite;
+  flex-shrink: 0;
+  display: none;
+}
+
+.terminal-running-indicator.visible {
+  display: block;
+}
+
+@keyframes terminal-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Shell selector dropdown */
+.terminal-shell-dropdown {
+  position: fixed;
+  background: rgba(13, 17, 24, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 4px 0;
+  min-width: 170px;
+  z-index: 9999;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.terminal-shell-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.terminal-shell-option:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+.terminal-shell-option.current {
+  color: #6ee7b7;
+}
+
+/* ANSI foreground colors */
+.a-black   { color: #4a5568; }
+.a-red     { color: #f87171; }
+.a-green   { color: #6ee7b7; }
+.a-yellow  { color: #fbbf24; }
+.a-blue    { color: #60a5fa; }
+.a-magenta { color: #c084fc; }
+.a-cyan    { color: #22d3ee; }
+.a-white   { color: #e2e8f0; }
+.a-Bblack  { color: #64748b; }
+.a-Bred    { color: #fca5a5; }
+.a-Bgreen  { color: #86efac; }
+.a-Byellow { color: #fde68a; }
+.a-Bblue   { color: #93c5fd; }
+.a-Bmagenta{ color: #d8b4fe; }
+.a-Bcyan   { color: #67e8f9; }
+.a-Bwhite  { color: #f8fafc; }
+.a-bold    { font-weight: 700; }
+.a-dim     { opacity: 0.6; }
+
+/* Autocomplete dropdown - appears above input row */
+.terminal-autocomplete {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 14px;
+  right: 14px;
+  background: rgba(12, 15, 21, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  max-height: 130px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+}
+
+.terminal-autocomplete-item {
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.08s ease, color 0.08s ease;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+}
+
+.terminal-autocomplete-item:hover,
+.terminal-autocomplete-item.focused {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.terminal-autocomplete-item.focused {
+  background: rgba(214, 222, 237, 0.12);
+}
+
+.terminal-autocomplete-item.is-dir::after {
+  content: '/';
+  color: #60a5fa;
+  font-weight: 600;
+  flex-shrink: 0;
+}
