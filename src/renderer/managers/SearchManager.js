@@ -8,7 +8,8 @@ class SearchManager {
     this.notificationManager = notificationManager;
     this.currentSearchMatches = [];
     this.currentMatchIndex = -1;
-    this.searchTimeout = null;
+    this._widgetDebounce = null;
+    this._sidebarDebounce = null;
     this.init();
   }
 
@@ -16,6 +17,18 @@ class SearchManager {
     this.setupSearchWidget();
     this.setupGoToLineDialog();
     this.setupSidebarSearch();
+
+    // Cancel any pending debounce timers when the window is closing to
+    // avoid callbacks firing against a partially-torn-down DOM.
+    window.addEventListener('beforeunload', () => this.destroy(), { once: true });
+  }
+
+  /**
+   * Cancel all pending debounced calls. Safe to call multiple times.
+   */
+  destroy() {
+    if (this._widgetDebounce) this._widgetDebounce.cancel();
+    if (this._sidebarDebounce) this._sidebarDebounce.cancel();
   }
 
   /**
@@ -23,12 +36,36 @@ class SearchManager {
    */
   setupSearchWidget() {
     const widgetSearchInput = document.getElementById('widget-search-input');
-    if (widgetSearchInput) {
-      widgetSearchInput.addEventListener('input', (e) => {
-        this.performLiveSearch(e.target.value);
-      });
-    }
+    if (!widgetSearchInput) return;
+
+    // Debounce live search so rapid keystrokes don't re-scan the whole document
+    // on every character. 300 ms matches the sidebar search delay.
+    this._widgetDebounce = window.debounce(
+      (value) => this.performLiveSearch(value),
+      300
+    );
+
+    widgetSearchInput.addEventListener('input', (e) => {
+      this._widgetDebounce.call(e.target.value);
+    });
+
+    // Enter key: cancel the timer and search immediately so that the
+    // document-level keydown handler in UIController can call searchNext()
+    // against up-to-date results (events bubble: input keydown fires first).
+    widgetSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        this._widgetDebounce.flush(widgetSearchInput.value);
+      }
+    });
   }
+
+  /**
+   * Setup go to line dialog
+   */
+  setupGoToLineDialog() {
+    // Event handlers will be attached by the UI controller
+  }
+
 
   /**
    * Setup go to line dialog
@@ -42,23 +79,32 @@ class SearchManager {
    */
   setupSidebarSearch() {
     const searchInput = document.getElementById('sidebar-search-input');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.trim();
-        
-        if (this.searchTimeout) {
-          clearTimeout(this.searchTimeout);
-        }
-        
+    if (!searchInput) return;
+
+    this._sidebarDebounce = window.debounce(
+      (term) => this.performWorkspaceSearch(term),
+      300
+    );
+
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.trim();
+      if (searchTerm.length >= 2 && this.currentWorkspacePath) {
+        this._sidebarDebounce.call(searchTerm);
+      } else {
+        this._sidebarDebounce.cancel();
+        this.clearSearchResults();
+      }
+    });
+
+    // Enter key: skip the delay and fire the IPC search immediately.
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const searchTerm = searchInput.value.trim();
         if (searchTerm.length >= 2 && this.currentWorkspacePath) {
-          this.searchTimeout = setTimeout(() => {
-            this.performWorkspaceSearch(searchTerm);
-          }, 300);
-        } else {
-          this.clearSearchResults();
+          this._sidebarDebounce.flush(searchTerm);
         }
-      });
-    }
+      }
+    });
   }
 
   /**
