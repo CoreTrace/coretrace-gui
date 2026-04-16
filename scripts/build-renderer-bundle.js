@@ -7,6 +7,7 @@ const outputPath = path.join(rootDir, 'src', 'renderer', 'bundle.js');
 const inputFiles = [
   'src/renderer/utils/fileTypeUtils.js',
   'src/renderer/utils/syntaxHighlighter.js',
+  'src/renderer/utils/debounce.js',
   'src/renderer/managers/NotificationManager.js',
   'src/renderer/managers/MonacoEditorManager.js',
   'src/renderer/managers/TabManager.js',
