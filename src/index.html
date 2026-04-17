@@ -210,6 +210,9 @@
             <div class="dropdown-item" onclick="openUpdateSettings(); hideAllMenus();">
               <span>Update Settings...</span>
             </div>
+            <div class="dropdown-item" onclick="openBackendSettings(); hideAllMenus();">
+              <span>Backend Settings...</span>
+            </div>
             <div class="dropdown-item" onclick="saveAsFile(); hideAllMenus();">
               <span>Save As...</span>
               <span class="shortcut">Ctrl+Shift+S</span>
@@ -338,8 +341,13 @@
           </div>
           
           <!-- Editor Area (hidden by default) -->
-          <div style="display: none;" id="editor-area">
-            <div class="editor" id="editor"></div>
+          <div style="display: none; flex-direction: column;" id="editor-area">
+            <div id="file-missing-banner">
+              <span class="fmb-icon">⚠</span>
+              <span class="fmb-msg" id="file-missing-msg">File not found on disk.</span>
+              <button class="fmb-close" id="file-missing-close-btn">Close tab</button>
+            </div>
+            <div class="editor" id="editor" style="flex: 1;"></div>
           </div>
           
           <!-- Visualyzer Area (hidden by default) -->

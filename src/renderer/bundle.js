@@ -1326,7 +1326,13 @@ class TabManager {
      * @type {string|null}
      */
     this.activeTabId = null;
-    
+
+    /**
+     * Set of tab IDs whose backing file is missing from disk
+     * @type {Set<string>}
+     */
+    this.missingFileTabs = new Set();
+
     /**
      * Map of open tabs with their data
      * @type {Map<string, Object>}
@@ -1456,12 +1462,12 @@ class TabManager {
     if (newTab) {
       // Update editor
       await this.editorManager.setContent(newTab.content);
-      
+
       // Set file type for syntax highlighting
       if (newTab.fileName) {
         await this.editorManager.setFileType(newTab.fileName);
       }
-      
+
       // Update tab appearance
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
@@ -1470,7 +1476,7 @@ class TabManager {
       if (tabElement) {
         tabElement.classList.add('active');
       }
-      
+
       // Update file tree selection
       if (newTab.filePath) {
         document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('selected'));
@@ -1478,6 +1484,13 @@ class TabManager {
         if (fileTreeItem) {
           fileTreeItem.classList.add('selected');
         }
+      }
+
+      // Show or hide the missing-file banner based on current flag.
+      // Also re-check existence asynchronously — file may have been restored.
+      this._syncMissingBanner(tabId, newTab.filePath);
+      if (newTab.filePath) {
+        this._recheckFileExists(tabId, newTab.filePath);
       }
 
       // Emit tab switch event for other components
@@ -1543,6 +1556,7 @@ class TabManager {
 
     // Remove from data
     this.openTabs.delete(tabId);
+    this.missingFileTabs.delete(tabId);
 
     // If closing active tab, switch to another tab or show welcome screen
     if (this.activeTabId === tabId) {
@@ -1737,6 +1751,94 @@ class TabManager {
   onLoadFullFile(filePath) {
     // This will be set by the main UI controller
     console.log('Load full file requested for:', filePath);
+  }
+
+  /**
+   * Mark or unmark a tab as having a missing backing file.
+   * Updates both the internal set and the tab element styling.
+   * @param {string} tabId
+   * @param {boolean} isMissing
+   */
+  markTabMissing(tabId, isMissing) {
+    if (isMissing) {
+      this.missingFileTabs.add(tabId);
+    } else {
+      this.missingFileTabs.delete(tabId);
+    }
+
+    const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (!tabEl) return;
+
+    if (isMissing) {
+      tabEl.classList.add('file-missing');
+      // Add missing icon if not already present
+      const label = tabEl.querySelector('.tab-label');
+      if (label && !label.querySelector('.tab-missing-icon')) {
+        const icon = document.createElement('span');
+        icon.className = 'tab-missing-icon';
+        icon.textContent = '⊘';
+        icon.title = 'File not found on disk';
+        label.insertBefore(icon, label.firstChild);
+      }
+    } else {
+      tabEl.classList.remove('file-missing');
+      const icon = tabEl.querySelector('.tab-missing-icon');
+      if (icon) icon.remove();
+    }
+
+    // If this is the active tab, sync the banner too
+    if (tabId === this.activeTabId) {
+      const tab = this.openTabs.get(tabId);
+      this._syncMissingBanner(tabId, tab ? tab.filePath : null);
+    }
+  }
+
+  /** @returns {boolean} True if the tab's file is known to be missing */
+  isTabFileMissing(tabId) {
+    return this.missingFileTabs.has(tabId);
+  }
+
+  /**
+   * Show or hide the missing-file banner based on the tab's current missing state.
+   */
+  _syncMissingBanner(tabId, filePath) {
+    const banner = document.getElementById('file-missing-banner');
+    const msg = document.getElementById('file-missing-msg');
+    if (!banner) return;
+
+    if (this.missingFileTabs.has(tabId) && filePath) {
+      if (msg) msg.textContent = `File not found on disk: ${filePath}`;
+      banner.classList.add('visible');
+
+      // Wire close-tab button once (idempotent via replacing onclick)
+      const closeBtn = document.getElementById('file-missing-close-btn');
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          const fakeEvent = { stopPropagation: () => {} };
+          this.closeTab(fakeEvent, tabId);
+        };
+      }
+    } else {
+      banner.classList.remove('visible');
+    }
+  }
+
+  /**
+   * Async re-check whether a file exists and update the missing flag accordingly.
+   * Silently no-ops if the file path is empty or IPC is unavailable.
+   */
+  async _recheckFileExists(tabId, filePath) {
+    if (!filePath || !window.api) return;
+    try {
+      const res = await window.api.invoke('check-file-exists', filePath);
+      const nowMissing = !res.exists;
+      const wasMissing = this.missingFileTabs.has(tabId);
+      if (nowMissing !== wasMissing) {
+        this.markTabMissing(tabId, nowMissing);
+      }
+    } catch {
+      // IPC unavailable or permission denied — leave flag unchanged
+    }
   }
 
   /**
@@ -2481,12 +2583,22 @@ class FileOperationsManager {
         const result = await window.api.invoke('save-file', currentTab.filePath, currentTab.content);
         if (result.success) {
           this.tabManager.markTabClean(this.tabManager.activeTabId);
+          // File was saved successfully — clear any missing flag
+          if (this.tabManager.activeTabId) {
+            this.tabManager.markTabMissing(this.tabManager.activeTabId, false);
+          }
           if (!options.silent) {
             this.notificationManager.showSuccess('File saved successfully');
           }
           return result;
         } else {
-          this.notificationManager.showError('Failed to save file: ' + result.error);
+          // If save failed because the file no longer exists, mark tab as missing
+          if (result.error && result.error.includes('ENOENT') && this.tabManager.activeTabId) {
+            this.tabManager.markTabMissing(this.tabManager.activeTabId, true);
+            this.notificationManager.showError('File not found on disk — it may have been moved or deleted');
+          } else {
+            this.notificationManager.showError('Failed to save file: ' + result.error);
+          }
         }
       } else {
         // Save as new file (untitled -> actual file)
@@ -4035,11 +4147,36 @@ class StateManager {
         await this.diagnosticsManager.displayDiagnostics();
       }
 
+      // Async: check each restored tab's file and mark missing ones visually.
+      // Don't await — let the UI show first, then apply warnings.
+      if (state.tabs && state.tabs.length > 0) {
+        this._checkRestoredFilesExist(state.tabs);
+      }
+
       console.log('[StateManager] State restored successfully');
       return true;
     } catch (error) {
       console.error('[StateManager] Error restoring state:', error);
       return false;
+    }
+  }
+
+  /**
+   * Async post-restore check: for each tab that has a file path, verify the
+   * file still exists on disk. Marks missing ones visually via TabManager.
+   * @param {Array} tabs - Restored tab data array
+   */
+  async _checkRestoredFilesExist(tabs) {
+    for (const tabData of tabs) {
+      if (!tabData.filePath || !tabData.tabId) continue;
+      try {
+        const res = await window.api.invoke('check-file-exists', tabData.filePath);
+        if (!res.exists) {
+          this.tabManager.markTabMissing(tabData.tabId, true);
+        }
+      } catch {
+        // IPC unavailable, skip silently
+      }
     }
   }
 
@@ -6406,6 +6543,7 @@ class UIController {
     window.saveAsFile = () => this.fileOpsManager.saveAsFile();
     window.autoSave = () => this.toggleAutoSave();
     window.openUpdateSettings = () => this.openUpdateSettingsModal();
+    window.openBackendSettings = () => this.openBackendSettingsModal();
 
     // Setup auto save status bar click handler
     const autoSaveStatus = document.getElementById('autoSaveStatus');
@@ -6490,6 +6628,20 @@ class UIController {
           </div>
         `;
         this.notificationManager.showWarning('Open a file to analyze with CTrace');
+        return;
+      }
+
+      // Block analysis if the file is known to be missing from disk
+      if (this.tabManager.activeTabId && this.tabManager.isTabFileMissing(this.tabManager.activeTabId)) {
+        resultsArea.innerHTML = `
+          <div class="ctrace-error">
+            <div class="error-icon">⚠️</div>
+            <div class="error-text">File not found on disk</div>
+            <div class="error-subtext">${currentFilePath}</div>
+            <div class="error-help">The file was moved or deleted. Open its new location to analyze it.</div>
+          </div>
+        `;
+        this.notificationManager.showError('File not found — analysis blocked');
         return;
       }
 
@@ -6742,6 +6894,166 @@ class UIController {
         }
       };
     }
+
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+  }
+
+  /**
+   * Open backend settings modal — lets user locate a native ctrace.exe
+   * to run analysis directly without WSL or the HTTP server.
+   */
+  async openBackendSettingsModal() {
+    let currentPath = '';
+
+    try {
+      const result = await window.api.invoke('backend-get-settings');
+      if (result && result.success && result.settings && result.settings.directBinaryPath) {
+        currentPath = result.settings.directBinaryPath;
+      }
+    } catch (err) {
+      console.warn('Failed to load backend settings:', err);
+    }
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: #0d1117;
+      color: #f0f6fc;
+      padding: 24px;
+      border-radius: 10px;
+      width: 500px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 8px 0; font-size: 18px;">Backend Settings</h3>
+      <div style="font-size: 12px; color: #8b949e; margin-bottom: 18px; line-height: 1.5;">
+        Optionally locate a native <code style="color:#79c0ff;">ctrace.exe</code> binary to run analysis
+        directly on Windows — no WSL or HTTP server required.<br><br>
+        When set, the GUI spawns the binary directly using CLI arguments.
+        Clear the path to revert to the default WSL-backed server mode.
+      </div>
+
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">
+        ctrace.exe path
+      </label>
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <input id="bs-binary-path" type="text"
+          placeholder="e.g. C:\\tools\\ctrace.exe"
+          style="flex:1; padding:8px; background:#161b22; color:#f0f6fc;
+                 border:1px solid #30363d; border-radius:6px; font-size:12px;" />
+        <button id="bs-browse"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer; white-space:nowrap;">
+          Browse…
+        </button>
+      </div>
+
+      <div id="bs-mode-hint" style="font-size:11px; color:#8b949e; margin-bottom:16px;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="bs-clear"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer;">
+          Clear (use WSL mode)
+        </button>
+        <button id="bs-close"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer;">
+          Cancel
+        </button>
+        <button id="bs-save"
+          style="padding:8px 12px; background:#238636; border:1px solid #2ea043;
+                 color:#fff; border-radius:6px; cursor:pointer;">
+          Save
+        </button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const pathInput = dialog.querySelector('#bs-binary-path');
+    const modeHint = dialog.querySelector('#bs-mode-hint');
+
+    const updateHint = (val) => {
+      if (val && val.trim()) {
+        modeHint.style.color = '#3fb950';
+        modeHint.textContent = 'Direct binary mode active — analysis will use this executable.';
+      } else {
+        modeHint.style.color = '#8b949e';
+        modeHint.textContent = 'No path set — WSL server mode will be used (default).';
+      }
+    };
+
+    pathInput.value = currentPath;
+    updateHint(currentPath);
+    pathInput.oninput = () => updateHint(pathInput.value);
+
+    const closeModal = () => {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    };
+
+    dialog.querySelector('#bs-close').onclick = closeModal;
+
+    dialog.querySelector('#bs-browse').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-browse-binary');
+        if (!result.canceled && result.filePath) {
+          pathInput.value = result.filePath;
+          updateHint(result.filePath);
+        }
+      } catch (err) {
+        this.notificationManager.showError('Browse failed: ' + err.message);
+      }
+    };
+
+    dialog.querySelector('#bs-clear').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: '' });
+        if (result && result.success) {
+          this.notificationManager.showSuccess('Backend reset to WSL server mode.');
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to clear backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to clear: ' + err.message);
+      }
+    };
+
+    dialog.querySelector('#bs-save').onclick = async () => {
+      const val = pathInput.value.trim();
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val });
+        if (result && result.success) {
+          if (val) {
+            this.notificationManager.showSuccess('Direct binary mode enabled.');
+          } else {
+            this.notificationManager.showSuccess('Backend reset to WSL server mode.');
+          }
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to save backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to save: ' + err.message);
+      }
+    };
 
     modal.onclick = (e) => {
       if (e.target === modal) closeModal();

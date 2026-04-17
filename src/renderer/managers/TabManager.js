@@ -50,7 +50,13 @@ class TabManager {
      * @type {string|null}
      */
     this.activeTabId = null;
-    
+
+    /**
+     * Set of tab IDs whose backing file is missing from disk
+     * @type {Set<string>}
+     */
+    this.missingFileTabs = new Set();
+
     /**
      * Map of open tabs with their data
      * @type {Map<string, Object>}
@@ -180,12 +186,12 @@ class TabManager {
     if (newTab) {
       // Update editor
       await this.editorManager.setContent(newTab.content);
-      
+
       // Set file type for syntax highlighting
       if (newTab.fileName) {
         await this.editorManager.setFileType(newTab.fileName);
       }
-      
+
       // Update tab appearance
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
@@ -194,7 +200,7 @@ class TabManager {
       if (tabElement) {
         tabElement.classList.add('active');
       }
-      
+
       // Update file tree selection
       if (newTab.filePath) {
         document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('selected'));
@@ -202,6 +208,13 @@ class TabManager {
         if (fileTreeItem) {
           fileTreeItem.classList.add('selected');
         }
+      }
+
+      // Show or hide the missing-file banner based on current flag.
+      // Also re-check existence asynchronously — file may have been restored.
+      this._syncMissingBanner(tabId, newTab.filePath);
+      if (newTab.filePath) {
+        this._recheckFileExists(tabId, newTab.filePath);
       }
 
       // Emit tab switch event for other components
@@ -267,6 +280,7 @@ class TabManager {
 
     // Remove from data
     this.openTabs.delete(tabId);
+    this.missingFileTabs.delete(tabId);
 
     // If closing active tab, switch to another tab or show welcome screen
     if (this.activeTabId === tabId) {
@@ -461,6 +475,94 @@ class TabManager {
   onLoadFullFile(filePath) {
     // This will be set by the main UI controller
     console.log('Load full file requested for:', filePath);
+  }
+
+  /**
+   * Mark or unmark a tab as having a missing backing file.
+   * Updates both the internal set and the tab element styling.
+   * @param {string} tabId
+   * @param {boolean} isMissing
+   */
+  markTabMissing(tabId, isMissing) {
+    if (isMissing) {
+      this.missingFileTabs.add(tabId);
+    } else {
+      this.missingFileTabs.delete(tabId);
+    }
+
+    const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (!tabEl) return;
+
+    if (isMissing) {
+      tabEl.classList.add('file-missing');
+      // Add missing icon if not already present
+      const label = tabEl.querySelector('.tab-label');
+      if (label && !label.querySelector('.tab-missing-icon')) {
+        const icon = document.createElement('span');
+        icon.className = 'tab-missing-icon';
+        icon.textContent = '⊘';
+        icon.title = 'File not found on disk';
+        label.insertBefore(icon, label.firstChild);
+      }
+    } else {
+      tabEl.classList.remove('file-missing');
+      const icon = tabEl.querySelector('.tab-missing-icon');
+      if (icon) icon.remove();
+    }
+
+    // If this is the active tab, sync the banner too
+    if (tabId === this.activeTabId) {
+      const tab = this.openTabs.get(tabId);
+      this._syncMissingBanner(tabId, tab ? tab.filePath : null);
+    }
+  }
+
+  /** @returns {boolean} True if the tab's file is known to be missing */
+  isTabFileMissing(tabId) {
+    return this.missingFileTabs.has(tabId);
+  }
+
+  /**
+   * Show or hide the missing-file banner based on the tab's current missing state.
+   */
+  _syncMissingBanner(tabId, filePath) {
+    const banner = document.getElementById('file-missing-banner');
+    const msg = document.getElementById('file-missing-msg');
+    if (!banner) return;
+
+    if (this.missingFileTabs.has(tabId) && filePath) {
+      if (msg) msg.textContent = `File not found on disk: ${filePath}`;
+      banner.classList.add('visible');
+
+      // Wire close-tab button once (idempotent via replacing onclick)
+      const closeBtn = document.getElementById('file-missing-close-btn');
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          const fakeEvent = { stopPropagation: () => {} };
+          this.closeTab(fakeEvent, tabId);
+        };
+      }
+    } else {
+      banner.classList.remove('visible');
+    }
+  }
+
+  /**
+   * Async re-check whether a file exists and update the missing flag accordingly.
+   * Silently no-ops if the file path is empty or IPC is unavailable.
+   */
+  async _recheckFileExists(tabId, filePath) {
+    if (!filePath || !window.api) return;
+    try {
+      const res = await window.api.invoke('check-file-exists', filePath);
+      const nowMissing = !res.exists;
+      const wasMissing = this.missingFileTabs.has(tabId);
+      if (nowMissing !== wasMissing) {
+        this.markTabMissing(tabId, nowMissing);
+      }
+    } catch {
+      // IPC unavailable or permission denied — leave flag unchanged
+    }
   }
 
   /**

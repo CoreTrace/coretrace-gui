@@ -384,11 +384,36 @@ class StateManager {
         await this.diagnosticsManager.displayDiagnostics();
       }
 
+      // Async: check each restored tab's file and mark missing ones visually.
+      // Don't await — let the UI show first, then apply warnings.
+      if (state.tabs && state.tabs.length > 0) {
+        this._checkRestoredFilesExist(state.tabs);
+      }
+
       console.log('[StateManager] State restored successfully');
       return true;
     } catch (error) {
       console.error('[StateManager] Error restoring state:', error);
       return false;
+    }
+  }
+
+  /**
+   * Async post-restore check: for each tab that has a file path, verify the
+   * file still exists on disk. Marks missing ones visually via TabManager.
+   * @param {Array} tabs - Restored tab data array
+   */
+  async _checkRestoredFilesExist(tabs) {
+    for (const tabData of tabs) {
+      if (!tabData.filePath || !tabData.tabId) continue;
+      try {
+        const res = await window.api.invoke('check-file-exists', tabData.filePath);
+        if (!res.exists) {
+          this.tabManager.markTabMissing(tabData.tabId, true);
+        }
+      } catch {
+        // IPC unavailable, skip silently
+      }
     }
   }
 

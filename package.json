@@ -1,6 +1,6 @@
 {
   "name": "ctrace-gui",
-  "version": "4.6.2",
+  "version": "4.6.3",
   "description": "A modern Electron-based GUI for CTrace static analysis tool",
   "main": "src/main.js",
   "scripts": {
@@ -22,7 +22,8 @@
     "dist:linux": "electron-builder --linux",
     "build:verify": "./scripts/build-verify.sh",
     "docs": "jsdoc -c jsdoc.conf.json",
-    "docs:watch": "jsdoc -c jsdoc.conf.json --watch"
+    "docs:watch": "jsdoc -c jsdoc.conf.json --watch",
+    "postinstall": "node scripts/patch-node-pty-spectre.js"
   },
   "keywords": [
     "ctrace",
