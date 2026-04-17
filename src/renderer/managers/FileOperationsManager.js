@@ -232,12 +232,22 @@ class FileOperationsManager {
         const result = await window.api.invoke('save-file', currentTab.filePath, currentTab.content);
         if (result.success) {
           this.tabManager.markTabClean(this.tabManager.activeTabId);
+          // File was saved successfully — clear any missing flag
+          if (this.tabManager.activeTabId) {
+            this.tabManager.markTabMissing(this.tabManager.activeTabId, false);
+          }
           if (!options.silent) {
             this.notificationManager.showSuccess('File saved successfully');
           }
           return result;
         } else {
-          this.notificationManager.showError('Failed to save file: ' + result.error);
+          // If save failed because the file no longer exists, mark tab as missing
+          if (result.error && result.error.includes('ENOENT') && this.tabManager.activeTabId) {
+            this.tabManager.markTabMissing(this.tabManager.activeTabId, true);
+            this.notificationManager.showError('File not found on disk — it may have been moved or deleted');
+          } else {
+            this.notificationManager.showError('Failed to save file: ' + result.error);
+          }
         }
       } else {
         // Save as new file (untitled -> actual file)
