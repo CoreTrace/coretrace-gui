@@ -4815,6 +4815,965 @@ class TerminalManager {
   }
 }
 
+// ----- src/renderer/managers/PerformanceManager.js -----
+class PerformanceManager {
+  constructor() {
+    this.hud = null;
+    this.hudVisible = false;
+    this.animationFrame = null;
+    this.observer = null;
+    this.sampleStartedAt = 0;
+    this.lastFrameAt = 0;
+    this.runtimeInfo = { hardwareAcceleration: 'unknown' };
+    this.liteEffectsEnabled = false;
+    this.stats = {
+      fps: 0,
+      frameMs: 0,
+      maxFrameMs: 0,
+      frameCount: 0,
+      longTasks: 0,
+      lastLongTaskMs: 0
+    };
+    this._metrics = null;
+    this._effectsBtn = null;
+  }
+
+  init() {
+    if (typeof document === 'undefined' || !document.body || this.hud) return;
+
+    try {
+      this.liteEffectsEnabled = localStorage.getItem('liteEffectsEnabled') === 'true';
+    } catch (_) {
+      this.liteEffectsEnabled = false;
+    }
+
+    this.applyLiteEffects(this.liteEffectsEnabled, false);
+
+    if (window.api && typeof window.api.getRuntimeInfo === 'function') {
+      try {
+        this.runtimeInfo = window.api.getRuntimeInfo() || this.runtimeInfo;
+      } catch (_) {
+        this.runtimeInfo = { hardwareAcceleration: 'unknown' };
+      }
+    }
+
+    const hud = document.createElement('aside');
+    hud.className = 'performance-hud';
+    hud.innerHTML = `
+      <div class="performance-hud-header">
+        <span class="performance-hud-title">Performance</span>
+        <div class="performance-hud-actions">
+          <button type="button" class="performance-hud-btn" data-action="effects">Lite effects</button>
+          <button type="button" class="performance-hud-btn" data-action="hide">Hide</button>
+        </div>
+      </div>
+      <div class="performance-hud-grid">
+        <div class="performance-hud-card"><span class="performance-hud-label">FPS</span><span class="performance-hud-value" data-metric="fps">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Frame</span><span class="performance-hud-value" data-metric="frame">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Long tasks</span><span class="performance-hud-value" data-metric="longTasks">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DOM nodes</span><span class="performance-hud-value" data-metric="domNodes">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">JS heap</span><span class="performance-hud-value" data-metric="memory">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">GPU</span><span class="performance-hud-value" data-metric="gpu">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Effects</span><span class="performance-hud-value" data-metric="effects">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DPR</span><span class="performance-hud-value" data-metric="dpr">--</span></div>
+      </div>
+      <div class="performance-hud-note">Toggle with Ctrl+Alt+P. If Lite effects makes the UI feel much faster, the slowdown is likely compositing and blur related.</div>
+    `;
+
+    hud.querySelector('[data-action="effects"]').addEventListener('click', () => {
+      this.applyLiteEffects(!this.liteEffectsEnabled);
+    });
+    hud.querySelector('[data-action="hide"]').addEventListener('click', () => {
+      this.toggle(false);
+    });
+
+    document.body.appendChild(hud);
+    this.hud = hud;
+    this._metrics = {
+      fps: hud.querySelector('[data-metric="fps"]'),
+      frame: hud.querySelector('[data-metric="frame"]'),
+      longTasks: hud.querySelector('[data-metric="longTasks"]'),
+      domNodes: hud.querySelector('[data-metric="domNodes"]'),
+      memory: hud.querySelector('[data-metric="memory"]'),
+      gpu: hud.querySelector('[data-metric="gpu"]'),
+      effects: hud.querySelector('[data-metric="effects"]'),
+      dpr: hud.querySelector('[data-metric="dpr"]')
+    };
+    this._effectsBtn = hud.querySelector('[data-action="effects"]');
+    this._render();
+  }
+
+  toggle(forceVisible) {
+    if (!this.hud) this.init();
+    if (!this.hud) return;
+
+    const next = typeof forceVisible === 'boolean' ? forceVisible : !this.hudVisible;
+    this.hudVisible = next;
+    this.hud.classList.toggle('visible', next);
+
+    if (next) {
+      this._startSampling();
+    } else {
+      this._stopSampling();
+    }
+  }
+
+  applyLiteEffects(enabled, persist = true) {
+    this.liteEffectsEnabled = !!enabled;
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('lite-effects', this.liteEffectsEnabled);
+    }
+
+    if (persist) {
+      try {
+        localStorage.setItem('liteEffectsEnabled', JSON.stringify(this.liteEffectsEnabled));
+      } catch (_) {
+        // ignore persistence failures
+      }
+    }
+
+    if (this._effectsBtn) {
+      this._effectsBtn.textContent = this.liteEffectsEnabled ? 'Full effects' : 'Lite effects';
+    }
+
+    this._render();
+  }
+
+  _startSampling() {
+    if (this.animationFrame || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      this._render();
+      return;
+    }
+
+    Object.assign(this.stats, { fps: 0, frameMs: 0, maxFrameMs: 0, frameCount: 0, longTasks: 0, lastLongTaskMs: 0 });
+    this.sampleStartedAt = performance.now();
+    this.lastFrameAt = 0;
+
+    if (typeof window.PerformanceObserver === 'function') {
+      try {
+        this.observer = new window.PerformanceObserver((list) => {
+          list.getEntries().forEach((entry) => {
+            this.stats.longTasks += 1;
+            this.stats.lastLongTaskMs = Math.max(this.stats.lastLongTaskMs, entry.duration || 0);
+          });
+        });
+        this.observer.observe({ entryTypes: ['longtask'] });
+      } catch (_) {
+        this.observer = null;
+      }
+    }
+
+    const sample = (timestamp) => {
+      if (!this.hudVisible) { this.animationFrame = null; return; }
+
+      if (this.lastFrameAt) {
+        const frameMs = timestamp - this.lastFrameAt;
+        this.stats.frameMs = frameMs;
+        this.stats.maxFrameMs = Math.max(this.stats.maxFrameMs, frameMs);
+        this.stats.frameCount += 1;
+      }
+      this.lastFrameAt = timestamp;
+
+      const elapsed = timestamp - this.sampleStartedAt;
+      if (elapsed >= 500) {
+        this.stats.fps = this.stats.frameCount > 0 ? (this.stats.frameCount * 1000) / elapsed : 0;
+        this._render();
+        this.sampleStartedAt = timestamp;
+        this.stats.frameCount = 0;
+        this.stats.maxFrameMs = this.stats.frameMs;
+        this.stats.longTasks = 0;
+        this.stats.lastLongTaskMs = 0;
+      }
+
+      this.animationFrame = window.requestAnimationFrame(sample);
+    };
+
+    this.animationFrame = window.requestAnimationFrame(sample);
+  }
+
+  _stopSampling() {
+    if (this.animationFrame && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this.animationFrame);
+    }
+    this.animationFrame = null;
+
+    if (this.observer) {
+      try { this.observer.disconnect(); } catch (_) {}
+      this.observer = null;
+    }
+  }
+
+  _render() {
+    if (!this._metrics || typeof document === 'undefined') return;
+
+    const domNodes = document.getElementsByTagName('*').length;
+    const memoryInfo = typeof performance !== 'undefined' ? performance.memory : null;
+    const memoryMb = memoryInfo && typeof memoryInfo.usedJSHeapSize === 'number'
+      ? (memoryInfo.usedJSHeapSize / (1024 * 1024)).toFixed(1)
+      : null;
+
+    this._metrics.fps.textContent = this.stats.fps ? `${Math.round(this.stats.fps)}` : '--';
+    this._metrics.frame.textContent = this.stats.frameMs ? `${this.stats.frameMs.toFixed(1)} ms` : '--';
+    this._metrics.longTasks.textContent = this.stats.lastLongTaskMs
+      ? `${this.stats.longTasks} / ${Math.round(this.stats.lastLongTaskMs)} ms`
+      : '0';
+    this._metrics.domNodes.textContent = `${domNodes}`;
+    this._metrics.memory.textContent = memoryMb ? `${memoryMb} MB` : 'n/a';
+    this._metrics.gpu.textContent = String(this.runtimeInfo.hardwareAcceleration || 'unknown').toUpperCase();
+    this._metrics.effects.textContent = this.liteEffectsEnabled ? 'Lite' : 'Full';
+    this._metrics.dpr.textContent = `${window.devicePixelRatio || 1}`;
+  }
+}
+
+window.PerformanceManager = PerformanceManager;
+
+// ----- src/renderer/managers/WSLManager.js -----
+class WSLManager {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+  setupListeners() {
+    window.api.on('wsl-status', (data) => {
+      if (data.platform) this.ui.platform = data.platform;
+      this.ui.wslAvailable = data.available && data.hasDistros;
+
+      if (this.ui.platform === 'win32') {
+        this._updateIndicator(data);
+
+        if (!data.available) {
+          this.ui.notificationManager.showWarning(
+            'WSL is not installed. CTrace requires WSL on Windows. Please install WSL to access all functionality.'
+          );
+          console.warn('WSL not detected on Windows platform');
+        } else if (!data.hasDistros) {
+          this.ui.notificationManager.showWarning(
+            'WSL is installed but no Linux distributions are available. Please install a distribution (e.g., Ubuntu) to use CTrace.'
+          );
+          console.warn('WSL detected but no distributions installed');
+        } else {
+          console.log('WSL is available and ready with distributions');
+        }
+      }
+    });
+
+    window.api.on('wsl-install-response', (data) => {
+      if (data.action === 'install') {
+        this.ui.notificationManager.showInfo(
+          'WSL installation initiated. Please follow the installation prompts and restart the application when complete.'
+        );
+      } else if (data.action === 'cancel') {
+        this.ui.notificationManager.showWarning(
+          'WSL installation cancelled. Some features may be limited without WSL.'
+        );
+      }
+    });
+
+    window.api.send('check-wsl-status');
+  }
+
+  _updateIndicator(wslStatus) {
+    let statusEl = document.getElementById('wsl-status-indicator');
+    if (!statusEl) {
+      statusEl = document.createElement('div');
+      statusEl.id = 'wsl-status-indicator';
+      statusEl.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        z-index: 1000;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      `;
+      document.body.appendChild(statusEl);
+    }
+
+    if (!wslStatus.available) {
+      statusEl.textContent = '❌ WSL Not Installed';
+      statusEl.style.backgroundColor = '#ff4757';
+      statusEl.title = 'WSL is not installed. Click for installation instructions.';
+    } else if (!wslStatus.hasDistros) {
+      statusEl.textContent = '⚠️ WSL No Distributions';
+      statusEl.style.backgroundColor = '#ffa502';
+      statusEl.title = 'WSL is installed but no Linux distributions are available. Click for setup instructions.';
+    } else {
+      statusEl.textContent = '✅ WSL Ready';
+      statusEl.style.backgroundColor = '#2ed573';
+      statusEl.title = 'WSL is ready and available for CTrace';
+      setTimeout(() => {
+        if (statusEl && statusEl.textContent.includes('✅')) {
+          statusEl.style.opacity = '0.3';
+        }
+      }, 3000);
+    }
+
+    statusEl.onclick = () => {
+      if (!wslStatus.available || !wslStatus.hasDistros) {
+        this._showSetupDialog(wslStatus);
+      }
+    };
+  }
+
+  _showSetupDialog(wslStatus) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    `;
+
+    let instructions = '';
+    if (!wslStatus.available) {
+      instructions = `
+        <h3>🔧 Install WSL (Windows Subsystem for Linux)</h3>
+        <p>CTrace requires WSL to run on Windows. Follow these steps:</p>
+        <ol>
+          <li><strong>Open PowerShell as Administrator</strong>
+            <br><small>Right-click Start button → "Windows PowerShell (Admin)"</small>
+          </li>
+          <li><strong>Run the installation command:</strong>
+            <br><code style="background:#f0f0f0; padding:4px 8px; border-radius:3px; font-family:monospace;">wsl --install</code>
+          </li>
+          <li><strong>Restart your computer</strong> when prompted</li>
+          <li><strong>Follow the Ubuntu setup</strong> (create username/password)</li>
+          <li><strong>Restart this application</strong> to use CTrace</li>
+        </ol>
+      `;
+    } else {
+      instructions = `
+        <h3>📦 Install a Linux Distribution</h3>
+        <p>WSL is installed but you need a Linux distribution to run CTrace:</p>
+        <ol>
+          <li><strong>Open PowerShell</strong> (no need for Admin)</li>
+          <li><strong>List available distributions:</strong>
+            <br><code style="background:#f0f0f0; padding:4px 8px; border-radius:3px; font-family:monospace;">wsl --list --online</code>
+          </li>
+          <li><strong>Install Ubuntu (recommended):</strong>
+            <br><code style="background:#f0f0f0; padding:4px 8px; border-radius:3px; font-family:monospace;">wsl --install Ubuntu</code>
+          </li>
+          <li><strong>Follow the setup instructions</strong> (create username/password)</li>
+          <li><strong>Restart this application</strong> to use CTrace</li>
+        </ol>
+      `;
+    }
+
+    dialog.innerHTML = `
+      ${instructions}
+      <div style="margin-top:20px; text-align:right;">
+        ${!wslStatus.available ? `
+          <button id="auto-install-wsl" style="padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; font-size:14px; margin-right:10px;">Install Automatically</button>
+        ` : wslStatus.available && !wslStatus.hasDistros ? `
+          <button id="install-ubuntu" style="padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; font-size:14px; margin-right:10px;">Install Ubuntu</button>
+        ` : ''}
+        <button id="close-wsl-dialog" style="padding:10px 20px; background:#007acc; color:white; border:none; border-radius:5px; cursor:pointer; font-size:14px;">Got it!</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const close = () => document.body.removeChild(modal);
+    document.getElementById('close-wsl-dialog').onclick = close;
+    modal.onclick = (e) => { if (e.target === modal) close(); };
+
+    const autoInstallBtn = document.getElementById('auto-install-wsl');
+    if (autoInstallBtn) {
+      autoInstallBtn.onclick = () => {
+        window.api.send('install-wsl');
+        close();
+        this.ui.notificationManager.showInfo('WSL installation started. Please follow any prompts that appear.');
+      };
+    }
+
+    const installUbuntuBtn = document.getElementById('install-ubuntu');
+    if (installUbuntuBtn) {
+      installUbuntuBtn.onclick = () => {
+        window.api.send('install-wsl-distro', 'Ubuntu');
+        close();
+        this.ui.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
+      };
+    }
+  }
+}
+
+window.WSLManager = WSLManager;
+
+// ----- src/renderer/managers/UpdaterManager.js -----
+class UpdaterManager {
+  constructor(notificationManager) {
+    this.notificationManager = notificationManager;
+  }
+
+  updateBackendVersionLabel(releaseTag, statusText = '') {
+    const backendEl = document.getElementById('backend_version');
+    if (!backendEl) return;
+
+    const normalizedTag = typeof releaseTag === 'string' && releaseTag.trim()
+      ? releaseTag.trim()
+      : null;
+
+    if (normalizedTag) {
+      backendEl.textContent = `CoreTrace latest: ${normalizedTag}`;
+      backendEl.title = `Latest CoreTrace backend release: ${normalizedTag}`;
+      return;
+    }
+
+    const fallback = statusText && String(statusText).trim() ? String(statusText).trim() : 'unknown';
+    backendEl.textContent = `CoreTrace latest: ${fallback}`;
+    backendEl.title = 'Latest CoreTrace backend release tag';
+  }
+
+  setupListeners() {
+    const indicator = document.getElementById('update-status-indicator');
+
+    this.updateBackendVersionLabel(null, 'checking...');
+
+    const applyBackendStatus = (status) => {
+      if (!status || !status.type) return;
+
+      if (status.type === 'backend-checking-for-update') {
+        this.updateBackendVersionLabel(null, 'checking...');
+        return;
+      }
+
+      if (status.type === 'backend-update-not-available' || status.type === 'backend-update-installed') {
+        const releaseTag = status.info && status.info.releaseTag ? status.info.releaseTag : null;
+        this.updateBackendVersionLabel(releaseTag, releaseTag ? '' : 'up to date');
+        return;
+      }
+
+      if (status.type === 'backend-error') {
+        this.updateBackendVersionLabel(null, 'unavailable');
+      }
+    };
+
+    window.api.invoke('backend-get-status')
+      .then((res) => {
+        if (res && res.success && res.status) applyBackendStatus(res.status);
+      })
+      .catch(() => {});
+
+    const showIndicator = (state, html, title = '') => {
+      if (!indicator) return;
+      indicator.className = `update-status-indicator ${state}`;
+      indicator.innerHTML = html;
+      indicator.title = title;
+      indicator.style.display = 'inline-flex';
+      indicator.onclick = null;
+    };
+
+    const hideIndicator = () => {
+      if (!indicator) return;
+      indicator.style.display = 'none';
+      indicator.className = 'update-status-indicator';
+      indicator.onclick = null;
+    };
+
+    window.api.on('updater-status', (data) => {
+      if (!data || !data.type) return;
+
+      if (['backend-checking-for-update', 'backend-update-not-available', 'backend-update-installed', 'backend-error'].includes(data.type)) {
+        applyBackendStatus(data);
+        if (data.type === 'backend-error') console.warn('[BackendUpdater] Error:', data.message);
+        return;
+      }
+
+      if (data.type === 'checking-for-update') {
+        showIndicator('checking', '<span class="update-spinner"></span><span>Checking for updates…</span>', 'Checking for updates');
+      } else if (data.type === 'update-available') {
+        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
+        showIndicator('update-available', `<span>↑</span><span>Update available${version} — downloading…</span>`, `Update${version} is downloading in the background`);
+      } else if (data.type === 'download-progress') {
+        const pct = data.percent != null ? ` ${Math.round(data.percent)}%` : '';
+        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
+        showIndicator('update-available', `<span>↑</span><span>Downloading${version}${pct}…</span>`, `Downloading update${version}`);
+      } else if (data.type === 'update-not-available') {
+        hideIndicator();
+      } else if (data.type === 'update-downloaded') {
+        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
+        showIndicator('update-downloaded', `<span>✓</span><span>${version ? version.trim() : 'Update'} ready — restart to apply</span>`, `Click to restart and install${version}`);
+        indicator.onclick = () => window.api.invoke('updater-install-update').catch(() => {});
+      } else if (data.type === 'error') {
+        hideIndicator();
+        console.warn('[Updater] Error:', data.message);
+      }
+    });
+  }
+
+  async openUpdateSettingsModal() {
+    let currentChannel = 'main';
+
+    try {
+      const result = await window.api.invoke('updater-get-settings');
+      if (result && result.success && result.settings && result.settings.channel) {
+        currentChannel = result.settings.channel;
+      }
+    } catch (error) {
+      console.warn('Failed to load updater settings:', error);
+    }
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: #0d1117; color: #f0f6fc;
+      padding: 20px; border-radius: 10px; width: 440px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 12px 0; font-size:18px;">Update Settings</h3>
+      <div style="font-size:12px; color:#8b949e; margin-bottom:14px; line-height:1.5;">
+        Choose which update stream to receive.
+      </div>
+      <label for="update-release-channel" style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Release channel</label>
+      <select id="update-release-channel" style="width:100%; padding:8px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; margin-bottom:8px;">
+        <option value="main">Main (stable)</option>
+        <option value="beta">Beta (pre-release)</option>
+      </select>
+      <div style="font-size:11px; color:#8b949e; margin-bottom:16px;">Beta may include pre-release builds and unstable changes.</div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="check-updates-now" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Check now</button>
+        <button id="close-update-settings" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Close</button>
+        <button id="save-update-settings" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const channelSelect = dialog.querySelector('#update-release-channel');
+    if (channelSelect) channelSelect.value = currentChannel === 'beta' ? 'beta' : 'main';
+
+    const closeModal = () => { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); };
+
+    dialog.querySelector('#close-update-settings').onclick = closeModal;
+
+    dialog.querySelector('#check-updates-now').onclick = async () => {
+      try {
+        const result = await window.api.invoke('updater-check-now');
+        if (result && result.success) {
+          this.notificationManager.showInfo('Update check started. You will be notified if an update is available.');
+        } else {
+          this.notificationManager.showWarning(result && result.error ? result.error : 'Unable to check for updates.');
+        }
+      } catch (error) {
+        this.notificationManager.showError('Failed to check updates: ' + error.message);
+      }
+    };
+
+    dialog.querySelector('#save-update-settings').onclick = async () => {
+      const selectedChannel = channelSelect ? channelSelect.value : 'main';
+      try {
+        const result = await window.api.invoke('updater-set-channel', selectedChannel);
+        if (result && result.success) {
+          this.notificationManager.showSuccess(`Update channel saved: ${selectedChannel}`);
+          closeModal();
+        } else {
+          this.notificationManager.showError(result && result.error ? result.error : 'Failed to save update channel');
+        }
+      } catch (error) {
+        this.notificationManager.showError('Failed to save update settings: ' + error.message);
+      }
+    };
+
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+  }
+
+  async openBackendSettingsModal() {
+    let currentPath = '';
+
+    try {
+      const result = await window.api.invoke('backend-get-settings');
+      if (result && result.success && result.settings && result.settings.directBinaryPath) {
+        currentPath = result.settings.directBinaryPath;
+      }
+    } catch (err) {
+      console.warn('Failed to load backend settings:', err);
+    }
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: #0d1117; color: #f0f6fc;
+      padding: 24px; border-radius: 10px; width: 500px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 8px 0; font-size:18px;">Backend Settings</h3>
+      <div style="font-size:12px; color:#8b949e; margin-bottom:18px; line-height:1.5;">
+        Optionally locate a native <code style="color:#79c0ff;">ctrace.exe</code> binary to run analysis
+        directly on Windows — no WSL or HTTP server required.<br><br>
+        When set, the GUI spawns the binary directly using CLI arguments.
+        Clear the path to revert to the default WSL-backed server mode.
+      </div>
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">ctrace.exe path</label>
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <input id="bs-binary-path" type="text"
+          placeholder="e.g. C:\\tools\\ctrace.exe"
+          style="flex:1; padding:8px; background:#161b22; color:#f0f6fc;
+                 border:1px solid #30363d; border-radius:6px; font-size:12px;" />
+        <button id="bs-browse"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer; white-space:nowrap;">
+          Browse…
+        </button>
+      </div>
+      <div id="bs-mode-hint" style="font-size:11px; color:#8b949e; margin-bottom:16px;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="bs-clear" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Clear (use WSL mode)</button>
+        <button id="bs-close" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Cancel</button>
+        <button id="bs-save" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const pathInput = dialog.querySelector('#bs-binary-path');
+    const modeHint = dialog.querySelector('#bs-mode-hint');
+
+    const updateHint = (val) => {
+      if (val && val.trim()) {
+        modeHint.style.color = '#3fb950';
+        modeHint.textContent = 'Direct binary mode active — analysis will use this executable.';
+      } else {
+        modeHint.style.color = '#8b949e';
+        modeHint.textContent = 'No path set — WSL server mode will be used (default).';
+      }
+    };
+
+    pathInput.value = currentPath;
+    updateHint(currentPath);
+    pathInput.oninput = () => updateHint(pathInput.value);
+
+    const closeModal = () => { if (modal.parentNode) modal.parentNode.removeChild(modal); };
+
+    dialog.querySelector('#bs-close').onclick = closeModal;
+
+    dialog.querySelector('#bs-browse').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-browse-binary');
+        if (!result.canceled && result.filePath) {
+          pathInput.value = result.filePath;
+          updateHint(result.filePath);
+        }
+      } catch (err) {
+        this.notificationManager.showError('Browse failed: ' + err.message);
+      }
+    };
+
+    dialog.querySelector('#bs-clear').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: '' });
+        if (result && result.success) {
+          this.notificationManager.showSuccess('Backend reset to WSL server mode.');
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to clear backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to clear: ' + err.message);
+      }
+    };
+
+    dialog.querySelector('#bs-save').onclick = async () => {
+      const val = pathInput.value.trim();
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val });
+        if (result && result.success) {
+          this.notificationManager.showSuccess(val ? 'Direct binary mode enabled.' : 'Backend reset to WSL server mode.');
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to save backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to save: ' + err.message);
+      }
+    };
+
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+  }
+}
+
+window.UpdaterManager = UpdaterManager;
+
+// ----- src/renderer/managers/ResizeManager.js -----
+class ResizeManager {
+  constructor() {
+    this.isResizing = false;
+    this.resizeType = null;
+    this._boundDoResize = this._doResize.bind(this);
+    this._boundStopResize = this._stopResize.bind(this);
+  }
+
+  setup() {
+    const sidebar = document.getElementById('sidebar');
+    const toolsPanel = document.getElementById('toolsPanel');
+
+    const startResize = (e, type) => {
+      this.isResizing = true;
+      this.resizeType = type;
+
+      if (type === 'sidebar') {
+        sidebar.style.transition = 'none';
+      } else if (type === 'toolsPanel') {
+        toolsPanel.style.transition = 'none';
+      }
+
+      document.addEventListener('mousemove', this._boundDoResize);
+      document.addEventListener('mouseup', this._boundStopResize);
+      e.preventDefault();
+      document.body.style.userSelect = 'none';
+    };
+
+    window.initSidebarResize = (e) => startResize(e, 'sidebar');
+    window.initToolsPanelResize = (e) => startResize(e, 'toolsPanel');
+  }
+
+  _doResize(e) {
+    if (!this.isResizing) return;
+
+    const sidebar = document.getElementById('sidebar');
+    const toolsPanel = document.getElementById('toolsPanel');
+
+    requestAnimationFrame(() => {
+      if (this.resizeType === 'sidebar') {
+        const sidebarRect = sidebar.getBoundingClientRect();
+        const newWidth = e.clientX - sidebarRect.left;
+        const minWidth = 180;
+        const maxWidth = window.innerWidth * 0.5;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          sidebar.style.width = newWidth + 'px';
+        }
+      } else if (this.resizeType === 'toolsPanel') {
+        const containerRect = toolsPanel.parentElement.getBoundingClientRect();
+        const newWidth = containerRect.right - e.clientX;
+        const minWidth = 200;
+        const maxWidth = window.innerWidth * 0.6;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          toolsPanel.style.width = newWidth + 'px';
+        }
+      }
+    });
+  }
+
+  _stopResize() {
+    this.isResizing = false;
+
+    const sidebar = document.getElementById('sidebar');
+    const toolsPanel = document.getElementById('toolsPanel');
+
+    if (this.resizeType === 'sidebar') {
+      sidebar.style.transition = '';
+    } else if (this.resizeType === 'toolsPanel') {
+      toolsPanel.style.transition = '';
+    }
+
+    document.body.style.userSelect = '';
+    document.removeEventListener('mousemove', this._boundDoResize);
+    document.removeEventListener('mouseup', this._boundStopResize);
+    this.resizeType = null;
+  }
+}
+
+window.ResizeManager = ResizeManager;
+
+// ----- src/renderer/managers/CTraceRunner.js -----
+class CTraceRunner {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+  async run() {
+    const ui = this.ui;
+    const resultsArea = document.getElementById('ctrace-results-area');
+    ui.showToolsPanel();
+
+    if (!resultsArea) {
+      ui.notificationManager.showError('CTrace results area not found');
+      return;
+    }
+
+    const active = ui.tabManager.getActiveTab();
+    const currentFilePath = active && active.filePath ? active.filePath : null;
+
+    if (!currentFilePath) {
+      resultsArea.innerHTML = `
+        <div class="ctrace-error">
+          <div class="error-icon">⚠️</div>
+          <div class="error-text">No active file to analyze</div>
+          <div class="error-subtext">Please open a file first</div>
+        </div>
+      `;
+      ui.notificationManager.showWarning('Open a file to analyze with CTrace');
+      return;
+    }
+
+    if (ui.tabManager.activeTabId && ui.tabManager.isTabFileMissing(ui.tabManager.activeTabId)) {
+      resultsArea.innerHTML = `
+        <div class="ctrace-error">
+          <div class="error-icon">⚠️</div>
+          <div class="error-text">File not found on disk</div>
+          <div class="error-subtext">${currentFilePath}</div>
+          <div class="error-help">The file was moved or deleted. Open its new location to analyze it.</div>
+        </div>
+      `;
+      ui.notificationManager.showError('File not found — analysis blocked');
+      return;
+    }
+
+    const wslFilePath = ui.convertToWSLPath(currentFilePath);
+    ui.diagnosticsManager.clear();
+    resultsArea.innerHTML = `
+      <div class="ctrace-loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Analyzing ${ui.diagnosticsManager.getFileName(currentFilePath)}...</div>
+        <div class="loading-subtext">This may take a moment</div>
+      </div>
+    `;
+
+    try {
+      const argsInput = document.getElementById('ctrace-args');
+      const customArgs = argsInput ? argsInput.value.trim() : '';
+
+      let args = [];
+      if (customArgs) {
+        const matches = customArgs.match(/(?:[^\s"]+|"[^"]*")+/g);
+        if (matches) args = matches.map(arg => arg.replace(/^"(.*)"$/, '$1'));
+      }
+
+      args.unshift(`--input=${wslFilePath}`);
+
+      console.log('invoke run-ctrace with WSL path:', wslFilePath);
+      console.log('Custom arguments:', args);
+      const result = await window.api.invoke('run-ctrace', args);
+
+      if (result && result.success) {
+        if (!result.output || result.output.trim() === '') {
+          resultsArea.innerHTML = `
+            <div class="ctrace-error">
+              <div class="error-icon">⚠️</div>
+              <div class="error-text">No Output from CTrace</div>
+              <div class="error-details">CTrace completed successfully but produced no output. This might indicate:</div>
+              <div class="error-help">
+                • The file may not be supported by CTrace<br>
+                • The analysis produced no diagnostics<br>
+                • Check that your custom arguments are correct<br>
+                • Try adding <code>--sarif-format</code> for JSON output
+              </div>
+            </div>
+          `;
+          ui.notificationManager.showWarning('CTrace produced no output');
+          return;
+        }
+
+        const isParsed = ui.diagnosticsManager.parseOutput(result.output);
+
+        if (isParsed) {
+          await ui.diagnosticsManager.displayDiagnostics();
+          ui.notificationManager.showSuccess('CTrace analysis completed');
+        } else {
+          resultsArea.innerHTML = `
+            <div class="ctrace-raw-output">
+              <div class="raw-output-header"><span>Raw Output</span></div>
+              <pre class="raw-output-content">${ui.diagnosticsManager.escapeHtml(result.output)}</pre>
+            </div>
+          `;
+          ui.notificationManager.showSuccess('CTrace completed');
+        }
+      } else {
+        const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
+        const clean = this._stripAnsi(details);
+
+        if (details.includes('WSL') && details.includes('distributions')) {
+          resultsArea.innerHTML = `
+            <div class="ctrace-error">
+              <div class="error-icon">⚠️</div>
+              <div class="error-text">WSL Setup Required</div>
+              <div class="error-details">${clean}</div>
+              <div class="error-help">
+                <strong>Quick Setup:</strong><br>
+                1. Open PowerShell as Administrator<br>
+                2. Run: <code>wsl --install Ubuntu</code><br>
+                3. Restart when prompted<br>
+                4. Restart this application
+              </div>
+            </div>
+          `;
+          ui.notificationManager.showWarning('WSL setup required');
+        } else {
+          resultsArea.innerHTML = `
+            <div class="ctrace-error">
+              <div class="error-icon">❌</div>
+              <div class="error-text">CTrace Error</div>
+              <pre class="error-details">${clean}</pre>
+            </div>
+          `;
+          ui.notificationManager.showError('Failed to run CTrace');
+        }
+      }
+    } catch (err) {
+      resultsArea.innerHTML = `
+        <div class="ctrace-error">
+          <div class="error-icon">❌</div>
+          <div class="error-text">Exception</div>
+          <pre class="error-details">${err.message}</pre>
+        </div>
+      `;
+      ui.notificationManager.showError('Error invoking CTrace');
+    }
+  }
+
+  _stripAnsi(input) {
+    if (!input || typeof input !== 'string') return input;
+    return input.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+}
+
+window.CTraceRunner = CTraceRunner;
+
 // ----- src/renderer/components/ActivityBar.js -----
 class ActivityBar {
   constructor(ui) {
@@ -6486,88 +7445,19 @@ class UIController {
      * @private
      */
     this.terminalManager = new TerminalManager();
+    this.performanceManager = new PerformanceManager();
+    this.resizeManager = new ResizeManager();
+    this.wslManager = new WSLManager(this);
+    this.updaterManager = new UpdaterManager(this.notificationManager);
+    this.ctraceRunner = new CTraceRunner(this);
 
-    /**
-     * Flag indicating if UI is being resized
-     * @type {boolean}
-     * @private
-     */
-    this.isResizing = false;
-    
-    /**
-     * Type of resize operation (sidebar, toolsPanel)
-     * @type {string|null}
-     * @private
-     */
-    this.resizeType = null;
-    
-    /**
-     * Currently active menu
-     * @type {string|null}
-     * @private
-     */
     this.activeMenu = null;
-
-    /**
-     * File tree context menu DOM element
-     * @type {HTMLElement|null}
-     * @private
-     */
     this.fileTreeContextMenu = null;
-
-    /**
-     * Auto save enabled state
-     * @type {boolean}
-     * @private
-     */
     this.autoSaveEnabled = false;
-
-    /**
-     * Auto save timer
-     * @type {number|null}
-     * @private
-     */
     this.autoSaveTimer = null;
-
-    /**
-     * Auto save delay in milliseconds
-     * @type {number}
-     * @private
-     */
     this.autoSaveDelay = 1000;
-
-    /**
-     * WSL availability status
-     * @type {boolean}
-     * @private
-     */
     this.wslAvailable = true;
-
-    /**
-     * Current platform
-     * @type {string}
-     * @private
-     */
     this.platform = 'unknown';
-
-    this.performanceHud = null;
-    this.performanceHudVisible = false;
-    this.performanceHudAnimationFrame = null;
-    this.performanceObserver = null;
-    this.performanceSampleStartedAt = 0;
-    this.performanceLastFrameAt = 0;
-    this.performanceRuntimeInfo = { hardwareAcceleration: 'unknown' };
-    this.liteEffectsEnabled = false;
-    this.performanceStats = {
-      fps: 0,
-      frameMs: 0,
-      maxFrameMs: 0,
-      frameCount: 0,
-      longTasks: 0,
-      lastLongTaskMs: 0,
-      domNodes: 0,
-      memoryMb: null
-    };
 
     this.activityBar = new ActivityBar(this);
     this.fileTree = new FileTree(this);
@@ -6659,7 +7549,7 @@ class UIController {
   deferNonCriticalStartup() {
     runAfterFirstPaint(() => {
       this.updateAppVersionLabel();
-      this.setupPerformanceMonitor();
+      this.performanceManager.init();
       this.setupFileTreeWatcher();
       this.loadAutoSaveState();
       this.setupAutoSaveListener();
@@ -6670,231 +7560,14 @@ class UIController {
     });
   }
 
-  setupPerformanceMonitor() {
-    if (typeof document === 'undefined' || !document.body || this.performanceHud) return;
-
-    try {
-      this.liteEffectsEnabled = localStorage.getItem('liteEffectsEnabled') === 'true';
-    } catch (_) {
-      this.liteEffectsEnabled = false;
-    }
-
-    this.applyLiteEffects(this.liteEffectsEnabled, false);
-
-    if (window.api && typeof window.api.getRuntimeInfo === 'function') {
-      try {
-        this.performanceRuntimeInfo = window.api.getRuntimeInfo() || this.performanceRuntimeInfo;
-      } catch (_) {
-        this.performanceRuntimeInfo = { hardwareAcceleration: 'unknown' };
-      }
-    }
-
-    const hud = document.createElement('aside');
-    hud.className = 'performance-hud';
-    hud.innerHTML = `
-      <div class="performance-hud-header">
-        <span class="performance-hud-title">Performance</span>
-        <div class="performance-hud-actions">
-          <button type="button" class="performance-hud-btn" data-action="effects">Lite effects</button>
-          <button type="button" class="performance-hud-btn" data-action="hide">Hide</button>
-        </div>
-      </div>
-      <div class="performance-hud-grid">
-        <div class="performance-hud-card"><span class="performance-hud-label">FPS</span><span class="performance-hud-value" data-metric="fps">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">Frame</span><span class="performance-hud-value" data-metric="frame">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">Long tasks</span><span class="performance-hud-value" data-metric="longTasks">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">DOM nodes</span><span class="performance-hud-value" data-metric="domNodes">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">JS heap</span><span class="performance-hud-value" data-metric="memory">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">GPU</span><span class="performance-hud-value" data-metric="gpu">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">Effects</span><span class="performance-hud-value" data-metric="effects">--</span></div>
-        <div class="performance-hud-card"><span class="performance-hud-label">DPR</span><span class="performance-hud-value" data-metric="dpr">--</span></div>
-      </div>
-      <div class="performance-hud-note">Toggle with Ctrl+Alt+P. If Lite effects makes the UI feel much faster, the slowdown is likely compositing and blur related.</div>
-    `;
-
-    hud.querySelector('[data-action="effects"]').addEventListener('click', () => {
-      this.applyLiteEffects(!this.liteEffectsEnabled);
-    });
-    hud.querySelector('[data-action="hide"]').addEventListener('click', () => {
-      this.togglePerformanceHud(false);
-    });
-
-    document.body.appendChild(hud);
-    this.performanceHud = hud;
-    this.performanceHudMetrics = {
-      fps: hud.querySelector('[data-metric="fps"]'),
-      frame: hud.querySelector('[data-metric="frame"]'),
-      longTasks: hud.querySelector('[data-metric="longTasks"]'),
-      domNodes: hud.querySelector('[data-metric="domNodes"]'),
-      memory: hud.querySelector('[data-metric="memory"]'),
-      gpu: hud.querySelector('[data-metric="gpu"]'),
-      effects: hud.querySelector('[data-metric="effects"]'),
-      dpr: hud.querySelector('[data-metric="dpr"]')
-    };
-    this.performanceHudEffectsButton = hud.querySelector('[data-action="effects"]');
-    this.renderPerformanceHud();
-  }
-
+  // --- PerformanceManager delegation ---
   togglePerformanceHud(forceVisible) {
-    if (!this.performanceHud) {
-      this.setupPerformanceMonitor();
-    }
-    if (!this.performanceHud) return;
-
-    const nextVisible = typeof forceVisible === 'boolean' ? forceVisible : !this.performanceHudVisible;
-    this.performanceHudVisible = nextVisible;
-    this.performanceHud.classList.toggle('visible', nextVisible);
-
-    if (nextVisible) {
-      this.startPerformanceSampling();
-    } else {
-      this.stopPerformanceSampling();
-    }
+    this.performanceManager.toggle(forceVisible);
   }
 
-  startPerformanceSampling() {
-    if (this.performanceHudAnimationFrame || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-      this.renderPerformanceHud();
-      return;
-    }
 
-    this.performanceStats.fps = 0;
-    this.performanceStats.frameMs = 0;
-    this.performanceStats.maxFrameMs = 0;
-    this.performanceStats.frameCount = 0;
-    this.performanceStats.longTasks = 0;
-    this.performanceStats.lastLongTaskMs = 0;
-    this.performanceSampleStartedAt = performance.now();
-    this.performanceLastFrameAt = 0;
-
-    if (typeof window.PerformanceObserver === 'function') {
-      try {
-        this.performanceObserver = new window.PerformanceObserver((list) => {
-          const entries = list.getEntries();
-          entries.forEach((entry) => {
-            this.performanceStats.longTasks += 1;
-            this.performanceStats.lastLongTaskMs = Math.max(this.performanceStats.lastLongTaskMs, entry.duration || 0);
-          });
-        });
-        this.performanceObserver.observe({ entryTypes: ['longtask'] });
-      } catch (_) {
-        this.performanceObserver = null;
-      }
-    }
-
-    const sample = (timestamp) => {
-      if (!this.performanceHudVisible) {
-        this.performanceHudAnimationFrame = null;
-        return;
-      }
-
-      if (this.performanceLastFrameAt) {
-        const frameMs = timestamp - this.performanceLastFrameAt;
-        this.performanceStats.frameMs = frameMs;
-        this.performanceStats.maxFrameMs = Math.max(this.performanceStats.maxFrameMs, frameMs);
-        this.performanceStats.frameCount += 1;
-      }
-      this.performanceLastFrameAt = timestamp;
-
-      const elapsed = timestamp - this.performanceSampleStartedAt;
-      if (elapsed >= 500) {
-        this.performanceStats.fps = this.performanceStats.frameCount > 0
-          ? (this.performanceStats.frameCount * 1000) / elapsed
-          : 0;
-        this.renderPerformanceHud();
-        this.performanceSampleStartedAt = timestamp;
-        this.performanceStats.frameCount = 0;
-        this.performanceStats.maxFrameMs = this.performanceStats.frameMs;
-        this.performanceStats.longTasks = 0;
-        this.performanceStats.lastLongTaskMs = 0;
-      }
-
-      this.performanceHudAnimationFrame = window.requestAnimationFrame(sample);
-    };
-
-    this.performanceHudAnimationFrame = window.requestAnimationFrame(sample);
-  }
-
-  stopPerformanceSampling() {
-    if (this.performanceHudAnimationFrame && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-      window.cancelAnimationFrame(this.performanceHudAnimationFrame);
-    }
-    this.performanceHudAnimationFrame = null;
-
-    if (this.performanceObserver) {
-      try {
-        this.performanceObserver.disconnect();
-      } catch (_) {
-        // ignore observer shutdown failures
-      }
-      this.performanceObserver = null;
-    }
-  }
-
-  applyLiteEffects(enabled, persist = true) {
-    this.liteEffectsEnabled = !!enabled;
-    if (typeof document !== 'undefined' && document.body) {
-      document.body.classList.toggle('lite-effects', this.liteEffectsEnabled);
-    }
-
-    if (persist) {
-      try {
-        localStorage.setItem('liteEffectsEnabled', JSON.stringify(this.liteEffectsEnabled));
-      } catch (_) {
-        // ignore persistence failures
-      }
-    }
-
-    if (this.performanceHudEffectsButton) {
-      this.performanceHudEffectsButton.textContent = this.liteEffectsEnabled ? 'Full effects' : 'Lite effects';
-    }
-
-    this.renderPerformanceHud();
-  }
-
-  renderPerformanceHud() {
-    if (!this.performanceHudMetrics || typeof document === 'undefined') return;
-
-    const domNodes = document.getElementsByTagName('*').length;
-    const memoryInfo = typeof performance !== 'undefined' ? performance.memory : null;
-    const memoryMb = memoryInfo && typeof memoryInfo.usedJSHeapSize === 'number'
-      ? (memoryInfo.usedJSHeapSize / (1024 * 1024)).toFixed(1)
-      : null;
-
-    this.performanceHudMetrics.fps.textContent = this.performanceStats.fps ? `${Math.round(this.performanceStats.fps)}` : '--';
-    this.performanceHudMetrics.frame.textContent = this.performanceStats.frameMs ? `${this.performanceStats.frameMs.toFixed(1)} ms` : '--';
-    this.performanceHudMetrics.longTasks.textContent = this.performanceStats.lastLongTaskMs
-      ? `${this.performanceStats.longTasks} / ${Math.round(this.performanceStats.lastLongTaskMs)} ms`
-      : '0';
-    this.performanceHudMetrics.domNodes.textContent = `${domNodes}`;
-    this.performanceHudMetrics.memory.textContent = memoryMb ? `${memoryMb} MB` : 'n/a';
-    this.performanceHudMetrics.gpu.textContent = String(this.performanceRuntimeInfo.hardwareAcceleration || 'unknown').toUpperCase();
-    this.performanceHudMetrics.effects.textContent = this.liteEffectsEnabled ? 'Lite' : 'Full';
-    this.performanceHudMetrics.dpr.textContent = `${window.devicePixelRatio || 1}`;
-  }
-
-  /**
-   * Update status bar backend version label using latest known release tag.
-   * @param {string|null} releaseTag
-   * @param {string} [statusText='']
-   */
   updateBackendVersionLabel(releaseTag, statusText = '') {
-    const backendEl = document.getElementById('backend_version');
-    if (!backendEl) return;
-
-    const normalizedTag = typeof releaseTag === 'string' && releaseTag.trim()
-      ? releaseTag.trim()
-      : null;
-
-    if (normalizedTag) {
-      backendEl.textContent = `CoreTrace latest: ${normalizedTag}`;
-      backendEl.title = `Latest CoreTrace backend release: ${normalizedTag}`;
-      return;
-    }
-
-    const fallback = statusText && String(statusText).trim() ? String(statusText).trim() : 'unknown';
-    backendEl.textContent = `CoreTrace latest: ${fallback}`;
-    backendEl.title = 'Latest CoreTrace backend release tag';
+    return this.updaterManager.updateBackendVersionLabel(releaseTag, statusText);
   }
   
   async refreshFileTree(silent = false) {
@@ -6906,344 +7579,20 @@ class UIController {
     return this.fileTree.setupFileTreeWatcher();
   }
 
-  /**
-   * Setup WSL status listener to handle WSL availability updates
-   */
   setupWSLStatusListener() {
-    // Listen for WSL status updates from main process
-    window.api.on('wsl-status', (data) => {
-      this.wslAvailable = data.available && data.hasDistros;
-      
-      if (this.platform === 'win32') {
-        // Update WSL status indicator in UI
-        this.updateWSLStatusIndicator(data);
-        
-        if (!data.available) {
-          this.notificationManager.showWarning(
-            'WSL is not installed. CTrace requires WSL on Windows. Please install WSL to access all functionality.'
-          );
-          console.warn('WSL not detected on Windows platform');
-        } else if (!data.hasDistros) {
-          this.notificationManager.showWarning(
-            'WSL is installed but no Linux distributions are available. Please install a distribution (e.g., Ubuntu) to use CTrace.'
-          );
-          console.warn('WSL detected but no distributions installed');
-        } else {
-          console.log('WSL is available and ready with distributions');
-        }
-      }
-    });
-
-    // Listen for WSL installation dialog responses
-    window.api.on('wsl-install-response', (data) => {
-      if (data.action === 'install') {
-        this.notificationManager.showInfo(
-          'WSL installation initiated. Please follow the installation prompts and restart the application when complete.'
-        );
-      } else if (data.action === 'cancel') {
-        this.notificationManager.showWarning(
-          'WSL installation cancelled. Some features may be limited without WSL.'
-        );
-      }
-    });
-
-    // Request initial WSL status check
-    window.api.send('check-wsl-status');
+    return this.wslManager.setupListeners();
   }
 
-  /**
-   * Setup updater status listener for notifications coming from main process
-   */
   setupUpdaterStatusListener() {
-    const indicator = document.getElementById('update-status-indicator');
-
-    // Initial placeholder until the first backend update event arrives.
-    this.updateBackendVersionLabel(null, 'checking...');
-
-    const applyBackendStatus = (status) => {
-      if (!status || !status.type) return;
-
-      if (status.type === 'backend-checking-for-update') {
-        this.updateBackendVersionLabel(null, 'checking...');
-        return;
-      }
-
-      if (status.type === 'backend-update-not-available' || status.type === 'backend-update-installed') {
-        const releaseTag = status.info && status.info.releaseTag ? status.info.releaseTag : null;
-        this.updateBackendVersionLabel(releaseTag, releaseTag ? '' : 'up to date');
-        return;
-      }
-
-      if (status.type === 'backend-error') {
-        this.updateBackendVersionLabel(null, 'unavailable');
-      }
-    };
-
-    window.api.invoke('backend-get-status')
-      .then((res) => {
-        if (res && res.success && res.status) {
-          applyBackendStatus(res.status);
-        }
-      })
-      .catch(() => {});
-
-    const showIndicator = (state, html, title = '') => {
-      if (!indicator) return;
-      indicator.className = `update-status-indicator ${state}`;
-      indicator.innerHTML = html;
-      indicator.title = title;
-      indicator.style.display = 'inline-flex';
-      indicator.onclick = null;
-    };
-
-    const hideIndicator = () => {
-      if (!indicator) return;
-      indicator.style.display = 'none';
-      indicator.className = 'update-status-indicator';
-      indicator.onclick = null;
-    };
-
-    window.api.on('updater-status', (data) => {
-      if (!data || !data.type) return;
-
-      if (data.type === 'backend-checking-for-update' || data.type === 'backend-update-not-available' || data.type === 'backend-update-installed' || data.type === 'backend-error') {
-        applyBackendStatus(data);
-        if (data.type === 'backend-error') {
-          console.warn('[BackendUpdater] Error:', data.message);
-        }
-        return;
-      }
-
-      if (data.type === 'checking-for-update') {
-        showIndicator(
-          'checking',
-          '<span class="update-spinner"></span><span>Checking for updates…</span>',
-          'Checking for updates'
-        );
-      } else if (data.type === 'update-available') {
-        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
-        showIndicator(
-          'update-available',
-          `<span>↑</span><span>Update available${version} — downloading…</span>`,
-          `Update${version} is downloading in the background`
-        );
-      } else if (data.type === 'download-progress') {
-        const pct = data.percent != null ? ` ${Math.round(data.percent)}%` : '';
-        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
-        showIndicator(
-          'update-available',
-          `<span>↑</span><span>Downloading${version}${pct}…</span>`,
-          `Downloading update${version}`
-        );
-      } else if (data.type === 'update-not-available') {
-        hideIndicator();
-      } else if (data.type === 'update-downloaded') {
-        const version = data.info && data.info.version ? ` v${data.info.version}` : '';
-        showIndicator(
-          'update-downloaded',
-          `<span>✓</span><span>${version ? version.trim() : 'Update'} ready — restart to apply</span>`,
-          `Click to restart and install${version}`
-        );
-        indicator.onclick = () => {
-          window.api.invoke('updater-install-update').catch(() => {});
-        };
-      } else if (data.type === 'error') {
-        hideIndicator();
-        console.warn('[Updater] Error:', data.message);
-      }
-    });
+    return this.updaterManager.setupListeners();
   }
 
-  /**
-   * Update WSL status indicator in the UI
-   * @param {Object} wslStatus - WSL status object with available, hasDistros, and error properties
-   */
-  updateWSLStatusIndicator(wslStatus) {
-    // Find or create WSL status indicator
-    let statusEl = document.getElementById('wsl-status-indicator');
-    if (!statusEl) {
-      statusEl = document.createElement('div');
-      statusEl.id = 'wsl-status-indicator';
-      statusEl.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: bold;
-        color: white;
-        z-index: 1000;
-        cursor: pointer;
-        transition: all 0.3s ease;
-      `;
-      document.body.appendChild(statusEl);
-    }
-
-    // Update status based on WSL state
-    if (!wslStatus.available) {
-      statusEl.textContent = '❌ WSL Not Installed';
-      statusEl.style.backgroundColor = '#ff4757';
-      statusEl.title = 'WSL is not installed. Click for installation instructions.';
-    } else if (!wslStatus.hasDistros) {
-      statusEl.textContent = '⚠️ WSL No Distributions';
-      statusEl.style.backgroundColor = '#ffa502';
-      statusEl.title = 'WSL is installed but no Linux distributions are available. Click for setup instructions.';
-    } else {
-      statusEl.textContent = '✅ WSL Ready';
-      statusEl.style.backgroundColor = '#2ed573';
-      statusEl.title = 'WSL is ready and available for CTrace';
-      
-      // Auto-hide the indicator after 3 seconds if everything is working
-      setTimeout(() => {
-        if (statusEl && statusEl.textContent.includes('✅')) {
-          statusEl.style.opacity = '0.3';
-        }
-      }, 3000);
-    }
-
-    // Add click handler for help
-    statusEl.onclick = () => {
-      if (!wslStatus.available || !wslStatus.hasDistros) {
-        this.showWSLSetupDialog(wslStatus);
-      }
-    };
+    updateWSLStatusIndicator(wslStatus) {
+    return this.wslManager._updateIndicator(wslStatus);
   }
 
-  /**
-   * Show WSL setup dialog with detailed instructions
-   * @param {Object} wslStatus - Current WSL status
-   */
   showWSLSetupDialog(wslStatus) {
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    `;
-
-    const dialog = document.createElement('div');
-    dialog.style.cssText = `
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    `;
-
-    let instructions = '';
-    if (!wslStatus.available) {
-      instructions = `
-        <h3>🔧 Install WSL (Windows Subsystem for Linux)</h3>
-        <p>CTrace requires WSL to run on Windows. Follow these steps:</p>
-        <ol>
-          <li><strong>Open PowerShell as Administrator</strong>
-            <br><small>Right-click Start button → "Windows PowerShell (Admin)"</small>
-          </li>
-          <li><strong>Run the installation command:</strong>
-            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --install</code>
-          </li>
-          <li><strong>Restart your computer</strong> when prompted</li>
-          <li><strong>Follow the Ubuntu setup</strong> (create username/password)</li>
-          <li><strong>Restart this application</strong> to use CTrace</li>
-        </ol>
-      `;
-    } else {
-      instructions = `
-        <h3>📦 Install a Linux Distribution</h3>
-        <p>WSL is installed but you need a Linux distribution to run CTrace:</p>
-        <ol>
-          <li><strong>Open PowerShell</strong> (no need for Admin)</li>
-          <li><strong>List available distributions:</strong>
-            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --list --online</code>
-          </li>
-          <li><strong>Install Ubuntu (recommended):</strong>
-            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --install Ubuntu</code>
-          </li>
-          <li><strong>Follow the setup instructions</strong> (create username/password)</li>
-          <li><strong>Restart this application</strong> to use CTrace</li>
-        </ol>
-      `;
-    }
-
-    dialog.innerHTML = `
-      ${instructions}
-      <div style="margin-top: 20px; text-align: right;">
-        ${!wslStatus.available ? `
-          <button id="auto-install-wsl" style="
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-          ">Install Automatically</button>
-        ` : wslStatus.available && !wslStatus.hasDistros ? `
-          <button id="install-ubuntu" style="
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-          ">Install Ubuntu</button>
-        ` : ''}
-        <button id="close-wsl-dialog" style="
-          padding: 10px 20px;
-          background: #007acc;
-          color: white;
-          border: none;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 14px;
-        ">Got it!</button>
-      </div>
-    `;
-
-    modal.appendChild(dialog);
-    document.body.appendChild(modal);
-
-    // Close dialog handlers
-    const closeDialog = () => {
-      document.body.removeChild(modal);
-    };
-
-    document.getElementById('close-wsl-dialog').onclick = closeDialog;
-    modal.onclick = (e) => {
-      if (e.target === modal) closeDialog();
-    };
-
-    // Installation button handlers
-    const autoInstallBtn = document.getElementById('auto-install-wsl');
-    if (autoInstallBtn) {
-      autoInstallBtn.onclick = () => {
-        window.api.send('install-wsl');
-        closeDialog();
-        this.notificationManager.showInfo('WSL installation started. Please follow any prompts that appear.');
-      };
-    }
-
-    const installUbuntuBtn = document.getElementById('install-ubuntu');
-    if (installUbuntuBtn) {
-      installUbuntuBtn.onclick = () => {
-        window.api.send('install-wsl-distro', 'Ubuntu');
-        closeDialog();
-        this.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
-      };
-    }
+    return this.wslManager._showSetupDialog(wslStatus);
   }
 
   
@@ -7623,83 +7972,16 @@ class UIController {
     });
   }
 
-  /**
-   * Setup resizing functionality
-   */
   setupResizing() {
-    const sidebar = document.getElementById('sidebar');
-    const toolsPanel = document.getElementById('toolsPanel');
-    this.boundDoResize = this.boundDoResize || this.doResize.bind(this);
-    this.boundStopResize = this.boundStopResize || this.stopResize.bind(this);
-
-    const startResize = (e, type) => {
-      this.isResizing = true;
-      this.resizeType = type;
-
-      if (type === 'sidebar') {
-        sidebar.style.transition = 'none';
-      } else if (type === 'toolsPanel') {
-        toolsPanel.style.transition = 'none';
-      }
-
-      document.addEventListener('mousemove', this.boundDoResize);
-      document.addEventListener('mouseup', this.boundStopResize);
-      e.preventDefault();
-      
-      document.body.style.userSelect = 'none';
-    };
-
-    window.initSidebarResize = (e) => startResize(e, 'sidebar');
-    window.initToolsPanelResize = (e) => startResize(e, 'toolsPanel');
+    return this.resizeManager.setup();
   }
 
   doResize(e) {
-    if (!this.isResizing) return;
-    
-    const sidebar = document.getElementById('sidebar');
-    const toolsPanel = document.getElementById('toolsPanel');
-    
-    requestAnimationFrame(() => {
-      if (this.resizeType === 'sidebar') {
-        const sidebarRect = sidebar.getBoundingClientRect();
-        const newWidth = e.clientX - sidebarRect.left;
-        const minWidth = 180;
-        const maxWidth = window.innerWidth * 0.5;
-        
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          sidebar.style.width = newWidth + 'px';
-        }
-      } else if (this.resizeType === 'toolsPanel') {
-        const containerRect = toolsPanel.parentElement.getBoundingClientRect();
-        const newWidth = containerRect.right - e.clientX;
-        const minWidth = 200;
-        const maxWidth = window.innerWidth * 0.6;
-        
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          toolsPanel.style.width = newWidth + 'px';
-        }
-      }
-    });
+    return this.resizeManager._doResize(e);
   }
 
   stopResize() {
-    this.isResizing = false;
-    
-    const sidebar = document.getElementById('sidebar');
-    const toolsPanel = document.getElementById('toolsPanel');
-    
-    if (this.resizeType === 'sidebar') {
-      sidebar.style.transition = '';
-    } else if (this.resizeType === 'toolsPanel') {
-      toolsPanel.style.transition = '';
-    }
-    
-    document.body.style.userSelect = '';
-    
-    document.removeEventListener('mousemove', this.boundDoResize);
-    document.removeEventListener('mouseup', this.boundStopResize);
-    
-    this.resizeType = null;
+    return this.resizeManager._stopResize();
   }
 
   /**
@@ -7821,168 +8103,7 @@ class UIController {
     window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
 
     // CTrace helpers
-    const stripAnsi = (input) => {
-      if (!input || typeof input !== 'string') return input;
-      const ansiRegex = /\x1b\[[0-9;]*m/g;
-      return input.replace(ansiRegex, '');
-    };
-
-    window.runCTrace = async () => {
-      const resultsArea = document.getElementById('ctrace-results-area');
-      this.showToolsPanel();
-      if (!resultsArea) {
-        this.notificationManager.showError('CTrace results area not found');
-        return;
-      }
-
-      const active = this.tabManager.getActiveTab();
-      const currentFilePath = active && active.filePath ? active.filePath : null;
-      if (!currentFilePath) {
-        resultsArea.innerHTML = `
-          <div class="ctrace-error">
-            <div class="error-icon">⚠️</div>
-            <div class="error-text">No active file to analyze</div>
-            <div class="error-subtext">Please open a file first</div>
-          </div>
-        `;
-        this.notificationManager.showWarning('Open a file to analyze with CTrace');
-        return;
-      }
-
-      // Block analysis if the file is known to be missing from disk
-      if (this.tabManager.activeTabId && this.tabManager.isTabFileMissing(this.tabManager.activeTabId)) {
-        resultsArea.innerHTML = `
-          <div class="ctrace-error">
-            <div class="error-icon">⚠️</div>
-            <div class="error-text">File not found on disk</div>
-            <div class="error-subtext">${currentFilePath}</div>
-            <div class="error-help">The file was moved or deleted. Open its new location to analyze it.</div>
-          </div>
-        `;
-        this.notificationManager.showError('File not found — analysis blocked');
-        return;
-      }
-
-      // Convert Windows path to WSL path for Linux binary
-      const wslFilePath = this.convertToWSLPath(currentFilePath);
-      
-      // Clear previous diagnostics and show loading state
-      this.diagnosticsManager.clear();
-      resultsArea.innerHTML = `
-        <div class="ctrace-loading">
-          <div class="loading-spinner"></div>
-          <div class="loading-text">Analyzing ${this.diagnosticsManager.getFileName(currentFilePath)}...</div>
-          <div class="loading-subtext">This may take a moment</div>
-        </div>
-      `;
-      
-      try {
-        // Get custom arguments from input field
-        const argsInput = document.getElementById('ctrace-args');
-        const customArgs = argsInput ? argsInput.value.trim() : '';
-        
-        // Parse custom arguments (simple split by space, preserving quoted strings)
-        let args = [];
-        if (customArgs) {
-          // Simple parsing - split by space but respect quotes
-          const matches = customArgs.match(/(?:[^\s"]+|"[^"]*")+/g);
-          if (matches) {
-            args = matches.map(arg => arg.replace(/^"(.*)"$/, '$1'));
-          }
-        }
-        
-        // Always prepend --input parameter as first argument
-        args.unshift(`--input=${wslFilePath}`);
-        
-        console.log("invoke run-ctrace with WSL path:", wslFilePath);
-        console.log("Custom arguments:", args);
-        const result = await window.api.invoke('run-ctrace', args);
-        console.log("after exec result");
-        console.log(result);
-        if (result && result.success) {
-          console.log("result.output");
-          console.log(result.output);
-          
-          // Check if output is empty
-          if (!result.output || result.output.trim() === '') {
-            resultsArea.innerHTML = `
-              <div class="ctrace-error">
-                <div class="error-icon">⚠️</div>
-                <div class="error-text">No Output from CTrace</div>
-                <div class="error-details">CTrace completed successfully but produced no output. This might indicate:</div>
-                <div class="error-help">
-                  • The file may not be supported by CTrace<br>
-                  • The analysis produced no diagnostics<br>
-                  • Check that your custom arguments are correct<br>
-                  • Try adding <code>--sarif-format</code> for JSON output
-                </div>
-              </div>
-            `;
-            this.notificationManager.showWarning('CTrace produced no output');
-            return;
-          }
-          
-          // Try to parse as JSON for diagnostics
-          const isParsed = this.diagnosticsManager.parseOutput(result.output);
-          
-          if (isParsed) {
-            // Display diagnostics with rich UI
-            await this.diagnosticsManager.displayDiagnostics();
-            this.notificationManager.showSuccess('CTrace analysis completed');
-          } else {
-            // Fallback to plain text output
-            resultsArea.innerHTML = `
-              <div class="ctrace-raw-output">
-                <div class="raw-output-header">
-                  <span>Raw Output</span>
-                </div>
-                <pre class="raw-output-content">${this.diagnosticsManager.escapeHtml(result.output)}</pre>
-              </div>
-            `;
-            this.notificationManager.showSuccess('CTrace completed');
-          }
-        } else {
-          const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
-          
-          // Check if this is a WSL setup error and provide helpful UI
-          if (details.includes('WSL') && details.includes('distributions')) {
-            resultsArea.innerHTML = `
-              <div class="ctrace-error">
-                <div class="error-icon">⚠️</div>
-                <div class="error-text">WSL Setup Required</div>
-                <div class="error-details">${stripAnsi(details)}</div>
-                <div class="error-help">
-                  <strong>Quick Setup:</strong><br>
-                  1. Open PowerShell as Administrator<br>
-                  2. Run: <code>wsl --install Ubuntu</code><br>
-                  3. Restart when prompted<br>
-                  4. Restart this application
-                </div>
-              </div>
-            `;
-            this.notificationManager.showWarning('WSL setup required');
-          } else {
-            resultsArea.innerHTML = `
-              <div class="ctrace-error">
-                <div class="error-icon">❌</div>
-                <div class="error-text">CTrace Error</div>
-                <pre class="error-details">${stripAnsi(details)}</pre>
-              </div>
-            `;
-            this.notificationManager.showError('Failed to run CTrace');
-          }
-        }
-      } catch (err) {
-        resultsArea.innerHTML = `
-          <div class="ctrace-error">
-            <div class="error-icon">❌</div>
-            <div class="error-text">Exception</div>
-            <pre class="error-details">${err.message}</pre>
-          </div>
-        `;
-        this.notificationManager.showError('Error invoking CTrace');
-      }
-    };
+    window.runCTrace = () => this.ctraceRunner.run();
 
     window.clearCTraceOutput = () => {
       this.diagnosticsManager.clear();
@@ -7996,286 +8117,12 @@ class UIController {
     window.searchManager = this.searchManager;
   }
 
-  /**
-   * Open update settings modal to configure release channel (main/beta)
-   */
   async openUpdateSettingsModal() {
-    let currentChannel = 'main';
-
-    try {
-      const result = await window.api.invoke('updater-get-settings');
-      if (result && result.success && result.settings && result.settings.channel) {
-        currentChannel = result.settings.channel;
-      }
-    } catch (error) {
-      console.warn('Failed to load updater settings:', error);
-    }
-
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    `;
-
-    const dialog = document.createElement('div');
-    dialog.style.cssText = `
-      background: #0d1117;
-      color: #f0f6fc;
-      padding: 20px;
-      border-radius: 10px;
-      width: 440px;
-      border: 1px solid #30363d;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    `;
-
-    dialog.innerHTML = `
-      <h3 style="margin: 0 0 12px 0; font-size: 18px;">Update Settings</h3>
-      <div style="font-size: 12px; color: #8b949e; margin-bottom: 14px; line-height: 1.5;">
-        Choose which update stream to receive.
-      </div>
-
-      <label for="update-release-channel" style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Release channel</label>
-      <select id="update-release-channel" style="width:100%; padding:8px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; margin-bottom:8px;">
-        <option value="main">Main (stable)</option>
-        <option value="beta">Beta (pre-release)</option>
-      </select>
-
-      <div style="font-size: 11px; color: #8b949e; margin-bottom: 16px;">
-        Beta may include pre-release builds and unstable changes.
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button id="check-updates-now" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Check now</button>
-        <button id="close-update-settings" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Close</button>
-        <button id="save-update-settings" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
-      </div>
-    `;
-
-    modal.appendChild(dialog);
-    document.body.appendChild(modal);
-
-    const channelSelect = dialog.querySelector('#update-release-channel');
-    if (channelSelect) {
-      channelSelect.value = currentChannel === 'beta' ? 'beta' : 'main';
-    }
-
-    const closeModal = () => {
-      if (modal && modal.parentNode) {
-        modal.parentNode.removeChild(modal);
-      }
-    };
-
-    const closeBtn = dialog.querySelector('#close-update-settings');
-    if (closeBtn) {
-      closeBtn.onclick = closeModal;
-    }
-
-    const checkBtn = dialog.querySelector('#check-updates-now');
-    if (checkBtn) {
-      checkBtn.onclick = async () => {
-        try {
-          const result = await window.api.invoke('updater-check-now');
-          if (result && result.success) {
-            this.notificationManager.showInfo('Update check started. You will be notified if an update is available.');
-          } else {
-            this.notificationManager.showWarning(result && result.error ? result.error : 'Unable to check for updates.');
-          }
-        } catch (error) {
-          this.notificationManager.showError('Failed to check updates: ' + error.message);
-        }
-      };
-    }
-
-    const saveBtn = dialog.querySelector('#save-update-settings');
-    if (saveBtn) {
-      saveBtn.onclick = async () => {
-        const selectedChannel = channelSelect ? channelSelect.value : 'main';
-
-        try {
-          const result = await window.api.invoke('updater-set-channel', selectedChannel);
-          if (result && result.success) {
-            this.notificationManager.showSuccess(`Update channel saved: ${selectedChannel}`);
-            closeModal();
-          } else {
-            this.notificationManager.showError(result && result.error ? result.error : 'Failed to save update channel');
-          }
-        } catch (error) {
-          this.notificationManager.showError('Failed to save update settings: ' + error.message);
-        }
-      };
-    }
-
-    modal.onclick = (e) => {
-      if (e.target === modal) closeModal();
-    };
+    return this.updaterManager.openUpdateSettingsModal();
   }
 
-  /**
-   * Open backend settings modal — lets user locate a native ctrace.exe
-   * to run analysis directly without WSL or the HTTP server.
-   */
   async openBackendSettingsModal() {
-    let currentPath = '';
-
-    try {
-      const result = await window.api.invoke('backend-get-settings');
-      if (result && result.success && result.settings && result.settings.directBinaryPath) {
-        currentPath = result.settings.directBinaryPath;
-      }
-    } catch (err) {
-      console.warn('Failed to load backend settings:', err);
-    }
-
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    `;
-
-    const dialog = document.createElement('div');
-    dialog.style.cssText = `
-      background: #0d1117;
-      color: #f0f6fc;
-      padding: 24px;
-      border-radius: 10px;
-      width: 500px;
-      border: 1px solid #30363d;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-    `;
-
-    dialog.innerHTML = `
-      <h3 style="margin: 0 0 8px 0; font-size: 18px;">Backend Settings</h3>
-      <div style="font-size: 12px; color: #8b949e; margin-bottom: 18px; line-height: 1.5;">
-        Optionally locate a native <code style="color:#79c0ff;">ctrace.exe</code> binary to run analysis
-        directly on Windows — no WSL or HTTP server required.<br><br>
-        When set, the GUI spawns the binary directly using CLI arguments.
-        Clear the path to revert to the default WSL-backed server mode.
-      </div>
-
-      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">
-        ctrace.exe path
-      </label>
-      <div style="display:flex; gap:8px; margin-bottom:16px;">
-        <input id="bs-binary-path" type="text"
-          placeholder="e.g. C:\\tools\\ctrace.exe"
-          style="flex:1; padding:8px; background:#161b22; color:#f0f6fc;
-                 border:1px solid #30363d; border-radius:6px; font-size:12px;" />
-        <button id="bs-browse"
-          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
-                 color:#f0f6fc; border-radius:6px; cursor:pointer; white-space:nowrap;">
-          Browse…
-        </button>
-      </div>
-
-      <div id="bs-mode-hint" style="font-size:11px; color:#8b949e; margin-bottom:16px;"></div>
-
-      <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button id="bs-clear"
-          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
-                 color:#f0f6fc; border-radius:6px; cursor:pointer;">
-          Clear (use WSL mode)
-        </button>
-        <button id="bs-close"
-          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
-                 color:#f0f6fc; border-radius:6px; cursor:pointer;">
-          Cancel
-        </button>
-        <button id="bs-save"
-          style="padding:8px 12px; background:#238636; border:1px solid #2ea043;
-                 color:#fff; border-radius:6px; cursor:pointer;">
-          Save
-        </button>
-      </div>
-    `;
-
-    modal.appendChild(dialog);
-    document.body.appendChild(modal);
-
-    const pathInput = dialog.querySelector('#bs-binary-path');
-    const modeHint = dialog.querySelector('#bs-mode-hint');
-
-    const updateHint = (val) => {
-      if (val && val.trim()) {
-        modeHint.style.color = '#3fb950';
-        modeHint.textContent = 'Direct binary mode active — analysis will use this executable.';
-      } else {
-        modeHint.style.color = '#8b949e';
-        modeHint.textContent = 'No path set — WSL server mode will be used (default).';
-      }
-    };
-
-    pathInput.value = currentPath;
-    updateHint(currentPath);
-    pathInput.oninput = () => updateHint(pathInput.value);
-
-    const closeModal = () => {
-      if (modal.parentNode) modal.parentNode.removeChild(modal);
-    };
-
-    dialog.querySelector('#bs-close').onclick = closeModal;
-
-    dialog.querySelector('#bs-browse').onclick = async () => {
-      try {
-        const result = await window.api.invoke('backend-browse-binary');
-        if (!result.canceled && result.filePath) {
-          pathInput.value = result.filePath;
-          updateHint(result.filePath);
-        }
-      } catch (err) {
-        this.notificationManager.showError('Browse failed: ' + err.message);
-      }
-    };
-
-    dialog.querySelector('#bs-clear').onclick = async () => {
-      try {
-        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: '' });
-        if (result && result.success) {
-          this.notificationManager.showSuccess('Backend reset to WSL server mode.');
-          closeModal();
-        } else {
-          this.notificationManager.showError(result.error || 'Failed to clear backend settings.');
-        }
-      } catch (err) {
-        this.notificationManager.showError('Failed to clear: ' + err.message);
-      }
-    };
-
-    dialog.querySelector('#bs-save').onclick = async () => {
-      const val = pathInput.value.trim();
-      try {
-        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val });
-        if (result && result.success) {
-          if (val) {
-            this.notificationManager.showSuccess('Direct binary mode enabled.');
-          } else {
-            this.notificationManager.showSuccess('Backend reset to WSL server mode.');
-          }
-          closeModal();
-        } else {
-          this.notificationManager.showError(result.error || 'Failed to save backend settings.');
-        }
-      } catch (err) {
-        this.notificationManager.showError('Failed to save: ' + err.message);
-      }
-    };
-
-    modal.onclick = (e) => {
-      if (e.target === modal) closeModal();
-    };
+    return this.updaterManager.openBackendSettingsModal();
   }
 
   /**
