@@ -269,6 +269,13 @@ async function setupAutoUpdater(mainWindow) {
           logUpdaterInfo('Backend binary updated successfully', result);
           lastBackendStatus = { type: 'backend-update-installed', info: result, at: Date.now() };
           sendUpdaterEvent({ type: 'backend-update-installed', info: result });
+
+          // Restart the ctrace server so the new binary is picked up immediately.
+          // If the server hasn't started yet this is a no-op (shutdownServer skips if not running).
+          try {
+            const { shutdownServer } = require('../utils/ctraceServeClient');
+            shutdownServer().catch(() => {});
+          } catch (_) {}
           return;
         }
 

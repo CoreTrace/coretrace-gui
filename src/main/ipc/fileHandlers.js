@@ -107,6 +107,17 @@ function setupFileHandlers(mainWindow) {
     return { success: false, canceled: true };
   });
 
+  // Check if a file path exists on disk (lightweight, no content read)
+  ipcMain.handle('check-file-exists', async (_event, filePath) => {
+    if (!filePath) return { exists: false };
+    try {
+      await fs.access(filePath);
+      return { exists: true };
+    } catch {
+      return { exists: false };
+    }
+  });
+
   // Get file tree for refresh (now uses lazy loading)
   ipcMain.handle('get-file-tree', async (event, folderPath) => {
     const requestId = ++workspaceLoadingSeq;

@@ -13,6 +13,8 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+const hardwareAccelerationEnabled = process.env.CTRACE_DISABLE_GPU !== '1';
+
 const appLaunchStartedAt = Date.now();
 const appLaunchHrStartedAt = process.hrtime.bigint();
 
@@ -34,8 +36,14 @@ function logStartupMilestone(message) {
 
 console.log(`[StartupTiming] Main process entry at ${formatStartupTimestamp(appLaunchStartedAt)}`);
 
-// Fix disk cache errors by disabling cache or using in-memory cache
-app.disableHardwareAcceleration();
+// Keep GPU acceleration enabled by default for renderer responsiveness.
+// Set CTRACE_DISABLE_GPU=1 to force software rendering when diagnosing GPU driver issues.
+if (!hardwareAccelerationEnabled) {
+  app.disableHardwareAcceleration();
+  console.log('[Rendering] Hardware acceleration disabled via CTRACE_DISABLE_GPU=1');
+} else {
+  console.log('[Rendering] Hardware acceleration enabled');
+}
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('disk-cache-size', '1');
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
@@ -47,6 +55,8 @@ const { setupCtraceHandlers, shutdownCtraceServer } = require('./main/ipc/ctrace
 const { setupAssistantHandlers } = require('./main/ipc/assistantHandlers');
 const { setupStateHandlers } = require('./main/ipc/stateHandlers');
 const { setupUpdaterHandlers, setupAutoUpdater } = require('./main/ipc/updaterHandlers');
+const { setupTerminalHandlers, cleanupTerminals } = require('./main/ipc/terminalHandlers');
+const { setupBackendSettingsHandlers } = require('./main/ipc/backendSettingsHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -65,6 +75,7 @@ function createWindow () {
   logStartupMilestone('createWindow start');
   const iconPath = path.join(__dirname, '../assets/ctrace.png');
   const iconApp = nativeImage.createFromPath(iconPath);
+  const hiddenTitleBarStyle = process.platform === 'darwin' ? 'hiddenInset' : 'hidden';
   logStartupMilestone('Window icon loaded');
 
   logStartupMilestone('Constructing BrowserWindow');
@@ -74,13 +85,17 @@ function createWindow () {
     minWidth: 800,
     minHeight: 600,
     icon: iconApp,
-    backgroundColor: '#0d1117',
-    frame: false,               // Custom frame for consistency across platforms
+    backgroundColor: '#0b1017',
+    frame: false,
+    titleBarStyle: hiddenTitleBarStyle,
+    titleBarOverlay: false,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
       preload: path.join(__dirname, 'preload.js'),
+      additionalArguments: [`--ctrace-hardware-acceleration=${hardwareAccelerationEnabled ? 'on' : 'off'}`],
       webSecurity: false          // For loading local fonts
     }
   });
@@ -609,6 +624,41 @@ function schedulePostStartupTasks(window) {
 
     setTimeout(async () => {
       try {
+        // If the user configured a direct ctrace.exe binary, probe it first.
+        // Only fall back to the WSL HTTP server when no direct binary is set.
+        const { loadBackendSettings } = require('./main/ipc/backendSettingsHandlers');
+        const settings = await loadBackendSettings().catch(() => ({}));
+        const directBinaryPath = settings && settings.directBinaryPath;
+
+        if (directBinaryPath) {
+          console.log('[Main] Direct binary configured, probing:', directBinaryPath);
+          await new Promise((resolve) => {
+            const { spawn } = require('child_process');
+            const probe = spawn(directBinaryPath, ['--version'], {
+              stdio: 'pipe',
+              windowsHide: true
+            });
+            let out = '';
+            probe.stdout.on('data', d => { out += d.toString(); });
+            probe.stderr.on('data', d => { out += d.toString(); });
+            probe.on('error', (err) => {
+              console.warn('[Main] Direct binary probe failed:', err.message, '— will use WSL server instead');
+              resolve(false);
+            });
+            probe.on('close', (code) => {
+              if (code === 0) {
+                console.log('[Main] Direct binary OK:', out.trim() || '(no version output)');
+              } else {
+                console.warn('[Main] Direct binary exited with code', code, '— will use WSL server on next run');
+              }
+              resolve(code === 0);
+            });
+            setTimeout(() => { try { probe.kill(); } catch (_) {} resolve(false); }, 5000);
+          });
+          // Direct binary is available — skip server preload.
+          return;
+        }
+
         console.log('[Main] Preloading CTrace server...');
         const { ensureServerRunning } = require('./main/utils/ctraceServeClient');
         await ensureServerRunning();
@@ -641,6 +691,7 @@ app.on('before-quit', async (event) => {
     
     // Shutdown ctrace server
     await shutdownCtraceServer();
+    cleanupTerminals();
   } catch (e) {
     console.warn('Failed to shutdown ctrace server:', e?.message || e);
   } finally {
@@ -660,6 +711,8 @@ app.whenReady().then(async () => {
   setupAssistantHandlers(mainWindow);
   setupStateHandlers();
   setupUpdaterHandlers(mainWindow);
+  setupTerminalHandlers(mainWindow);
+  setupBackendSettingsHandlers(mainWindow);
   setupWindowControls(mainWindow);
   mainWindow.once('ready-to-show', () => {
     schedulePostStartupTasks(mainWindow);

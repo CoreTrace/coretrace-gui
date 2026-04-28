@@ -29,6 +29,10 @@ class ActivityBar {
     if (sidebar && sidebar.style.display === 'none') {
       sidebar.style.display = 'flex';
     }
+    if (sidebar && sidebar.style.width === '0px') {
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    }
   }
 
   showSearch() {
@@ -45,6 +49,10 @@ class ActivityBar {
     if (sidebar && sidebar.style.display === 'none') {
       sidebar.style.display = 'flex';
     }
+    if (sidebar && sidebar.style.width === '0px') {
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    }
     setTimeout(() => searchInput && searchInput.focus(), 100);
   }
 
@@ -56,9 +64,12 @@ class ActivityBar {
     if (!sidebar) return;
 
     if (sidebar.style.width === '0px' || sidebar.style.display === 'none') {
-      sidebar.style.width = '280px';
       sidebar.style.display = 'flex';
+      sidebar.offsetHeight; // force reflow so transition fires
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
     } else {
+      sidebar.style.minWidth = '0px';
       sidebar.style.width = '0px';
       setTimeout(() => {
         sidebar.style.display = 'none';
