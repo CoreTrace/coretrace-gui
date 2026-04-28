@@ -23,7 +23,7 @@ class EditorPanel {
     if (statusElement) {
       if (this.ui.autoSaveEnabled) {
         statusElement.style.display = 'inline-block';
-        statusElement.textContent = '💾 Auto Save: ON';
+        statusElement.textContent = 'Auto Save: ON';
         statusElement.style.background = 'rgba(31, 111, 235, 0.15)';
         statusElement.style.color = '#58a6ff';
       } else {

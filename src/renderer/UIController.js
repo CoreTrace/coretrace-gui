@@ -96,6 +96,13 @@ class UIController {
     this.stateManager = new StateManager(this.tabManager, this.editorManager, this.diagnosticsManager);
 
     /**
+     * Terminal manager instance
+     * @type {TerminalManager}
+     * @private
+     */
+    this.terminalManager = new TerminalManager();
+
+    /**
      * Flag indicating if UI is being resized
      * @type {boolean}
      * @private
@@ -157,6 +164,26 @@ class UIController {
      * @private
      */
     this.platform = 'unknown';
+
+    this.performanceHud = null;
+    this.performanceHudVisible = false;
+    this.performanceHudAnimationFrame = null;
+    this.performanceObserver = null;
+    this.performanceSampleStartedAt = 0;
+    this.performanceLastFrameAt = 0;
+    this.performanceRuntimeInfo = { hardwareAcceleration: 'unknown' };
+    this.liteEffectsEnabled = false;
+    this.performanceStats = {
+      fps: 0,
+      frameMs: 0,
+      maxFrameMs: 0,
+      frameCount: 0,
+      longTasks: 0,
+      lastLongTaskMs: 0,
+      domNodes: 0,
+      memoryMb: null
+    };
+
     this.activityBar = new ActivityBar(this);
     this.fileTree = new FileTree(this);
     this.editorPanel = new EditorPanel(this);
@@ -247,13 +274,218 @@ class UIController {
   deferNonCriticalStartup() {
     runAfterFirstPaint(() => {
       this.updateAppVersionLabel();
+      this.setupPerformanceMonitor();
       this.setupFileTreeWatcher();
       this.loadAutoSaveState();
       this.setupAutoSaveListener();
       this.setupFileTreeContextMenu();
       this.setupWSLStatusListener();
       this.setupUpdaterStatusListener();
+      this.terminalManager.init();
     });
+  }
+
+  setupPerformanceMonitor() {
+    if (typeof document === 'undefined' || !document.body || this.performanceHud) return;
+
+    try {
+      this.liteEffectsEnabled = localStorage.getItem('liteEffectsEnabled') === 'true';
+    } catch (_) {
+      this.liteEffectsEnabled = false;
+    }
+
+    this.applyLiteEffects(this.liteEffectsEnabled, false);
+
+    if (window.api && typeof window.api.getRuntimeInfo === 'function') {
+      try {
+        this.performanceRuntimeInfo = window.api.getRuntimeInfo() || this.performanceRuntimeInfo;
+      } catch (_) {
+        this.performanceRuntimeInfo = { hardwareAcceleration: 'unknown' };
+      }
+    }
+
+    const hud = document.createElement('aside');
+    hud.className = 'performance-hud';
+    hud.innerHTML = `
+      <div class="performance-hud-header">
+        <span class="performance-hud-title">Performance</span>
+        <div class="performance-hud-actions">
+          <button type="button" class="performance-hud-btn" data-action="effects">Lite effects</button>
+          <button type="button" class="performance-hud-btn" data-action="hide">Hide</button>
+        </div>
+      </div>
+      <div class="performance-hud-grid">
+        <div class="performance-hud-card"><span class="performance-hud-label">FPS</span><span class="performance-hud-value" data-metric="fps">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Frame</span><span class="performance-hud-value" data-metric="frame">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Long tasks</span><span class="performance-hud-value" data-metric="longTasks">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DOM nodes</span><span class="performance-hud-value" data-metric="domNodes">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">JS heap</span><span class="performance-hud-value" data-metric="memory">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">GPU</span><span class="performance-hud-value" data-metric="gpu">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Effects</span><span class="performance-hud-value" data-metric="effects">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DPR</span><span class="performance-hud-value" data-metric="dpr">--</span></div>
+      </div>
+      <div class="performance-hud-note">Toggle with Ctrl+Alt+P. If Lite effects makes the UI feel much faster, the slowdown is likely compositing and blur related.</div>
+    `;
+
+    hud.querySelector('[data-action="effects"]').addEventListener('click', () => {
+      this.applyLiteEffects(!this.liteEffectsEnabled);
+    });
+    hud.querySelector('[data-action="hide"]').addEventListener('click', () => {
+      this.togglePerformanceHud(false);
+    });
+
+    document.body.appendChild(hud);
+    this.performanceHud = hud;
+    this.performanceHudMetrics = {
+      fps: hud.querySelector('[data-metric="fps"]'),
+      frame: hud.querySelector('[data-metric="frame"]'),
+      longTasks: hud.querySelector('[data-metric="longTasks"]'),
+      domNodes: hud.querySelector('[data-metric="domNodes"]'),
+      memory: hud.querySelector('[data-metric="memory"]'),
+      gpu: hud.querySelector('[data-metric="gpu"]'),
+      effects: hud.querySelector('[data-metric="effects"]'),
+      dpr: hud.querySelector('[data-metric="dpr"]')
+    };
+    this.performanceHudEffectsButton = hud.querySelector('[data-action="effects"]');
+    this.renderPerformanceHud();
+  }
+
+  togglePerformanceHud(forceVisible) {
+    if (!this.performanceHud) {
+      this.setupPerformanceMonitor();
+    }
+    if (!this.performanceHud) return;
+
+    const nextVisible = typeof forceVisible === 'boolean' ? forceVisible : !this.performanceHudVisible;
+    this.performanceHudVisible = nextVisible;
+    this.performanceHud.classList.toggle('visible', nextVisible);
+
+    if (nextVisible) {
+      this.startPerformanceSampling();
+    } else {
+      this.stopPerformanceSampling();
+    }
+  }
+
+  startPerformanceSampling() {
+    if (this.performanceHudAnimationFrame || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      this.renderPerformanceHud();
+      return;
+    }
+
+    this.performanceStats.fps = 0;
+    this.performanceStats.frameMs = 0;
+    this.performanceStats.maxFrameMs = 0;
+    this.performanceStats.frameCount = 0;
+    this.performanceStats.longTasks = 0;
+    this.performanceStats.lastLongTaskMs = 0;
+    this.performanceSampleStartedAt = performance.now();
+    this.performanceLastFrameAt = 0;
+
+    if (typeof window.PerformanceObserver === 'function') {
+      try {
+        this.performanceObserver = new window.PerformanceObserver((list) => {
+          const entries = list.getEntries();
+          entries.forEach((entry) => {
+            this.performanceStats.longTasks += 1;
+            this.performanceStats.lastLongTaskMs = Math.max(this.performanceStats.lastLongTaskMs, entry.duration || 0);
+          });
+        });
+        this.performanceObserver.observe({ entryTypes: ['longtask'] });
+      } catch (_) {
+        this.performanceObserver = null;
+      }
+    }
+
+    const sample = (timestamp) => {
+      if (!this.performanceHudVisible) {
+        this.performanceHudAnimationFrame = null;
+        return;
+      }
+
+      if (this.performanceLastFrameAt) {
+        const frameMs = timestamp - this.performanceLastFrameAt;
+        this.performanceStats.frameMs = frameMs;
+        this.performanceStats.maxFrameMs = Math.max(this.performanceStats.maxFrameMs, frameMs);
+        this.performanceStats.frameCount += 1;
+      }
+      this.performanceLastFrameAt = timestamp;
+
+      const elapsed = timestamp - this.performanceSampleStartedAt;
+      if (elapsed >= 500) {
+        this.performanceStats.fps = this.performanceStats.frameCount > 0
+          ? (this.performanceStats.frameCount * 1000) / elapsed
+          : 0;
+        this.renderPerformanceHud();
+        this.performanceSampleStartedAt = timestamp;
+        this.performanceStats.frameCount = 0;
+        this.performanceStats.maxFrameMs = this.performanceStats.frameMs;
+        this.performanceStats.longTasks = 0;
+        this.performanceStats.lastLongTaskMs = 0;
+      }
+
+      this.performanceHudAnimationFrame = window.requestAnimationFrame(sample);
+    };
+
+    this.performanceHudAnimationFrame = window.requestAnimationFrame(sample);
+  }
+
+  stopPerformanceSampling() {
+    if (this.performanceHudAnimationFrame && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this.performanceHudAnimationFrame);
+    }
+    this.performanceHudAnimationFrame = null;
+
+    if (this.performanceObserver) {
+      try {
+        this.performanceObserver.disconnect();
+      } catch (_) {
+        // ignore observer shutdown failures
+      }
+      this.performanceObserver = null;
+    }
+  }
+
+  applyLiteEffects(enabled, persist = true) {
+    this.liteEffectsEnabled = !!enabled;
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('lite-effects', this.liteEffectsEnabled);
+    }
+
+    if (persist) {
+      try {
+        localStorage.setItem('liteEffectsEnabled', JSON.stringify(this.liteEffectsEnabled));
+      } catch (_) {
+        // ignore persistence failures
+      }
+    }
+
+    if (this.performanceHudEffectsButton) {
+      this.performanceHudEffectsButton.textContent = this.liteEffectsEnabled ? 'Full effects' : 'Lite effects';
+    }
+
+    this.renderPerformanceHud();
+  }
+
+  renderPerformanceHud() {
+    if (!this.performanceHudMetrics || typeof document === 'undefined') return;
+
+    const domNodes = document.getElementsByTagName('*').length;
+    const memoryInfo = typeof performance !== 'undefined' ? performance.memory : null;
+    const memoryMb = memoryInfo && typeof memoryInfo.usedJSHeapSize === 'number'
+      ? (memoryInfo.usedJSHeapSize / (1024 * 1024)).toFixed(1)
+      : null;
+
+    this.performanceHudMetrics.fps.textContent = this.performanceStats.fps ? `${Math.round(this.performanceStats.fps)}` : '--';
+    this.performanceHudMetrics.frame.textContent = this.performanceStats.frameMs ? `${this.performanceStats.frameMs.toFixed(1)} ms` : '--';
+    this.performanceHudMetrics.longTasks.textContent = this.performanceStats.lastLongTaskMs
+      ? `${this.performanceStats.longTasks} / ${Math.round(this.performanceStats.lastLongTaskMs)} ms`
+      : '0';
+    this.performanceHudMetrics.domNodes.textContent = `${domNodes}`;
+    this.performanceHudMetrics.memory.textContent = memoryMb ? `${memoryMb} MB` : 'n/a';
+    this.performanceHudMetrics.gpu.textContent = String(this.performanceRuntimeInfo.hardwareAcceleration || 'unknown').toUpperCase();
+    this.performanceHudMetrics.effects.textContent = this.liteEffectsEnabled ? 'Lite' : 'Full';
+    this.performanceHudMetrics.dpr.textContent = `${window.devicePixelRatio || 1}`;
   }
 
   /**
@@ -867,6 +1099,12 @@ class UIController {
       const isSearchVisible = searchWidget.classList.contains('visible');
       const isGotoVisible = gotoDialog.classList.contains('visible');
 
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        this.togglePerformanceHud();
+        return;
+      }
+
       // Handle Enter key
       if (e.key === 'Enter') {
         if (isSearchVisible) {
@@ -981,7 +1219,13 @@ class UIController {
         e.preventDefault();
         this.toggleToolsPanel();
       }
-      
+
+      if (e.ctrlKey && e.key === 'j') {
+        e.preventDefault();
+        this.terminalManager.toggle();
+        this._syncTerminalActivityIcon();
+      }
+
       if (e.ctrlKey && e.shiftKey && e.key === 'F') {
         e.preventDefault();
         this.showSearch();
@@ -1000,19 +1244,21 @@ class UIController {
   setupResizing() {
     const sidebar = document.getElementById('sidebar');
     const toolsPanel = document.getElementById('toolsPanel');
+    this.boundDoResize = this.boundDoResize || this.doResize.bind(this);
+    this.boundStopResize = this.boundStopResize || this.stopResize.bind(this);
 
     const startResize = (e, type) => {
       this.isResizing = true;
       this.resizeType = type;
-      
+
       if (type === 'sidebar') {
         sidebar.style.transition = 'none';
       } else if (type === 'toolsPanel') {
         toolsPanel.style.transition = 'none';
       }
-      
-      document.addEventListener('mousemove', this.doResize.bind(this));
-      document.addEventListener('mouseup', this.stopResize.bind(this));
+
+      document.addEventListener('mousemove', this.boundDoResize);
+      document.addEventListener('mouseup', this.boundStopResize);
       e.preventDefault();
       
       document.body.style.userSelect = 'none';
@@ -1030,8 +1276,8 @@ class UIController {
     
     requestAnimationFrame(() => {
       if (this.resizeType === 'sidebar') {
-        const containerRect = sidebar.parentElement.getBoundingClientRect();
-        const newWidth = e.clientX - containerRect.left;
+        const sidebarRect = sidebar.getBoundingClientRect();
+        const newWidth = e.clientX - sidebarRect.left;
         const minWidth = 180;
         const maxWidth = window.innerWidth * 0.5;
         
@@ -1065,8 +1311,8 @@ class UIController {
     
     document.body.style.userSelect = '';
     
-    document.removeEventListener('mousemove', this.doResize.bind(this));
-    document.removeEventListener('mouseup', this.stopResize.bind(this));
+    document.removeEventListener('mousemove', this.boundDoResize);
+    document.removeEventListener('mouseup', this.boundStopResize);
     
     this.resizeType = null;
   }
@@ -1130,6 +1376,7 @@ class UIController {
     window.saveAsFile = () => this.fileOpsManager.saveAsFile();
     window.autoSave = () => this.toggleAutoSave();
     window.openUpdateSettings = () => this.openUpdateSettingsModal();
+    window.openBackendSettings = () => this.openBackendSettingsModal();
 
     // Setup auto save status bar click handler
     const autoSaveStatus = document.getElementById('autoSaveStatus');
@@ -1166,7 +1413,24 @@ class UIController {
     window.showToolsPanel = () => this.showToolsPanel();
     window.hideToolsPanel = () => this.hideToolsPanel();
     window.openCtracePanel = () => this.openCtracePanel();
-  window.openAssistantPanel = () => this.openAssistantPanel();
+    window.openAssistantPanel = () => this.openAssistantPanel();
+
+    // Terminal panel
+    window.toggleTerminalPanel = () => {
+      this.terminalManager.toggle();
+      this._syncTerminalActivityIcon();
+    };
+    window.terminalNew = () => this.terminalManager.createTerminal();
+    window.terminalKill = () => {
+      const id = this.terminalManager.activeId;
+      if (id !== null) {
+        const term = this.terminalManager.terminals.get(id);
+        if (term && term.running) {
+          window.api.invoke('terminal-kill-current', id).catch(() => {});
+        }
+      }
+    };
+    window.terminalToggleShellDropdown = () => this.terminalManager.toggleShellDropdown();
 
     // Visualyzer operations
     window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
@@ -1197,6 +1461,20 @@ class UIController {
           </div>
         `;
         this.notificationManager.showWarning('Open a file to analyze with CTrace');
+        return;
+      }
+
+      // Block analysis if the file is known to be missing from disk
+      if (this.tabManager.activeTabId && this.tabManager.isTabFileMissing(this.tabManager.activeTabId)) {
+        resultsArea.innerHTML = `
+          <div class="ctrace-error">
+            <div class="error-icon">⚠️</div>
+            <div class="error-text">File not found on disk</div>
+            <div class="error-subtext">${currentFilePath}</div>
+            <div class="error-help">The file was moved or deleted. Open its new location to analyze it.</div>
+          </div>
+        `;
+        this.notificationManager.showError('File not found — analysis blocked');
         return;
       }
 
@@ -1455,7 +1733,179 @@ class UIController {
     };
   }
 
-  
+  /**
+   * Open backend settings modal — lets user locate a native ctrace.exe
+   * to run analysis directly without WSL or the HTTP server.
+   */
+  async openBackendSettingsModal() {
+    let currentPath = '';
+
+    try {
+      const result = await window.api.invoke('backend-get-settings');
+      if (result && result.success && result.settings && result.settings.directBinaryPath) {
+        currentPath = result.settings.directBinaryPath;
+      }
+    } catch (err) {
+      console.warn('Failed to load backend settings:', err);
+    }
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: #0d1117;
+      color: #f0f6fc;
+      padding: 24px;
+      border-radius: 10px;
+      width: 500px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 8px 0; font-size: 18px;">Backend Settings</h3>
+      <div style="font-size: 12px; color: #8b949e; margin-bottom: 18px; line-height: 1.5;">
+        Optionally locate a native <code style="color:#79c0ff;">ctrace.exe</code> binary to run analysis
+        directly on Windows — no WSL or HTTP server required.<br><br>
+        When set, the GUI spawns the binary directly using CLI arguments.
+        Clear the path to revert to the default WSL-backed server mode.
+      </div>
+
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">
+        ctrace.exe path
+      </label>
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <input id="bs-binary-path" type="text"
+          placeholder="e.g. C:\\tools\\ctrace.exe"
+          style="flex:1; padding:8px; background:#161b22; color:#f0f6fc;
+                 border:1px solid #30363d; border-radius:6px; font-size:12px;" />
+        <button id="bs-browse"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer; white-space:nowrap;">
+          Browse…
+        </button>
+      </div>
+
+      <div id="bs-mode-hint" style="font-size:11px; color:#8b949e; margin-bottom:16px;"></div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="bs-clear"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer;">
+          Clear (use WSL mode)
+        </button>
+        <button id="bs-close"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer;">
+          Cancel
+        </button>
+        <button id="bs-save"
+          style="padding:8px 12px; background:#238636; border:1px solid #2ea043;
+                 color:#fff; border-radius:6px; cursor:pointer;">
+          Save
+        </button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const pathInput = dialog.querySelector('#bs-binary-path');
+    const modeHint = dialog.querySelector('#bs-mode-hint');
+
+    const updateHint = (val) => {
+      if (val && val.trim()) {
+        modeHint.style.color = '#3fb950';
+        modeHint.textContent = 'Direct binary mode active — analysis will use this executable.';
+      } else {
+        modeHint.style.color = '#8b949e';
+        modeHint.textContent = 'No path set — WSL server mode will be used (default).';
+      }
+    };
+
+    pathInput.value = currentPath;
+    updateHint(currentPath);
+    pathInput.oninput = () => updateHint(pathInput.value);
+
+    const closeModal = () => {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    };
+
+    dialog.querySelector('#bs-close').onclick = closeModal;
+
+    dialog.querySelector('#bs-browse').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-browse-binary');
+        if (!result.canceled && result.filePath) {
+          pathInput.value = result.filePath;
+          updateHint(result.filePath);
+        }
+      } catch (err) {
+        this.notificationManager.showError('Browse failed: ' + err.message);
+      }
+    };
+
+    dialog.querySelector('#bs-clear').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: '' });
+        if (result && result.success) {
+          this.notificationManager.showSuccess('Backend reset to WSL server mode.');
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to clear backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to clear: ' + err.message);
+      }
+    };
+
+    dialog.querySelector('#bs-save').onclick = async () => {
+      const val = pathInput.value.trim();
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val });
+        if (result && result.success) {
+          if (val) {
+            this.notificationManager.showSuccess('Direct binary mode enabled.');
+          } else {
+            this.notificationManager.showSuccess('Backend reset to WSL server mode.');
+          }
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to save backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to save: ' + err.message);
+      }
+    };
+
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+  }
+
+  /**
+   * Sync the terminal activity bar icon active state with panel visibility.
+   */
+  _syncTerminalActivityIcon() {
+    const icon = document.getElementById('terminal-activity');
+    if (!icon) return;
+    if (this.terminalManager.isVisible()) {
+      icon.classList.add('active');
+    } else {
+      icon.classList.remove('active');
+    }
+  }
+
   setActiveActivity(activityId) {
     return this.activityBar.setActiveActivity(activityId);
   }
