@@ -1,37 +1,44 @@
 /* Resizer styles */
 .resizer {
-  width: 4px;
+  width: 10px;
   background: transparent;
   cursor: col-resize;
   position: absolute;
   top: 0;
   bottom: 0;
   z-index: 10;
-  transition: none; /* Remove transition for better performance */
 }
 
-.resizer:hover {
-  background: #1f6feb;
+.resizer::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0);
+  transition: background-color 0.18s ease;
 }
 
-.resizer:active {
-  background: #1f6feb;
+.resizer:hover::after,
+.resizer:active::after {
+  background: rgba(214, 222, 237, 0.44);
 }
 
 .resizer-right {
-  right: -2px;
+  right: -5px;
 }
 
 .resizer-left {
-  left: -2px;
+  left: -5px;
 }
 
-/* Sidebar resizer */
 .sidebar .resizer {
-  right: -2px;
+  right: -5px;
 }
 
-/* Tools panel resizer */
 .tools-panel .resizer {
-  left: -2px;
+  left: -5px;
 }

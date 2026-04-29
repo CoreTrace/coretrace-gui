@@ -1,79 +1,78 @@
 /* Status bar styles */
 .statusbar {
-  height: 24px;
-  background: #1f6feb;
+  min-height: 34px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  margin: 0 12px 12px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
   font-size: 11px;
-  color: #ffffff;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
-.statusbar-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
+.statusbar-left,
 .statusbar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  min-width: 0;
 }
 
 #backend_version {
-  opacity: 0.95;
+  opacity: 0.92;
   white-space: nowrap;
 }
 
-/* ── Update status indicator ─────────────────────────────────── */
 .update-status-indicator {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  border-radius: 3px;
-  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  padding: 2px 8px 2px 6px;
   white-space: nowrap;
   transition: opacity 0.2s;
 }
 
 .update-status-indicator.checking {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .update-status-indicator.update-available {
-  background: rgba(227, 179, 65, 0.2);
-  color: #e3b341;
+  background: rgba(255, 207, 102, 0.16);
+  color: #ffd47e;
   cursor: default;
 }
 
 .update-status-indicator.update-downloaded {
-  background: rgba(63, 185, 80, 0.2);
-  color: #3fb950;
+  background: rgba(120, 244, 211, 0.16);
+  color: #9af0d3;
   cursor: pointer;
   font-weight: 600;
 }
 
 .update-status-indicator.update-downloaded:hover {
-  background: rgba(63, 185, 80, 0.35);
+  background: rgba(120, 244, 211, 0.24);
 }
 
-/* Spinning ring for the "checking" state */
 .update-spinner {
   display: inline-block;
   width: 9px;
   height: 9px;
-  border: 1.5px solid rgba(255, 255, 255, 0.25);
-  border-top-color: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  border-top-color: rgba(255, 255, 255, 0.92);
   border-radius: 50%;
   animation: updater-spin 0.75s linear infinite;
   flex-shrink: 0;
 }
 
 @keyframes updater-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
