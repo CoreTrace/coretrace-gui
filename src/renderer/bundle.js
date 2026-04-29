@@ -1049,7 +1049,8 @@ class MonacoEditorManager {
         showIcons: true,
         maxVisibleSuggestions: 12,
         filteredTypes: { 'keyword': false, 'snippet': true }
-      }
+      },
+      fixedOverflowWidgets: true
     });
 
     // Debugging for "blank" autocomplete dropdown.
@@ -1377,7 +1378,13 @@ class TabManager {
      * @type {string|null}
      */
     this.activeTabId = null;
-    
+
+    /**
+     * Set of tab IDs whose backing file is missing from disk
+     * @type {Set<string>}
+     */
+    this.missingFileTabs = new Set();
+
     /**
      * Map of open tabs with their data
      * @type {Map<string, Object>}
@@ -1507,12 +1514,12 @@ class TabManager {
     if (newTab) {
       // Update editor
       await this.editorManager.setContent(newTab.content);
-      
+
       // Set file type for syntax highlighting
       if (newTab.fileName) {
         await this.editorManager.setFileType(newTab.fileName);
       }
-      
+
       // Update tab appearance
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
@@ -1521,7 +1528,7 @@ class TabManager {
       if (tabElement) {
         tabElement.classList.add('active');
       }
-      
+
       // Update file tree selection
       if (newTab.filePath) {
         document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('selected'));
@@ -1529,6 +1536,13 @@ class TabManager {
         if (fileTreeItem) {
           fileTreeItem.classList.add('selected');
         }
+      }
+
+      // Show or hide the missing-file banner based on current flag.
+      // Also re-check existence asynchronously — file may have been restored.
+      this._syncMissingBanner(tabId, newTab.filePath);
+      if (newTab.filePath) {
+        this._recheckFileExists(tabId, newTab.filePath);
       }
 
       // Emit tab switch event for other components
@@ -1594,6 +1608,7 @@ class TabManager {
 
     // Remove from data
     this.openTabs.delete(tabId);
+    this.missingFileTabs.delete(tabId);
 
     // If closing active tab, switch to another tab or show welcome screen
     if (this.activeTabId === tabId) {
@@ -1791,6 +1806,94 @@ class TabManager {
   }
 
   /**
+   * Mark or unmark a tab as having a missing backing file.
+   * Updates both the internal set and the tab element styling.
+   * @param {string} tabId
+   * @param {boolean} isMissing
+   */
+  markTabMissing(tabId, isMissing) {
+    if (isMissing) {
+      this.missingFileTabs.add(tabId);
+    } else {
+      this.missingFileTabs.delete(tabId);
+    }
+
+    const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (!tabEl) return;
+
+    if (isMissing) {
+      tabEl.classList.add('file-missing');
+      // Add missing icon if not already present
+      const label = tabEl.querySelector('.tab-label');
+      if (label && !label.querySelector('.tab-missing-icon')) {
+        const icon = document.createElement('span');
+        icon.className = 'tab-missing-icon';
+        icon.textContent = '⊘';
+        icon.title = 'File not found on disk';
+        label.insertBefore(icon, label.firstChild);
+      }
+    } else {
+      tabEl.classList.remove('file-missing');
+      const icon = tabEl.querySelector('.tab-missing-icon');
+      if (icon) icon.remove();
+    }
+
+    // If this is the active tab, sync the banner too
+    if (tabId === this.activeTabId) {
+      const tab = this.openTabs.get(tabId);
+      this._syncMissingBanner(tabId, tab ? tab.filePath : null);
+    }
+  }
+
+  /** @returns {boolean} True if the tab's file is known to be missing */
+  isTabFileMissing(tabId) {
+    return this.missingFileTabs.has(tabId);
+  }
+
+  /**
+   * Show or hide the missing-file banner based on the tab's current missing state.
+   */
+  _syncMissingBanner(tabId, filePath) {
+    const banner = document.getElementById('file-missing-banner');
+    const msg = document.getElementById('file-missing-msg');
+    if (!banner) return;
+
+    if (this.missingFileTabs.has(tabId) && filePath) {
+      if (msg) msg.textContent = `File not found on disk: ${filePath}`;
+      banner.classList.add('visible');
+
+      // Wire close-tab button once (idempotent via replacing onclick)
+      const closeBtn = document.getElementById('file-missing-close-btn');
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          const fakeEvent = { stopPropagation: () => {} };
+          this.closeTab(fakeEvent, tabId);
+        };
+      }
+    } else {
+      banner.classList.remove('visible');
+    }
+  }
+
+  /**
+   * Async re-check whether a file exists and update the missing flag accordingly.
+   * Silently no-ops if the file path is empty or IPC is unavailable.
+   */
+  async _recheckFileExists(tabId, filePath) {
+    if (!filePath || !window.api) return;
+    try {
+      const res = await window.api.invoke('check-file-exists', filePath);
+      const nowMissing = !res.exists;
+      const wasMissing = this.missingFileTabs.has(tabId);
+      if (nowMissing !== wasMissing) {
+        this.markTabMissing(tabId, nowMissing);
+      }
+    } catch {
+      // IPC unavailable or permission denied — leave flag unchanged
+    }
+  }
+
+  /**
    * Create a new untitled file tab
    * @returns {string} - New tab ID
    */
@@ -1869,18 +1972,47 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // ----- src/renderer/managers/SearchManager.js -----
 ;(function() {
+/**
+ * Search Manager - Handles search functionality
+ */
 class SearchManager {
   constructor(editorManager, notificationManager) {
     this.editorManager = editorManager;
     this.notificationManager = notificationManager;
+    this.currentSearchMatches = [];
+    this.currentMatchIndex = -1;
     this.searchTimeout = null;
     this.init();
   }
 
   init() {
+    this.setupSearchWidget();
+    this.setupGoToLineDialog();
     this.setupSidebarSearch();
   }
 
+  /**
+   * Setup search widget functionality
+   */
+  setupSearchWidget() {
+    const widgetSearchInput = document.getElementById('widget-search-input');
+    if (widgetSearchInput) {
+      widgetSearchInput.addEventListener('input', (e) => {
+        this.performLiveSearch(e.target.value);
+      });
+    }
+  }
+
+  /**
+   * Setup go to line dialog
+   */
+  setupGoToLineDialog() {
+    // Event handlers will be attached by the UI controller
+  }
+
+  /**
+   * Setup sidebar search
+   */
   setupSidebarSearch() {
     const searchInput = document.getElementById('sidebar-search-input');
     if (searchInput) {
@@ -1902,6 +2034,240 @@ class SearchManager {
     }
   }
 
+  /**
+   * Show find dialog
+   */
+  showFindDialog() {
+    const widget = document.getElementById('search-widget');
+    const input = document.getElementById('widget-search-input');
+    widget.classList.add('visible');
+    input.focus();
+    input.select();
+  }
+
+  /**
+   * Close search widget
+   */
+  closeSearchWidget() {
+    const widget = document.getElementById('search-widget');
+    widget.classList.remove('visible');
+    this.clearSearchHighlights();
+    this.currentSearchMatches = [];
+    this.currentMatchIndex = -1;
+    this.updateSearchResults();
+  }
+
+  /**
+   * Perform live search in current document
+   * @param {string} searchText - Text to search for
+   */
+  performLiveSearch(searchText) {
+    this.clearSearchHighlights();
+    this.currentSearchMatches = [];
+    this.currentMatchIndex = -1;
+
+    if (!searchText.trim()) {
+      this.updateSearchResults();
+      return;
+    }
+
+    const text = this.editorManager.getContent();
+
+    if (!text) {
+      this.updateSearchResults();
+      return;
+    }
+
+    try {
+      const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        this.currentSearchMatches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          text: match[0]
+        });
+
+        if (match.index === regex.lastIndex) {
+          regex.lastIndex++;
+        }
+      }
+
+      if (this.currentSearchMatches.length > 0) {
+        this.currentMatchIndex = 0;
+        this.highlightAllMatches();
+      }
+    } catch (e) {
+      console.warn('Invalid search regex:', e);
+    }
+
+    this.updateSearchResults();
+  }
+
+  /**
+   * Search next match
+   */
+  searchNext() {
+    if (this.currentSearchMatches.length === 0) return;
+
+    this.currentMatchIndex = (this.currentMatchIndex + 1) % this.currentSearchMatches.length;
+    this.highlightAllMatches();
+    this.focusOnCurrentMatch();
+    this.updateSearchResults();
+  }
+
+  /**
+   * Search previous match
+   */
+  searchPrev() {
+    if (this.currentSearchMatches.length === 0) return;
+
+    this.currentMatchIndex = this.currentMatchIndex <= 0
+      ? this.currentSearchMatches.length - 1
+      : this.currentMatchIndex - 1;
+    this.highlightAllMatches();
+    this.focusOnCurrentMatch();
+    this.updateSearchResults();
+  }
+
+  /**
+   * Update search results display
+   */
+  updateSearchResults() {
+    const resultsText = document.getElementById('search-results-text');
+    const prevBtn = document.getElementById('search-prev');
+    const nextBtn = document.getElementById('search-next');
+
+    if (!resultsText || !prevBtn || !nextBtn) return;
+
+    if (this.currentSearchMatches.length === 0) {
+      resultsText.textContent = 'No results';
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
+    } else {
+      resultsText.textContent = `${this.currentMatchIndex + 1} of ${this.currentSearchMatches.length}`;
+      prevBtn.disabled = false;
+      nextBtn.disabled = false;
+    }
+  }
+
+  /**
+   * Focus on current match
+   */
+  focusOnCurrentMatch() {
+    if (this.currentMatchIndex >= 0 && this.currentMatchIndex < this.currentSearchMatches.length) {
+      const match = this.currentSearchMatches[this.currentMatchIndex];
+      const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+
+      if (monacoEditor) {
+        const model = monacoEditor.getModel();
+        if (model) {
+          const startPos = model.getPositionAt(match.start);
+          const endPos = model.getPositionAt(match.end);
+          const range = {
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: endPos.column
+          };
+          monacoEditor.focus();
+          monacoEditor.setSelection(range);
+          monacoEditor.revealRangeInCenter(range);
+          return;
+        }
+      }
+
+      const editor = this.editorManager.editor;
+      editor.focus();
+      editor.setSelectionRange(match.start, match.end);
+      const lines = editor.value.substring(0, match.start).split('\n');
+      const lineNumber = lines.length;
+      const approximateLineHeight = 20;
+      const targetScrollTop = (lineNumber - 5) * approximateLineHeight;
+      editor.scrollTop = Math.max(0, targetScrollTop);
+      setTimeout(() => {
+        if (editor.setSelectionRange) {
+          editor.setSelectionRange(match.start, match.end);
+        }
+      }, 10);
+    }
+  }
+
+  /**
+   * Highlight all matches
+   */
+  highlightAllMatches() {
+    // For now, we'll keep it simple and just highlight the current match when navigating
+  }
+
+  /**
+   * Clear search highlights
+   */
+  clearSearchHighlights() {
+    // Clear any visual highlights if implemented
+  }
+
+  /**
+   * Show go to line dialog
+   */
+  showGoToLineDialog() {
+    const dialog = document.getElementById('goto-dialog');
+    const input = document.getElementById('goto-input');
+
+    const text = this.editorManager.getContent();
+    if (text) {
+      const lineCount = text.split('\n').length;
+      input.max = lineCount;
+    }
+
+    dialog.classList.add('visible');
+    input.focus();
+    input.select();
+  }
+
+  /**
+   * Close go to line dialog
+   */
+  closeGoToLineDialog() {
+    const dialog = document.getElementById('goto-dialog');
+    dialog.classList.remove('visible');
+  }
+
+  /**
+   * Perform go to line
+   */
+  performGoToLine() {
+    const input = document.getElementById('goto-input');
+    const lineNumber = parseInt(input.value, 10);
+
+    if (!lineNumber || lineNumber < 1) {
+      this.notificationManager.showError('Please enter a valid line number');
+      return;
+    }
+
+    const text = this.editorManager.getContent();
+    if (text) {
+      const lines = text.split('\n');
+
+      if (lineNumber > lines.length) {
+        this.notificationManager.showError(`Line ${lineNumber} does not exist. Maximum line is ${lines.length}`);
+        return;
+      }
+
+      this.editorManager.jumpToLine(lineNumber);
+      this.notificationManager.showSuccess(`Jumped to line ${lineNumber}`);
+    } else {
+      this.notificationManager.showError('No file is currently open');
+    }
+
+    this.closeGoToLineDialog();
+  }
+
+  /**
+   * Perform workspace search
+   * @param {string} searchTerm - Term to search for
+   */
   async performWorkspaceSearch(searchTerm) {
     if (!this.currentWorkspacePath) {
       this.displaySearchResults([], searchTerm);
@@ -1911,7 +2277,7 @@ class SearchManager {
     try {
       const searchResults = document.getElementById('search-results');
       if (searchResults) {
-        searchResults.innerHTML = '<div style="color: #7d8590; padding: 12px; text-align: center;">Searching...</div>';
+        searchResults.innerHTML = '<div class="search-results-state">Searching...</div>';
       }
 
       const result = await window.api.invoke('search-in-files', searchTerm, this.currentWorkspacePath);
@@ -1921,60 +2287,65 @@ class SearchManager {
       } else {
         const searchResults = document.getElementById('search-results');
         if (searchResults) {
-          searchResults.innerHTML = '<div style="color: #f85149; padding: 12px;">Search failed: ' + result.error + '</div>';
+          searchResults.innerHTML = `<div class="search-results-state search-results-state-error">Search failed: ${this.escapeHtml(result.error || 'Unknown error')}</div>`;
         }
       }
     } catch (error) {
       const searchResults = document.getElementById('search-results');
       if (searchResults) {
-        searchResults.innerHTML = '<div style="color: #f85149; padding: 12px;">Search error: ' + error.message + '</div>';
+        searchResults.innerHTML = `<div class="search-results-state search-results-state-error">Search error: ${this.escapeHtml(error.message || 'Unknown error')}</div>`;
       }
     }
   }
 
+  /**
+   * Display search results in sidebar
+   * @param {Array} results - Search results
+   * @param {string} searchTerm - Search term
+   */
   displaySearchResults(results, searchTerm) {
     const searchResults = document.getElementById('search-results');
     if (!searchResults) return;
 
     if (results.length === 0) {
-      searchResults.innerHTML = '<div style="color: #7d8590; padding: 12px; text-align: center;">No results found</div>';
+      searchResults.innerHTML = '<div class="search-results-state">No results found</div>';
       return;
     }
 
     const groupedResults = {};
-    results.forEach(result => {
+    results.forEach((result) => {
       if (!groupedResults[result.file]) {
         groupedResults[result.file] = [];
       }
       groupedResults[result.file].push(result);
     });
 
-    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+    let html = '<div class="search-results-list">';
 
-    Object.keys(groupedResults).forEach(file => {
+    Object.keys(groupedResults).forEach((file) => {
       const fileResults = groupedResults[file];
       const fileName = file.split(/[/\\]/).pop();
       const relativePath = file.replace(this.currentWorkspacePath, '').replace(/^[/\\]/, '');
-
       const escapedPath = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-      html += `<div class="search-result-item" style="display: flex; flex-direction: column;">`;
-      html += `<div class="search-result-file" onclick="window.searchManager.openSearchResult('${escapedPath}', ${fileResults[0].line})" style="margin-bottom: 4px;">${fileName}</div>`;
-      html += `<div class="search-result-line" style="margin-bottom: 6px;">${relativePath} • ${fileResults.length} result${fileResults.length > 1 ? 's' : ''}</div>`;
+      html += '<div class="search-result-item">';
+      html += `<button class="search-result-file" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${fileResults[0].line})">${this.escapeHtml(fileName)}</button>`;
+      html += `<div class="search-result-line">${this.escapeHtml(relativePath)} • ${fileResults.length} result${fileResults.length > 1 ? 's' : ''}</div>`;
+      html += '<div class="search-result-matches">';
 
-      html += '<div style="display: flex; flex-direction: column; gap: 2px;">';
-      fileResults.forEach(result => {
-        const highlightedContent = result.content.replace(
+      fileResults.forEach((result) => {
+        const highlightedContent = this.escapeHtml(result.content).replace(
           new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
-          match => `<span class="search-highlight">${match}</span>`
+          (match) => `<span class="search-highlight">${match}</span>`
         );
-        html += `<div class="search-result-content" onclick="window.searchManager.openSearchResult('${escapedPath}', ${result.line}); event.stopPropagation();" style="display: block; margin: 2px 0; padding: 4px 6px; cursor: pointer; border-radius: 3px; background: #161b22; border-left: 2px solid #1f6feb;" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#161b22'">`;
-        html += `<div style="color: #7d8590; font-size: 10px; margin-bottom: 2px;">Line ${result.line}:</div>`;
-        html += `<div style="font-family: monospace; font-size: 11px;">${highlightedContent}</div>`;
-        html += `</div>`;
-      });
-      html += '</div>';
 
+        html += `<button class="search-result-content" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${result.line}); event.stopPropagation();">`;
+        html += `<span class="search-result-line-number">Line ${result.line}</span>`;
+        html += `<span class="search-result-snippet">${highlightedContent}</span>`;
+        html += '</button>';
+      });
+
+      html += '</div>';
       html += '</div>';
     });
 
@@ -1982,6 +2353,9 @@ class SearchManager {
     searchResults.innerHTML = html;
   }
 
+  /**
+   * Clear search results
+   */
   clearSearchResults() {
     const searchResults = document.getElementById('search-results');
     if (searchResults) {
@@ -1989,10 +2363,30 @@ class SearchManager {
     }
   }
 
+  escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Open search result (to be implemented by parent controller)
+   * @param {string} filePath - File path
+   * @param {number} lineNumber - Line number
+   */
   async openSearchResult(filePath, lineNumber) {
+    // This will be implemented by the main controller
     console.log('Open search result requested:', filePath, 'at line', lineNumber);
   }
 
+  /**
+   * Set current workspace path
+   * @param {string} workspacePath - Workspace path
+   */
   setWorkspacePath(workspacePath) {
     this.currentWorkspacePath = workspacePath;
   }
@@ -2241,12 +2635,22 @@ class FileOperationsManager {
         const result = await window.api.invoke('save-file', currentTab.filePath, currentTab.content);
         if (result.success) {
           this.tabManager.markTabClean(this.tabManager.activeTabId);
+          // File was saved successfully — clear any missing flag
+          if (this.tabManager.activeTabId) {
+            this.tabManager.markTabMissing(this.tabManager.activeTabId, false);
+          }
           if (!options.silent) {
             this.notificationManager.showSuccess('File saved successfully');
           }
           return result;
         } else {
-          this.notificationManager.showError('Failed to save file: ' + result.error);
+          // If save failed because the file no longer exists, mark tab as missing
+          if (result.error && result.error.includes('ENOENT') && this.tabManager.activeTabId) {
+            this.tabManager.markTabMissing(this.tabManager.activeTabId, true);
+            this.notificationManager.showError('File not found on disk — it may have been moved or deleted');
+          } else {
+            this.notificationManager.showError('Failed to save file: ' + result.error);
+          }
         }
       } else {
         // Save as new file (untitled -> actual file)
@@ -2946,15 +3350,15 @@ class DiagnosticsManager {
     return `
       <div class="ctrace-metadata-compact">
         <div class="metadata-header">
-          <span class="metadata-icon">📊</span>
+          <span class="metadata-accent" aria-hidden="true"></span>
           <span class="metadata-file-name" title="${this.escapeHtml(meta.inputFile || 'N/A')}">${this.escapeHtml(this.getFileName(meta.inputFile))}</span>
           <span class="metadata-mode-badge">${this.escapeHtml(meta.mode || 'N/A')}</span>
         </div>
         <div class="metadata-stats">
-          <span class="stat-item" title="Tool Used">🔧 ${this.escapeHtml(meta.tool || 'ctrace')}</span>
-          <span class="stat-item" title="Functions Analyzed">⚡ ${this.currentFunctions.length} functions</span>
-          <span class="stat-item" title="Analysis Time">${meta.analysisTimeMs >= 0 ? '⏱️ ' + meta.analysisTimeMs + ' ms' : ''}</span>
-          <span class="stat-item" title="Stack Limit">💾 ${meta.stackLimit ? this.formatBytes(meta.stackLimit) : 'N/A'}</span>
+          <span class="stat-item" title="Tool Used"><span class="stat-label">Tool</span><span class="stat-value">${this.escapeHtml(meta.tool || 'ctrace')}</span></span>
+          <span class="stat-item" title="Functions Analyzed"><span class="stat-label">Functions</span><span class="stat-value">${this.currentFunctions.length}</span></span>
+          <span class="stat-item" title="Analysis Time"><span class="stat-label">Time</span><span class="stat-value">${meta.analysisTimeMs >= 0 ? meta.analysisTimeMs + ' ms' : 'Pending'}</span></span>
+          <span class="stat-item" title="Stack Limit"><span class="stat-label">Stack</span><span class="stat-value">${meta.stackLimit ? this.formatBytes(meta.stackLimit) : 'N/A'}</span></span>
         </div>
       </div>
     `;
@@ -2970,12 +3374,11 @@ class DiagnosticsManager {
         <div class="diagnostics-container">
           <div class="diagnostics-toolbar">
             <div class="diagnostics-count">
-              <span class="count-icon">✅</span>
+              <span class="count-badge count-badge-clear">Clear</span>
               <span class="count-text">No Issues Found</span>
             </div>
           </div>
           <div class="diagnostics-empty">
-            <div class="empty-icon">🎉</div>
             <div class="empty-text">All clear! No diagnostics reported.</div>
           </div>
         </div>
@@ -3012,18 +3415,16 @@ class DiagnosticsManager {
       return `
         <div class="diagnostic-item" data-diag-id="${this.escapeHtml(diag.id)}" onclick="window.diagnosticsManager.jumpToDiagnostic('${this.escapeHtml(diag.id)}')">
           <div class="diagnostic-item-header">
-            <div class="diagnostic-severity-icon" style="background: ${severityColor};">
+            <div class="diagnostic-severity-icon diagnostic-severity-icon-${String(diag.severity || '').toLowerCase()}" style="background: ${severityColor};">
               ${icon}
             </div>
             <div class="diagnostic-item-info">
               <div class="diagnostic-title">
                 <span class="diagnostic-rule">${this.escapeHtml(presentation.title)}</span>
-                <span class="diagnostic-separator">•</span>
+                <span class="diagnostic-separator">·</span>
                 <span class="diagnostic-function">${this.escapeHtml(diag.location.function)}</span>
               </div>
-              <div class="diagnostic-location">
-                📍 Line ${diag.location.startLine}${diag.location.startColumn ? ':' + diag.location.startColumn : ''}
-              </div>
+              <div class="diagnostic-location">Line ${diag.location.startLine}${diag.location.startColumn ? ':' + diag.location.startColumn : ''}</div>
             </div>
           </div>
           <div class="diagnostic-item-details">
@@ -3041,7 +3442,7 @@ class DiagnosticsManager {
       <div class="diagnostics-container">
         <div class="diagnostics-toolbar">
           <div class="diagnostics-count">
-            <span class="count-icon">🔍</span>
+            <span class="count-badge">${this.currentSeverityFilter === 'ALL' ? 'Overview' : this.escapeHtml(this.currentSeverityFilter)}</span>
             <span class="count-text">${summaryText}</span>
           </div>
           ${this.renderFilterDropdown()}
@@ -3061,10 +3462,10 @@ class DiagnosticsManager {
     return `
       <div class="severity-filter">
         <select id="severity-filter-select" onchange="window.diagnosticsManager.changeSeverityFilter(this.value)">
-          <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>🔍 All Issues</option>
-          <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>❌ Errors</option>
-          <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>⚠️ Warnings</option>
-          <option value="INFO" ${this.currentSeverityFilter === 'INFO' ? 'selected' : ''}>ℹ️ Info</option>
+          <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>All issues</option>
+          <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>Errors</option>
+          <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>Warnings</option>
+          <option value="INFO" ${this.currentSeverityFilter === 'INFO' ? 'selected' : ''}>Info</option>
         </select>
       </div>
     `;
@@ -3294,9 +3695,9 @@ class DiagnosticsManager {
    */
   getSeverityIcon(severity) {
     switch (severity) {
-      case 'ERROR': return '❌';
-      case 'WARNING': return '⚠️';
-      case 'INFO': return 'ℹ️';
+      case 'ERROR': return 'E';
+      case 'WARNING': return 'W';
+      case 'INFO': return 'I';
       default: return '•';
     }
   }
@@ -3348,7 +3749,7 @@ class DiagnosticsManager {
     if (resultsArea) {
       resultsArea.innerHTML = `
         <div class="ctrace-placeholder">
-          <div class="placeholder-icon">🔍</div>
+          <div class="placeholder-mark" aria-hidden="true"></div>
           <div class="placeholder-text">Run CTrace to analyze your code</div>
           <div class="placeholder-subtext">Click the button above to start</div>
         </div>
@@ -3798,11 +4199,36 @@ class StateManager {
         await this.diagnosticsManager.displayDiagnostics();
       }
 
+      // Async: check each restored tab's file and mark missing ones visually.
+      // Don't await — let the UI show first, then apply warnings.
+      if (state.tabs && state.tabs.length > 0) {
+        this._checkRestoredFilesExist(state.tabs);
+      }
+
       console.log('[StateManager] State restored successfully');
       return true;
     } catch (error) {
       console.error('[StateManager] Error restoring state:', error);
       return false;
+    }
+  }
+
+  /**
+   * Async post-restore check: for each tab that has a file path, verify the
+   * file still exists on disk. Marks missing ones visually via TabManager.
+   * @param {Array} tabs - Restored tab data array
+   */
+  async _checkRestoredFilesExist(tabs) {
+    for (const tabData of tabs) {
+      if (!tabData.filePath || !tabData.tabId) continue;
+      try {
+        const res = await window.api.invoke('check-file-exists', tabData.filePath);
+        if (!res.exists) {
+          this.tabManager.markTabMissing(tabData.tabId, true);
+        }
+      } catch {
+        // IPC unavailable, skip silently
+      }
     }
   }
 
@@ -3850,265 +4276,1007 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 })();
 
-// ----- src/renderer/UIController.js -----
-;(function() {
-// Manager classes and utilities are loaded via <script> tags in index.html
-// and are available as globals: NotificationManager, MonacoEditorManager,
-// TabManager, SearchManager, FileOperationsManager, DiagnosticsManager,
-// StateManager, fileTypeUtils (window.detectFileType, etc.)
-
-const appLaunchStartedAt = Date.now();
-const appLaunchPerfStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
-
-function formatStartupTimestamp(timestamp) {
-  return new Date(timestamp).toISOString();
-}
-
-function runAfterFirstPaint(callback) {
-  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-    setTimeout(callback, 0);
-    return;
-  }
-
-  window.requestAnimationFrame(() => {
-    setTimeout(callback, 0);
-  });
-}
-
-console.log(`[StartupTiming] App launch detected at ${formatStartupTimestamp(appLaunchStartedAt)}`);
-
+// ----- src/renderer/managers/TerminalManager.js -----
 /**
- * Main UI Controller - Coordinates all managers and components
- * 
- * This is the central coordinator for the entire application UI. It manages
- * the interaction between different managers and handles global UI state.
- * 
- * @class UIController
- * @author CTrace GUI Team
- * @version 1.0.0
- * 
- * @example
- * // UIController is automatically instantiated in the HTML
- * const uiController = new UIController();
+ * TerminalManager - Integrated terminal panel for CTraceGUI.
+ *
+ * Manages multiple terminal sessions inside the bottom panel.
+ * Each session tracks its own cwd, command history, and shell type.
+ * Commands are executed via IPC (main process spawns the child process).
  */
-class UIController {
-  /**
-   * Creates an instance of UIController and initializes all managers.
-   * 
-   * @constructor
-   * @memberof UIController
-   */
+class TerminalManager {
   constructor() {
-    /**
-     * Notification manager instance
-     * @type {NotificationManager}
-     * @private
-     */
-    this.notificationManager = new NotificationManager();
-    
-    /**
-     * Editor manager instance
-     * @type {MonacoEditorManager}
-     * @private
-     */
-    this.editorManager = new MonacoEditorManager();
-    
-    /**
-     * Tab manager instance
-     * @type {TabManager}
-     * @private
-     */
-    this.tabManager = new TabManager(this.editorManager, this.notificationManager);
-    
-    /**
-     * Search manager instance
-     * @type {SearchManager}
-     * @private
-     */
-    this.searchManager = new SearchManager(this.editorManager, this.notificationManager);
-    
-    /**
-     * File operations manager instance
-     * @type {FileOperationsManager}
-     * @private
-     */
-    this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
+    this.terminals = new Map();   // id -> terminal state
+    this.activeId   = null;
+    this.counter    = 0;
 
-    /**
-     * Diagnostics manager instance
-     * @type {DiagnosticsManager}
-     * @private
-     */
-    this.diagnosticsManager = new DiagnosticsManager(this.editorManager);
+    this.shells         = [];
+    this.currentShellId = null;
+    this.currentShellPath = null;
 
-    /**
-     * State manager instance for work loss prevention
-     * @type {StateManager}
-     * @private
-     */
-    this.stateManager = new StateManager(this.tabManager, this.editorManager, this.diagnosticsManager);
+    this._dataUnsub = null;
+    this._doneUnsub = null;
+    this._shellDropdownOpen = false;
 
-    /**
-     * Flag indicating if UI is being resized
-     * @type {boolean}
-     * @private
-     */
-    this.isResizing = false;
-    
-    /**
-     * Type of resize operation (sidebar, toolsPanel)
-     * @type {string|null}
-     * @private
-     */
-    this.resizeType = null;
-    
-    /**
-     * Currently active menu
-     * @type {string|null}
-     * @private
-     */
-    this.activeMenu = null;
-
-    /**
-     * File tree context menu DOM element
-     * @type {HTMLElement|null}
-     * @private
-     */
-    this.fileTreeContextMenu = null;
-
-    /**
-     * Auto save enabled state
-     * @type {boolean}
-     * @private
-     */
-    this.autoSaveEnabled = false;
-
-    /**
-     * Auto save timer
-     * @type {number|null}
-     * @private
-     */
-    this.autoSaveTimer = null;
-
-    /**
-     * Auto save delay in milliseconds
-     * @type {number}
-     * @private
-     */
-    this.autoSaveDelay = 1000;
-
-    /**
-     * WSL availability status
-     * @type {boolean}
-     * @private
-     */
-    this.wslAvailable = true;
-
-    /**
-     * Current platform
-     * @type {string}
-     * @private
-     */
-    this.platform = 'unknown';
-
-    this.init();
+    // Autocomplete state
+    this._lastTabTime = 0;  // for double-tap detection
   }
 
-  /**
-   * Convert Windows path to WSL path
-   * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
-   * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
-   * @private
-   */
-  convertToWSLPath(windowsPath) {
-    if (!windowsPath) return windowsPath;
-    
-    // Convert backslashes to forward slashes
-    let wslPath = windowsPath.replace(/\\/g, '/');
-    
-    // Convert drive letter (C: -> /mnt/c)
-    wslPath = wslPath.replace(/^([A-Z]):/i, (match, drive) => `/mnt/${drive.toLowerCase()}`);
-    
-    return wslPath;
-  }
+  // ─── Init ────────────────────────────────────────────────────────────────
 
-  /**
-   * Initializes the UI Controller and sets up all necessary components.
-   * 
-   * This method is called automatically by the constructor and sets up:
-   * - Event listeners for UI interactions
-   * - Keyboard shortcuts
-   * - Resizing functionality
-   * - Menu systems
-   * - UI components
-   * - Manager interconnections
-   * - File tree watcher
-   * 
-   * @memberof UIController
-   * @private
-   */
-  init() {
-    this.setupEventListeners();
-    this.setupKeyboardShortcuts();
-    this.setupResizing();
-    this.setupMenus();
-    this.setupUIComponents();
-
-    // Connect managers
-    this.connectManagers();
-
-    // Initialize with explorer view and welcome screen
-    this.showExplorer();
-    this.tabManager.showWelcomeScreen();
-
-    // Add refresh button event listener
-    const refreshBtn = document.getElementById('refresh-file-tree');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', () => {
-        this.refreshFileTree();
-      });
+  async init() {
+    try {
+      this.shells = await window.api.invoke('terminal-get-shells');
+    } catch {
+      this.shells = [{ id: 'cmd', name: 'Command Prompt', icon: 'cmd' }];
+    }
+    if (this.shells.length) {
+      this.currentShellId   = this.shells[0].id;
+      this.currentShellPath = this.shells[0].path || null;
     }
 
-    // Set up state management for work loss prevention
-    this.setupStateManagement();
-    this.setupTitleBarControls();
-    this.deferNonCriticalStartup();
+    // IPC listeners
+    this._dataUnsub = window.api.on('terminal-data', ({ terminalId, data }) => {
+      this._appendOutput(terminalId, data);
+    });
+    this._doneUnsub = window.api.on('terminal-command-done', ({ terminalId, code }) => {
+      const term = this.terminals.get(terminalId);
+      if (!term) return;
+      term.running = false;
+      this._setInputEnabled(terminalId, true);
+      this._scrollBottom(terminalId);
+    });
+
+    // Close shell dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (
+        this._shellDropdownOpen &&
+        !e.target.closest('#terminal-shell-dropdown') &&
+        !e.target.closest('#terminal-shell-btn')
+      ) {
+        this._closeShellDropdown();
+      }
+    });
+
+    this._setupTerminalResizer();
   }
 
-  /**
-   * Update status bar app version label from package metadata.
-   */
-  async updateAppVersionLabel() {
-    const versionEl = document.getElementById('tool_version');
-    if (!versionEl) return;
+  // ─── Panel visibility ────────────────────────────────────────────────────
+
+  show() {
+    const panel = document.getElementById('terminalPanel');
+    if (!panel) return;
+    panel.style.display = 'flex';
+    panel.offsetHeight; // reflow
+    panel.classList.add('active');
+
+    // Auto-create first terminal
+    if (this.terminals.size === 0) {
+      this.createTerminal();
+    } else if (this.activeId !== null) {
+      setTimeout(() => this._focusInput(this.activeId), 60);
+    }
+  }
+
+  hide() {
+    const panel = document.getElementById('terminalPanel');
+    if (!panel) return;
+    panel.classList.remove('active');
+    setTimeout(() => {
+      if (!panel.classList.contains('active')) panel.style.display = 'none';
+    }, 200);
+  }
+
+  toggle() {
+    const panel = document.getElementById('terminalPanel');
+    if (!panel) return;
+    if (panel.classList.contains('active')) this.hide();
+    else this.show();
+  }
+
+  isVisible() {
+    const panel = document.getElementById('terminalPanel');
+    return panel ? panel.classList.contains('active') : false;
+  }
+
+  // ─── Terminal lifecycle ──────────────────────────────────────────────────
+
+  async createTerminal(shellId, shellPath) {
+    const sid   = shellId   || this.currentShellId;
+    const spath = shellPath || this.currentShellPath;
+    const shell = this.shells.find(s => s.id === sid) || this.shells[0] || { id: 'cmd', name: 'Terminal' };
+
+    // Get initial cwd from the app's working directory
+    let cwd = '';
+    try { cwd = await window.api.invoke('terminal-get-initial-cwd'); } catch {
+      try { cwd = await window.api.invoke('terminal-get-home'); } catch { cwd = ''; }
+    }
+
+    const id = ++this.counter;
+    this.terminals.set(id, {
+      shell,
+      shellPath: spath,
+      cwd: cwd,
+      history: [],
+      historyIndex: -1,
+      running: false,
+    });
+
+    this._renderTab(id);
+    this._renderInstance(id);
+    this._activate(id);
+
+    this._appendOutput(id,
+      `\u001b[32m${shell.name}\u001b[0m  \u001b[2m${cwd}\u001b[0m\r\n`,
+      true
+    );
+    return id;
+  }
+
+  closeTerminal(id) {
+    const term = this.terminals.get(id);
+    if (!term) return;
+
+    window.api.invoke('terminal-kill-current', id).catch(() => {});
+
+    document.getElementById(`terminal-tab-${id}`)?.remove();
+    document.getElementById(`terminal-inst-${id}`)?.remove();
+    this.terminals.delete(id);
+
+    if (this.activeId === id) {
+      this.activeId = null;
+      const remaining = [...this.terminals.keys()];
+      if (remaining.length) {
+        this._activate(remaining[remaining.length - 1]);
+      } else {
+        this.hide();
+      }
+    }
+  }
+
+  // ─── Rendering ───────────────────────────────────────────────────────────
+
+  _renderTab(id) {
+    const term = this.terminals.get(id);
+    const list = document.getElementById('terminal-tabs-list');
+    if (!list) return;
+
+    const tab = document.createElement('div');
+    tab.className = 'terminal-tab';
+    tab.id = `terminal-tab-${id}`;
+    tab.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0">
+        <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5zM8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
+      </svg>
+      <span>${this._escHtml(term.shell.name)}</span>
+      <span class="terminal-tab-close" title="Close">×</span>
+    `;
+
+    tab.addEventListener('click', (e) => {
+      if (e.target.closest('.terminal-tab-close')) {
+        e.stopPropagation();
+        this.closeTerminal(id);
+      } else if (!e.target.closest('svg')) {
+        this._activate(id);
+      }
+    });
+
+    list.appendChild(tab);
+  }
+
+  _renderInstance(id) {
+    const body = document.getElementById('terminal-body');
+    if (!body) return;
+    const term = this.terminals.get(id);
+
+    const el = document.createElement('div');
+    el.className = 'terminal-instance';
+    el.id = `terminal-inst-${id}`;
+    el.innerHTML = `
+      <div class="terminal-output" id="terminal-out-${id}"></div>
+      <div class="terminal-input-row">
+        <span class="terminal-prompt-cwd" id="terminal-cwd-${id}" title="${this._escHtml(term.cwd)}"></span>
+        <span class="terminal-prompt-symbol">$</span>
+        <div class="terminal-running-indicator" id="terminal-spinner-${id}"></div>
+        <input
+          class="terminal-input"
+          id="terminal-in-${id}"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="type a command..."
+        />
+      </div>
+    `;
+    body.appendChild(el);
+
+    this._updateCwd(id);
+
+    const input = el.querySelector(`#terminal-in-${id}`);
+    input.addEventListener('keydown', (e) => this._onKey(e, id));
+  }
+
+  _activate(id) {
+    if (this.activeId !== null) {
+      document.getElementById(`terminal-tab-${this.activeId}`)?.classList.remove('active');
+      document.getElementById(`terminal-inst-${this.activeId}`)?.classList.remove('active');
+    }
+    this.activeId = id;
+    document.getElementById(`terminal-tab-${id}`)?.classList.add('active');
+    document.getElementById(`terminal-inst-${id}`)?.classList.add('active');
+    setTimeout(() => this._focusInput(id), 40);
+  }
+
+  _updateCwd(id) {
+    const term = this.terminals.get(id);
+    const el   = document.getElementById(`terminal-cwd-${id}`);
+    if (!el || !term) return;
+    // Show full path
+    el.textContent = term.cwd || '~';
+    el.title = term.cwd;
+  }
+
+  // ─── Input handling ──────────────────────────────────────────────────────
+
+  _onKey(e, id) {
+    const term = this.terminals.get(id);
+    if (!term) return;
+
+    switch (e.key) {
+      case 'Enter': {
+        e.preventDefault();
+        const raw = e.target.value.trim();
+        if (!raw) return;
+
+        // If a process is running, send input to it instead of executing a new command
+        if (term.running) {
+          window.api.invoke('terminal-send-input', { terminalId: id, input: raw }).catch(() => {});
+          this._appendOutput(id, `${this._escHtml(raw)}\r\n`, true);
+          e.target.value = '';
+          term.historyIndex = -1;
+        } else {
+          // Normal command execution
+          term.history.unshift(raw);
+          if (term.history.length > 100) term.history.pop();
+          term.historyIndex = -1;
+          e.target.value = '';
+          this._execute(id, raw);
+        }
+        break;
+      }
+      case 'Tab': {
+        e.preventDefault();
+        this._onTab(e.target, id);
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        if (term.historyIndex < term.history.length - 1) {
+          term.historyIndex++;
+          e.target.value = term.history[term.historyIndex] || '';
+        }
+        break;
+      }
+      case 'ArrowDown': {
+        e.preventDefault();
+        if (term.historyIndex > 0) {
+          term.historyIndex--;
+          e.target.value = term.history[term.historyIndex] || '';
+        } else {
+          term.historyIndex = -1;
+          e.target.value = '';
+        }
+        break;
+      }
+      case 'c': {
+        if (e.ctrlKey && term.running) {
+          e.preventDefault();
+          window.api.invoke('terminal-kill-current', id).catch(() => {});
+          this._appendOutput(id, '\u001b[31m^C\u001b[0m\r\n', true);
+          term.running = false;
+          this._setInputEnabled(id, true);
+        }
+        break;
+      }
+      case 'l': {
+        if (e.ctrlKey) {
+          e.preventDefault();
+          const out = document.getElementById(`terminal-out-${id}`);
+          if (out) out.innerHTML = '';
+        }
+        break;
+      }
+    }
+  }
+
+  async _onTab(input, id) {
+    const term = this.terminals.get(id);
+    if (!term) return;
+
+    const partial = input.value;
+    if (!partial.trim()) return;
 
     try {
-      const appInfo = await window.api.getAppInfo();
-      const appName = appInfo.name;
-      const appVersion = appInfo.version;
-      versionEl.textContent = `${appName} v${appVersion}`;
-    } catch (error) {
-      console.warn('Failed to load app version from package.json:', error);
+      const matches = await window.api.invoke('terminal-get-completions', {
+        cwd: term.cwd,
+        partial,
+      });
+
+      if (matches.length === 0) {
+        // No matches, do nothing
+        return;
+      } else if (matches.length === 1) {
+        // Single match: auto-complete
+        const trimmed = partial.trim();
+        const lastSpace = trimmed.lastIndexOf(' ');
+        const prefix = lastSpace === -1 ? '' : trimmed.substring(0, lastSpace + 1);
+        input.value = prefix + matches[0].value;
+      } else {
+        // Multiple matches: show them
+        this._appendOutput(id, `\u001b[2m${matches.map(m => m.label).join('  ')}\u001b[0m\r\n`, true);
+        this._scrollBottom(id);
+      }
+    } catch {}
+  }
+
+  async _execute(id, command) {
+    const term = this.terminals.get(id);
+    if (!term || term.running) return;
+
+    // Echo the command
+    this._appendOutput(id,
+      `\u001b[2m${this._escPrompt(term.cwd)}\u001b[0m \u001b[1m${this._escHtml(command)}\u001b[0m\r\n`,
+      true
+    );
+
+    // Handle `cd` locally — update cwd, then bail (no subprocess needed)
+    const cdMatch = command.match(/^cd(?:\s+(.+))?$/i);
+    if (cdMatch) {
+      const target = (cdMatch[1] || '').trim().replace(/^["']|["']$/g, '');
+      if (!target || target === '~') {
+        try { term.cwd = await window.api.invoke('terminal-get-home'); } catch {}
+      } else {
+        term.cwd = this._joinPath(term.cwd, target);
+      }
+      this._updateCwd(id);
+      return;
+    }
+
+    // Handle `clear` / `cls`
+    if (/^(clear|cls)$/i.test(command)) {
+      const out = document.getElementById(`terminal-out-${id}`);
+      if (out) out.innerHTML = '';
+      return;
+    }
+
+    term.running = true;
+    this._setInputEnabled(id, false);
+
+    try {
+      await window.api.invoke('terminal-execute', {
+        terminalId: id,
+        shellId:    term.shell.id,
+        shellPath:  term.shellPath || null,
+        command,
+        cwd:        term.cwd,
+      });
+    } catch (err) {
+      this._appendOutput(id, `\u001b[31mError: ${err.message}\u001b[0m\r\n`, true);
+      term.running = false;
+      this._setInputEnabled(id, true);
     }
   }
 
-  deferNonCriticalStartup() {
-    runAfterFirstPaint(() => {
-      this.updateAppVersionLabel();
-      this.setupFileTreeWatcher();
-      this.loadAutoSaveState();
-      this.setupAutoSaveListener();
-      this.setupFileTreeContextMenu();
-      this.setupWSLStatusListener();
-      this.setupUpdaterStatusListener();
+  _joinPath(base, rel) {
+    if (!rel) return base;
+    // Absolute paths (Windows or Unix)
+    if (/^[A-Za-z]:[\\/]/.test(rel) || rel.startsWith('/')) return rel;
+    if (rel === '..') {
+      const parts = base.replace(/\\/g, '/').split('/');
+      parts.pop();
+      return parts.join('/') || base;
+    }
+    const sep = base.includes('\\') ? '\\' : '/';
+    return base.replace(/[\\/]+$/, '') + sep + rel;
+  }
+
+  // ─── Output rendering ────────────────────────────────────────────────────
+
+  _appendOutput(id, text, raw = false) {
+    const out = document.getElementById(`terminal-out-${id}`);
+    if (!out) return;
+
+    const span = document.createElement('span');
+    span.innerHTML = this._ansiToHtml(text);
+    out.appendChild(span);
+    this._scrollBottom(id);
+  }
+
+  _ansiToHtml(text) {
+    if (!text) return '';
+
+    // Normalise line endings
+    let s = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // Strip all ANSI escape sequences except SGR color/style codes.
+    s = s.replace(
+      /\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g,
+      (m) => /^\x1b\[[0-9;]*m$/.test(m) ? m : ''
+    );
+
+    // Escape HTML special chars (before inserting spans)
+    const escHtml = (t) => t
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const fgMap = {
+      '30':'a-black','31':'a-red','32':'a-green','33':'a-yellow',
+      '34':'a-blue','35':'a-magenta','36':'a-cyan','37':'a-white',
+      '90':'a-Bblack','91':'a-Bred','92':'a-Bgreen','93':'a-Byellow',
+      '94':'a-Bblue','95':'a-Bmagenta','96':'a-Bcyan','97':'a-Bwhite',
+    };
+
+    let result = '';
+    let openSpans = 0;
+
+    // Split on SGR sequences (\x1b[...m)
+    const parts = s.split(/(\x1b\[[0-9;]*m)/g);
+    for (const part of parts) {
+      if (/^\x1b\[/.test(part)) {
+        // Close open spans on any SGR
+        while (openSpans > 0) { result += '</span>'; openSpans--; }
+        const code = part.slice(2, -1);
+        if (code === '0' || code === '') continue; // reset
+        const classes = [];
+        for (const c of code.split(';')) {
+          if (c === '1')  classes.push('a-bold');
+          if (c === '2')  classes.push('a-dim');
+          if (fgMap[c])   classes.push(fgMap[c]);
+        }
+        if (classes.length) { result += `<span class="${classes.join(' ')}"`; result += '>'; openSpans++; }
+      } else {
+        result += escHtml(part);
+      }
+    }
+    while (openSpans > 0) { result += '</span>'; openSpans--; }
+    return result;
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  _scrollBottom(id) {
+    const out = document.getElementById(`terminal-out-${id}`);
+    if (out) out.scrollTop = out.scrollHeight;
+  }
+
+  _setInputEnabled(id, enabled) {
+    const spinner = document.getElementById(`terminal-spinner-${id}`);
+    if (spinner) spinner.classList.toggle('visible', !enabled);
+    // Keep input always enabled so user can respond to interactive prompts (sudo, password, etc.)
+  }
+
+  _focusInput(id) {
+    document.getElementById(`terminal-in-${id}`)?.focus();
+  }
+
+  _escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  _escPrompt(cwd) {
+    const parts = (cwd || '').replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : '~';
+  }
+
+  // ─── Shell selector dropdown ─────────────────────────────────────────────
+
+  toggleShellDropdown() {
+    if (this._shellDropdownOpen) {
+      this._closeShellDropdown();
+    } else {
+      this._openShellDropdown();
+    }
+  }
+
+  _openShellDropdown() {
+    this._closeShellDropdown();
+
+    const btn  = document.getElementById('terminal-shell-btn');
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+
+    const dd = document.createElement('div');
+    dd.className = 'terminal-shell-dropdown';
+    dd.id = 'terminal-shell-dropdown';
+    dd.style.cssText = `bottom:${window.innerHeight - rect.top + 4}px; left:${rect.left}px;`;
+
+    dd.innerHTML = this.shells.map(s => `
+      <div class="terminal-shell-option ${s.id === this.currentShellId ? 'current' : ''}" data-id="${s.id}" data-path="${s.path || ''}">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5z"/>
+          <path d="M8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
+        </svg>
+        ${this._escHtml(s.name)}
+      </div>
+    `).join('');
+
+    dd.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-id]');
+      if (!item) return;
+      const sid   = item.dataset.id;
+      const spath = item.dataset.path || null;
+      this.currentShellId   = sid;
+      this.currentShellPath = spath;
+      const btnLabel = document.getElementById('terminal-shell-label');
+      const s = this.shells.find(x => x.id === sid);
+      if (btnLabel && s) btnLabel.textContent = s.name;
+      this._closeShellDropdown();
+      this.createTerminal(sid, spath || null);
+    });
+
+    document.body.appendChild(dd);
+    this._shellDropdownOpen = true;
+  }
+
+  _closeShellDropdown() {
+    document.getElementById('terminal-shell-dropdown')?.remove();
+    this._shellDropdownOpen = false;
+  }
+
+  // ─── Vertical resize ─────────────────────────────────────────────────────
+
+  _setupTerminalResizer() {
+    const handle = document.getElementById('terminal-resizer-top');
+    const panel  = document.getElementById('terminalPanel');
+    if (!handle || !panel) return;
+
+    let startY = 0;
+    let startH = 0;
+
+    const onMove = (e) => {
+      const dy = startY - e.clientY;
+      const newH = Math.max(120, Math.min(window.innerHeight * 0.72, startH + dy));
+      panel.style.height = newH + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      startH = panel.offsetHeight;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
   }
 
-  /**
-   * Update status bar backend version label using latest known release tag.
-   * @param {string|null} releaseTag
-   * @param {string} [statusText='']
-   */
+
+  destroy() {
+    if (this._dataUnsub) window.api.removeListener('terminal-data', this._dataUnsub);
+    if (this._doneUnsub) window.api.removeListener('terminal-command-done', this._doneUnsub);
+  }
+}
+
+// ----- src/renderer/managers/PerformanceManager.js -----
+class PerformanceManager {
+  constructor() {
+    this.hud = null;
+    this.hudVisible = false;
+    this.animationFrame = null;
+    this.observer = null;
+    this.sampleStartedAt = 0;
+    this.lastFrameAt = 0;
+    this.runtimeInfo = { hardwareAcceleration: 'unknown' };
+    this.liteEffectsEnabled = false;
+    this.stats = {
+      fps: 0,
+      frameMs: 0,
+      maxFrameMs: 0,
+      frameCount: 0,
+      longTasks: 0,
+      lastLongTaskMs: 0
+    };
+    this._metrics = null;
+    this._effectsBtn = null;
+  }
+
+  init() {
+    if (typeof document === 'undefined' || !document.body || this.hud) return;
+
+    try {
+      this.liteEffectsEnabled = localStorage.getItem('liteEffectsEnabled') === 'true';
+    } catch (_) {
+      this.liteEffectsEnabled = false;
+    }
+
+    this.applyLiteEffects(this.liteEffectsEnabled, false);
+
+    if (window.api && typeof window.api.getRuntimeInfo === 'function') {
+      try {
+        this.runtimeInfo = window.api.getRuntimeInfo() || this.runtimeInfo;
+      } catch (_) {
+        this.runtimeInfo = { hardwareAcceleration: 'unknown' };
+      }
+    }
+
+    const hud = document.createElement('aside');
+    hud.className = 'performance-hud';
+    hud.innerHTML = `
+      <div class="performance-hud-header">
+        <span class="performance-hud-title">Performance</span>
+        <div class="performance-hud-actions">
+          <button type="button" class="performance-hud-btn" data-action="effects">Lite effects</button>
+          <button type="button" class="performance-hud-btn" data-action="hide">Hide</button>
+        </div>
+      </div>
+      <div class="performance-hud-grid">
+        <div class="performance-hud-card"><span class="performance-hud-label">FPS</span><span class="performance-hud-value" data-metric="fps">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Frame</span><span class="performance-hud-value" data-metric="frame">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Long tasks</span><span class="performance-hud-value" data-metric="longTasks">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DOM nodes</span><span class="performance-hud-value" data-metric="domNodes">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">JS heap</span><span class="performance-hud-value" data-metric="memory">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">GPU</span><span class="performance-hud-value" data-metric="gpu">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">Effects</span><span class="performance-hud-value" data-metric="effects">--</span></div>
+        <div class="performance-hud-card"><span class="performance-hud-label">DPR</span><span class="performance-hud-value" data-metric="dpr">--</span></div>
+      </div>
+      <div class="performance-hud-note">Toggle with Ctrl+Alt+P. If Lite effects makes the UI feel much faster, the slowdown is likely compositing and blur related.</div>
+    `;
+
+    hud.querySelector('[data-action="effects"]').addEventListener('click', () => {
+      this.applyLiteEffects(!this.liteEffectsEnabled);
+    });
+    hud.querySelector('[data-action="hide"]').addEventListener('click', () => {
+      this.toggle(false);
+    });
+
+    document.body.appendChild(hud);
+    this.hud = hud;
+    this._metrics = {
+      fps: hud.querySelector('[data-metric="fps"]'),
+      frame: hud.querySelector('[data-metric="frame"]'),
+      longTasks: hud.querySelector('[data-metric="longTasks"]'),
+      domNodes: hud.querySelector('[data-metric="domNodes"]'),
+      memory: hud.querySelector('[data-metric="memory"]'),
+      gpu: hud.querySelector('[data-metric="gpu"]'),
+      effects: hud.querySelector('[data-metric="effects"]'),
+      dpr: hud.querySelector('[data-metric="dpr"]')
+    };
+    this._effectsBtn = hud.querySelector('[data-action="effects"]');
+    this._render();
+  }
+
+  toggle(forceVisible) {
+    if (!this.hud) this.init();
+    if (!this.hud) return;
+
+    const next = typeof forceVisible === 'boolean' ? forceVisible : !this.hudVisible;
+    this.hudVisible = next;
+    this.hud.classList.toggle('visible', next);
+
+    if (next) {
+      this._startSampling();
+    } else {
+      this._stopSampling();
+    }
+  }
+
+  applyLiteEffects(enabled, persist = true) {
+    this.liteEffectsEnabled = !!enabled;
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('lite-effects', this.liteEffectsEnabled);
+    }
+
+    if (persist) {
+      try {
+        localStorage.setItem('liteEffectsEnabled', JSON.stringify(this.liteEffectsEnabled));
+      } catch (_) {
+        // ignore persistence failures
+      }
+    }
+
+    if (this._effectsBtn) {
+      this._effectsBtn.textContent = this.liteEffectsEnabled ? 'Full effects' : 'Lite effects';
+    }
+
+    this._render();
+  }
+
+  _startSampling() {
+    if (this.animationFrame || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      this._render();
+      return;
+    }
+
+    Object.assign(this.stats, { fps: 0, frameMs: 0, maxFrameMs: 0, frameCount: 0, longTasks: 0, lastLongTaskMs: 0 });
+    this.sampleStartedAt = performance.now();
+    this.lastFrameAt = 0;
+
+    if (typeof window.PerformanceObserver === 'function') {
+      try {
+        this.observer = new window.PerformanceObserver((list) => {
+          list.getEntries().forEach((entry) => {
+            this.stats.longTasks += 1;
+            this.stats.lastLongTaskMs = Math.max(this.stats.lastLongTaskMs, entry.duration || 0);
+          });
+        });
+        this.observer.observe({ entryTypes: ['longtask'] });
+      } catch (_) {
+        this.observer = null;
+      }
+    }
+
+    const sample = (timestamp) => {
+      if (!this.hudVisible) { this.animationFrame = null; return; }
+
+      if (this.lastFrameAt) {
+        const frameMs = timestamp - this.lastFrameAt;
+        this.stats.frameMs = frameMs;
+        this.stats.maxFrameMs = Math.max(this.stats.maxFrameMs, frameMs);
+        this.stats.frameCount += 1;
+      }
+      this.lastFrameAt = timestamp;
+
+      const elapsed = timestamp - this.sampleStartedAt;
+      if (elapsed >= 500) {
+        this.stats.fps = this.stats.frameCount > 0 ? (this.stats.frameCount * 1000) / elapsed : 0;
+        this._render();
+        this.sampleStartedAt = timestamp;
+        this.stats.frameCount = 0;
+        this.stats.maxFrameMs = this.stats.frameMs;
+        this.stats.longTasks = 0;
+        this.stats.lastLongTaskMs = 0;
+      }
+
+      this.animationFrame = window.requestAnimationFrame(sample);
+    };
+
+    this.animationFrame = window.requestAnimationFrame(sample);
+  }
+
+  _stopSampling() {
+    if (this.animationFrame && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this.animationFrame);
+    }
+    this.animationFrame = null;
+
+    if (this.observer) {
+      try { this.observer.disconnect(); } catch (_) {}
+      this.observer = null;
+    }
+  }
+
+  _render() {
+    if (!this._metrics || typeof document === 'undefined') return;
+
+    const domNodes = document.getElementsByTagName('*').length;
+    const memoryInfo = typeof performance !== 'undefined' ? performance.memory : null;
+    const memoryMb = memoryInfo && typeof memoryInfo.usedJSHeapSize === 'number'
+      ? (memoryInfo.usedJSHeapSize / (1024 * 1024)).toFixed(1)
+      : null;
+
+    this._metrics.fps.textContent = this.stats.fps ? `${Math.round(this.stats.fps)}` : '--';
+    this._metrics.frame.textContent = this.stats.frameMs ? `${this.stats.frameMs.toFixed(1)} ms` : '--';
+    this._metrics.longTasks.textContent = this.stats.lastLongTaskMs
+      ? `${this.stats.longTasks} / ${Math.round(this.stats.lastLongTaskMs)} ms`
+      : '0';
+    this._metrics.domNodes.textContent = `${domNodes}`;
+    this._metrics.memory.textContent = memoryMb ? `${memoryMb} MB` : 'n/a';
+    this._metrics.gpu.textContent = String(this.runtimeInfo.hardwareAcceleration || 'unknown').toUpperCase();
+    this._metrics.effects.textContent = this.liteEffectsEnabled ? 'Lite' : 'Full';
+    this._metrics.dpr.textContent = `${window.devicePixelRatio || 1}`;
+  }
+}
+
+window.PerformanceManager = PerformanceManager;
+
+// ----- src/renderer/managers/WSLManager.js -----
+class WSLManager {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+  setupListeners() {
+    window.api.on('wsl-status', (data) => {
+      if (data.platform) this.ui.platform = data.platform;
+      this.ui.wslAvailable = data.available && data.hasDistros;
+
+      if (this.ui.platform === 'win32') {
+        this._updateIndicator(data);
+
+        if (!data.available) {
+          this.ui.notificationManager.showWarning(
+            'WSL is not installed. CTrace requires WSL on Windows. Please install WSL to access all functionality.'
+          );
+          console.warn('WSL not detected on Windows platform');
+        } else if (!data.hasDistros) {
+          this.ui.notificationManager.showWarning(
+            'WSL is installed but no Linux distributions are available. Please install a distribution (e.g., Ubuntu) to use CTrace.'
+          );
+          console.warn('WSL detected but no distributions installed');
+        } else {
+          console.log('WSL is available and ready with distributions');
+        }
+      }
+    });
+
+    window.api.on('wsl-install-response', (data) => {
+      if (data.action === 'install') {
+        this.ui.notificationManager.showInfo(
+          'WSL installation initiated. Please follow the installation prompts and restart the application when complete.'
+        );
+      } else if (data.action === 'cancel') {
+        this.ui.notificationManager.showWarning(
+          'WSL installation cancelled. Some features may be limited without WSL.'
+        );
+      }
+    });
+
+    window.api.send('check-wsl-status');
+  }
+
+  _updateIndicator(wslStatus) {
+    let statusEl = document.getElementById('wsl-status-indicator');
+    if (!statusEl) {
+      statusEl = document.createElement('div');
+      statusEl.id = 'wsl-status-indicator';
+      statusEl.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        z-index: 1000;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      `;
+      document.body.appendChild(statusEl);
+    }
+
+    if (!wslStatus.available) {
+      statusEl.textContent = '❌ WSL Not Installed';
+      statusEl.style.backgroundColor = '#ff4757';
+      statusEl.title = 'WSL is not installed. Click for installation instructions.';
+    } else if (!wslStatus.hasDistros) {
+      statusEl.textContent = '⚠️ WSL No Distributions';
+      statusEl.style.backgroundColor = '#ffa502';
+      statusEl.title = 'WSL is installed but no Linux distributions are available. Click for setup instructions.';
+    } else {
+      statusEl.textContent = '✅ WSL Ready';
+      statusEl.style.backgroundColor = '#2ed573';
+      statusEl.title = 'WSL is ready and available for CTrace';
+      setTimeout(() => {
+        if (statusEl && statusEl.textContent.includes('✅')) {
+          statusEl.style.opacity = '0.3';
+        }
+      }, 3000);
+    }
+
+    statusEl.onclick = () => {
+      if (!wslStatus.available || !wslStatus.hasDistros) {
+        this._showSetupDialog(wslStatus);
+      }
+    };
+  }
+
+  _showSetupDialog(wslStatus) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    `;
+
+    let instructions = '';
+    if (!wslStatus.available) {
+      instructions = `
+        <h3>🔧 Install WSL (Windows Subsystem for Linux)</h3>
+        <p>CTrace requires WSL to run on Windows. Follow these steps:</p>
+        <ol>
+          <li><strong>Open PowerShell as Administrator</strong>
+            <br><small>Right-click Start button → "Windows PowerShell (Admin)"</small>
+          </li>
+          <li><strong>Run the installation command:</strong>
+            <br><code style="background:#f0f0f0; padding:4px 8px; border-radius:3px; font-family:monospace;">wsl --install</code>
+          </li>
+          <li><strong>Restart your computer</strong> when prompted</li>
+          <li><strong>Follow the Ubuntu setup</strong> (create username/password)</li>
+          <li><strong>Restart this application</strong> to use CTrace</li>
+        </ol>
+      `;
+    } else {
+      instructions = `
+        <h3>📦 Install a Linux Distribution</h3>
+        <p>WSL is installed but you need a Linux distribution to run CTrace:</p>
+        <ol>
+          <li><strong>Open PowerShell</strong> (no need for Admin)</li>
+          <li><strong>List available distributions:</strong>
+            <br><code style="background:#f0f0f0; padding:4px 8px; border-radius:3px; font-family:monospace;">wsl --list --online</code>
+          </li>
+          <li><strong>Install Ubuntu (recommended):</strong>
+            <br><code style="background:#f0f0f0; padding:4px 8px; border-radius:3px; font-family:monospace;">wsl --install Ubuntu</code>
+          </li>
+          <li><strong>Follow the setup instructions</strong> (create username/password)</li>
+          <li><strong>Restart this application</strong> to use CTrace</li>
+        </ol>
+      `;
+    }
+
+    dialog.innerHTML = `
+      ${instructions}
+      <div style="margin-top:20px; text-align:right;">
+        ${!wslStatus.available ? `
+          <button id="auto-install-wsl" style="padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; font-size:14px; margin-right:10px;">Install Automatically</button>
+        ` : wslStatus.available && !wslStatus.hasDistros ? `
+          <button id="install-ubuntu" style="padding:10px 20px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; font-size:14px; margin-right:10px;">Install Ubuntu</button>
+        ` : ''}
+        <button id="close-wsl-dialog" style="padding:10px 20px; background:#007acc; color:white; border:none; border-radius:5px; cursor:pointer; font-size:14px;">Got it!</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const close = () => document.body.removeChild(modal);
+    document.getElementById('close-wsl-dialog').onclick = close;
+    modal.onclick = (e) => { if (e.target === modal) close(); };
+
+    const autoInstallBtn = document.getElementById('auto-install-wsl');
+    if (autoInstallBtn) {
+      autoInstallBtn.onclick = () => {
+        window.api.send('install-wsl');
+        close();
+        this.ui.notificationManager.showInfo('WSL installation started. Please follow any prompts that appear.');
+      };
+    }
+
+    const installUbuntuBtn = document.getElementById('install-ubuntu');
+    if (installUbuntuBtn) {
+      installUbuntuBtn.onclick = () => {
+        window.api.send('install-wsl-distro', 'Ubuntu');
+        close();
+        this.ui.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
+      };
+    }
+  }
+}
+
+window.WSLManager = WSLManager;
+
+// ----- src/renderer/managers/UpdaterManager.js -----
+class UpdaterManager {
+  constructor(notificationManager) {
+    this.notificationManager = notificationManager;
+  }
+
   updateBackendVersionLabel(releaseTag, statusText = '') {
     const backendEl = document.getElementById('backend_version');
     if (!backendEl) return;
@@ -4127,172 +5295,10 @@ class UIController {
     backendEl.textContent = `CoreTrace latest: ${fallback}`;
     backendEl.title = 'Latest CoreTrace backend release tag';
   }
-  /**
-   * Refreshes the file tree in the explorer view.
-   * 
-   * This method manually triggers a refresh of the file tree to show any
-   * new files or folders that may have been added to the workspace. It
-   * communicates with the main process to get an updated file tree structure.
-   * 
-   * @async
-   * @memberof UIController
-   * @throws {Error} When file tree refresh fails
-   * 
-   * @example
-   * // Refresh is typically triggered by the refresh button
-   * await uiController.refreshFileTree();
-   */
-  async refreshFileTree(silent = false) {
-    // Only refresh if workspace is open
-    const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
-    if (!workspacePath) {
-      this.notificationManager.showWarning('No workspace open to refresh');
-      return;
-    }
-    // Request updated file tree from main process
-    try {
-      const result = await window.api.invoke('get-file-tree', workspacePath);
-      if (result.success) {
-        const folderName = workspacePath.split(/[/\\]/).pop();
-        this.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
-        if (!silent) {
-          this.notificationManager.showSuccess('File tree refreshed');
-        }
-      } else {
-        this.notificationManager.showError('Failed to refresh file tree: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      this.notificationManager.showError('Error refreshing file tree: ' + error.message);
-    }
-  }
 
-  /**
-   * Setup file tree watcher to listen for automatic updates.
-   * Debounces refreshes to avoid UI freezes on large workspaces.
-   */
-  setupFileTreeWatcher() {
-    if (this._fileTreeWatcherInitialized) return;
-    this._fileTreeWatcherInitialized = true;
-
-    let refreshTimer = null;
-    window.api.on('workspace-changed', (data) => {
-      if (!data || !data.success) {
-        if (data && data.error) {
-          console.error('Error in workspace change notification:', data.error);
-        }
-        return;
-      }
-
-      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
-      if (!workspacePath) return;
-      if (data.folderPath && data.folderPath !== workspacePath) return;
-
-      clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => {
-        this.refreshFileTree(true);
-      }, 1200);
-    });
-
-    // Show a discrete loading indicator for slow workspace operations
-    this._workspaceLoadingTimer = null;
-    this._workspaceLoadingNotification = null;
-    this._workspaceLoadingRequestId = null;
-
-    window.api.on('workspace-loading', (data) => {
-      if (!data || !data.status) return;
-
-      // Only react for the active workspace.
-      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
-      if (workspacePath && data.folderPath && data.folderPath !== workspacePath && data.operation !== 'open') {
-        return;
-      }
-
-      if (data.status === 'start') {
-        this._workspaceLoadingRequestId = data.requestId || null;
-        clearTimeout(this._workspaceLoadingTimer);
-
-        this._workspaceLoadingTimer = setTimeout(() => {
-          if (this._workspaceLoadingNotification) return;
-          const folderName = (data.folderPath || '').split(/[/\\]/).pop() || 'workspace';
-          const label = data.operation === 'refresh'
-            ? `Refreshing "${folderName}"...`
-            : `Loading "${folderName}"...`;
-          this._workspaceLoadingNotification = this.notificationManager.showLoading(label);
-        }, 450);
-
-        return;
-      }
-
-      if (data.status === 'end') {
-        if (this._workspaceLoadingRequestId && data.requestId && data.requestId !== this._workspaceLoadingRequestId) {
-          return;
-        }
-
-        clearTimeout(this._workspaceLoadingTimer);
-        this._workspaceLoadingTimer = null;
-
-        if (this._workspaceLoadingNotification) {
-          this._workspaceLoadingNotification.dismiss();
-          this._workspaceLoadingNotification = null;
-        }
-
-        this._workspaceLoadingRequestId = null;
-      }
-    });
-  }
-
-  /**
-   * Setup WSL status listener to handle WSL availability updates
-   */
-  setupWSLStatusListener() {
-    // Listen for WSL status updates from main process
-    window.api.on('wsl-status', (data) => {
-      this.wslAvailable = data.available && data.hasDistros;
-      
-      if (this.platform === 'win32') {
-        // Update WSL status indicator in UI
-        this.updateWSLStatusIndicator(data);
-        
-        if (!data.available) {
-          this.notificationManager.showWarning(
-            'WSL is not installed. CTrace requires WSL on Windows. Please install WSL to access all functionality.'
-          );
-          console.warn('WSL not detected on Windows platform');
-        } else if (!data.hasDistros) {
-          this.notificationManager.showWarning(
-            'WSL is installed but no Linux distributions are available. Please install a distribution (e.g., Ubuntu) to use CTrace.'
-          );
-          console.warn('WSL detected but no distributions installed');
-        } else {
-          console.log('WSL is available and ready with distributions');
-        }
-      }
-    });
-
-    // Listen for WSL installation dialog responses
-    window.api.on('wsl-install-response', (data) => {
-      if (data.action === 'install') {
-        this.notificationManager.showInfo(
-          'WSL installation initiated. Please follow the installation prompts and restart the application when complete.'
-        );
-      } else if (data.action === 'cancel') {
-        this.notificationManager.showWarning(
-          'WSL installation cancelled. Some features may be limited without WSL.'
-        );
-      }
-    });
-
-    // Request initial WSL status check
-    window.api.send('check-wsl-status');
-  }
-
-  /**
-   * Setup updater status listener for notifications coming from main process
-   */
-  setupUpdaterStatusListener() {
+  setupListeners() {
     const indicator = document.getElementById('update-status-indicator');
 
-    // Initial placeholder until the first backend update event arrives.
     this.updateBackendVersionLabel(null, 'checking...');
 
     const applyBackendStatus = (status) => {
@@ -4316,9 +5322,7 @@ class UIController {
 
     window.api.invoke('backend-get-status')
       .then((res) => {
-        if (res && res.success && res.status) {
-          applyBackendStatus(res.status);
-        }
+        if (res && res.success && res.status) applyBackendStatus(res.status);
       })
       .catch(() => {});
 
@@ -4341,47 +5345,27 @@ class UIController {
     window.api.on('updater-status', (data) => {
       if (!data || !data.type) return;
 
-      if (data.type === 'backend-checking-for-update' || data.type === 'backend-update-not-available' || data.type === 'backend-update-installed' || data.type === 'backend-error') {
+      if (['backend-checking-for-update', 'backend-update-not-available', 'backend-update-installed', 'backend-error'].includes(data.type)) {
         applyBackendStatus(data);
-        if (data.type === 'backend-error') {
-          console.warn('[BackendUpdater] Error:', data.message);
-        }
+        if (data.type === 'backend-error') console.warn('[BackendUpdater] Error:', data.message);
         return;
       }
 
       if (data.type === 'checking-for-update') {
-        showIndicator(
-          'checking',
-          '<span class="update-spinner"></span><span>Checking for updates…</span>',
-          'Checking for updates'
-        );
+        showIndicator('checking', '<span class="update-spinner"></span><span>Checking for updates…</span>', 'Checking for updates');
       } else if (data.type === 'update-available') {
         const version = data.info && data.info.version ? ` v${data.info.version}` : '';
-        showIndicator(
-          'update-available',
-          `<span>↑</span><span>Update available${version} — downloading…</span>`,
-          `Update${version} is downloading in the background`
-        );
+        showIndicator('update-available', `<span>↑</span><span>Update available${version} — downloading…</span>`, `Update${version} is downloading in the background`);
       } else if (data.type === 'download-progress') {
         const pct = data.percent != null ? ` ${Math.round(data.percent)}%` : '';
         const version = data.info && data.info.version ? ` v${data.info.version}` : '';
-        showIndicator(
-          'update-available',
-          `<span>↑</span><span>Downloading${version}${pct}…</span>`,
-          `Downloading update${version}`
-        );
+        showIndicator('update-available', `<span>↑</span><span>Downloading${version}${pct}…</span>`, `Downloading update${version}`);
       } else if (data.type === 'update-not-available') {
         hideIndicator();
       } else if (data.type === 'update-downloaded') {
         const version = data.info && data.info.version ? ` v${data.info.version}` : '';
-        showIndicator(
-          'update-downloaded',
-          `<span>✓</span><span>${version ? version.trim() : 'Update'} ready — restart to apply</span>`,
-          `Click to restart and install${version}`
-        );
-        indicator.onclick = () => {
-          window.api.invoke('updater-install-update').catch(() => {});
-        };
+        showIndicator('update-downloaded', `<span>✓</span><span>${version ? version.trim() : 'Update'} ready — restart to apply</span>`, `Click to restart and install${version}`);
+        indicator.onclick = () => window.api.invoke('updater-install-update').catch(() => {});
       } else if (data.type === 'error') {
         hideIndicator();
         console.warn('[Updater] Error:', data.message);
@@ -4389,337 +5373,625 @@ class UIController {
     });
   }
 
-  /**
-   * Update WSL status indicator in the UI
-   * @param {Object} wslStatus - WSL status object with available, hasDistros, and error properties
-   */
-  updateWSLStatusIndicator(wslStatus) {
-    // Find or create WSL status indicator
-    let statusEl = document.getElementById('wsl-status-indicator');
-    if (!statusEl) {
-      statusEl = document.createElement('div');
-      statusEl.id = 'wsl-status-indicator';
-      statusEl.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: bold;
-        color: white;
-        z-index: 1000;
-        cursor: pointer;
-        transition: all 0.3s ease;
-      `;
-      document.body.appendChild(statusEl);
-    }
+  async openUpdateSettingsModal() {
+    let currentChannel = 'main';
 
-    // Update status based on WSL state
-    if (!wslStatus.available) {
-      statusEl.textContent = '❌ WSL Not Installed';
-      statusEl.style.backgroundColor = '#ff4757';
-      statusEl.title = 'WSL is not installed. Click for installation instructions.';
-    } else if (!wslStatus.hasDistros) {
-      statusEl.textContent = '⚠️ WSL No Distributions';
-      statusEl.style.backgroundColor = '#ffa502';
-      statusEl.title = 'WSL is installed but no Linux distributions are available. Click for setup instructions.';
-    } else {
-      statusEl.textContent = '✅ WSL Ready';
-      statusEl.style.backgroundColor = '#2ed573';
-      statusEl.title = 'WSL is ready and available for CTrace';
-      
-      // Auto-hide the indicator after 3 seconds if everything is working
-      setTimeout(() => {
-        if (statusEl && statusEl.textContent.includes('✅')) {
-          statusEl.style.opacity = '0.3';
-        }
-      }, 3000);
-    }
-
-    // Add click handler for help
-    statusEl.onclick = () => {
-      if (!wslStatus.available || !wslStatus.hasDistros) {
-        this.showWSLSetupDialog(wslStatus);
+    try {
+      const result = await window.api.invoke('updater-get-settings');
+      if (result && result.success && result.settings && result.settings.channel) {
+        currentChannel = result.settings.channel;
       }
-    };
-  }
+    } catch (error) {
+      console.warn('Failed to load updater settings:', error);
+    }
 
-  /**
-   * Show WSL setup dialog with detailed instructions
-   * @param {Object} wslStatus - Current WSL status
-   */
-  showWSLSetupDialog(wslStatus) {
     const modal = document.createElement('div');
     modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex; justify-content: center; align-items: center;
       z-index: 10000;
     `;
 
     const dialog = document.createElement('div');
     dialog.style.cssText = `
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      background: #0d1117; color: #f0f6fc;
+      padding: 20px; border-radius: 10px; width: 440px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
     `;
 
-    let instructions = '';
-    if (!wslStatus.available) {
-      instructions = `
-        <h3>🔧 Install WSL (Windows Subsystem for Linux)</h3>
-        <p>CTrace requires WSL to run on Windows. Follow these steps:</p>
-        <ol>
-          <li><strong>Open PowerShell as Administrator</strong>
-            <br><small>Right-click Start button → "Windows PowerShell (Admin)"</small>
-          </li>
-          <li><strong>Run the installation command:</strong>
-            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --install</code>
-          </li>
-          <li><strong>Restart your computer</strong> when prompted</li>
-          <li><strong>Follow the Ubuntu setup</strong> (create username/password)</li>
-          <li><strong>Restart this application</strong> to use CTrace</li>
-        </ol>
-      `;
-    } else {
-      instructions = `
-        <h3>📦 Install a Linux Distribution</h3>
-        <p>WSL is installed but you need a Linux distribution to run CTrace:</p>
-        <ol>
-          <li><strong>Open PowerShell</strong> (no need for Admin)</li>
-          <li><strong>List available distributions:</strong>
-            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --list --online</code>
-          </li>
-          <li><strong>Install Ubuntu (recommended):</strong>
-            <br><code style="background: #f0f0f0; padding: 4px 8px; border-radius: 3px; font-family: monospace;">wsl --install Ubuntu</code>
-          </li>
-          <li><strong>Follow the setup instructions</strong> (create username/password)</li>
-          <li><strong>Restart this application</strong> to use CTrace</li>
-        </ol>
-      `;
-    }
-
     dialog.innerHTML = `
-      ${instructions}
-      <div style="margin-top: 20px; text-align: right;">
-        ${!wslStatus.available ? `
-          <button id="auto-install-wsl" style="
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-          ">Install Automatically</button>
-        ` : wslStatus.available && !wslStatus.hasDistros ? `
-          <button id="install-ubuntu" style="
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-          ">Install Ubuntu</button>
-        ` : ''}
-        <button id="close-wsl-dialog" style="
-          padding: 10px 20px;
-          background: #007acc;
-          color: white;
-          border: none;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 14px;
-        ">Got it!</button>
+      <h3 style="margin:0 0 12px 0; font-size:18px;">Update Settings</h3>
+      <div style="font-size:12px; color:#8b949e; margin-bottom:14px; line-height:1.5;">
+        Choose which update stream to receive.
+      </div>
+      <label for="update-release-channel" style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Release channel</label>
+      <select id="update-release-channel" style="width:100%; padding:8px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; margin-bottom:8px;">
+        <option value="main">Main (stable)</option>
+        <option value="beta">Beta (pre-release)</option>
+      </select>
+      <div style="font-size:11px; color:#8b949e; margin-bottom:16px;">Beta may include pre-release builds and unstable changes.</div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="check-updates-now" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Check now</button>
+        <button id="close-update-settings" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Close</button>
+        <button id="save-update-settings" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
       </div>
     `;
 
     modal.appendChild(dialog);
     document.body.appendChild(modal);
 
-    // Close dialog handlers
-    const closeDialog = () => {
-      document.body.removeChild(modal);
-    };
+    const channelSelect = dialog.querySelector('#update-release-channel');
+    if (channelSelect) channelSelect.value = currentChannel === 'beta' ? 'beta' : 'main';
 
-    document.getElementById('close-wsl-dialog').onclick = closeDialog;
-    modal.onclick = (e) => {
-      if (e.target === modal) closeDialog();
-    };
+    const closeModal = () => { if (modal && modal.parentNode) modal.parentNode.removeChild(modal); };
 
-    // Installation button handlers
-    const autoInstallBtn = document.getElementById('auto-install-wsl');
-    if (autoInstallBtn) {
-      autoInstallBtn.onclick = () => {
-        window.api.send('install-wsl');
-        closeDialog();
-        this.notificationManager.showInfo('WSL installation started. Please follow any prompts that appear.');
-      };
-    }
+    dialog.querySelector('#close-update-settings').onclick = closeModal;
 
-    const installUbuntuBtn = document.getElementById('install-ubuntu');
-    if (installUbuntuBtn) {
-      installUbuntuBtn.onclick = () => {
-        window.api.send('install-wsl-distro', 'Ubuntu');
-        closeDialog();
-        this.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
-      };
-    }
-  }
-
-  /**
-   * Setup custom title bar controls for frameless window.
-   * 
-   * This method handles the custom window controls (minimize, maximize, close)
-   * and window state management for the frameless window.
-   * 
-   * @memberof UIController
-   * @private
-   */
-  setupTitleBarControls() {
-    // Setup IPC-based window controls (via secure preload bridge)
-    const minimizeBtn = document.getElementById('minimize-btn');
-    const maximizeBtn = document.getElementById('maximize-btn');
-    const closeBtn = document.getElementById('close-btn');
-    
-    if (minimizeBtn) {
-      minimizeBtn.addEventListener('click', () => {
-        window.api.send('window-minimize');
-      });
-    }
-    
-    if (maximizeBtn) {
-      maximizeBtn.addEventListener('click', () => {
-        window.api.send('window-maximize-toggle');
-      });
-    }
-    
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        window.api.send('window-close');
-      });
-    }
-    
-    // Listen for window state changes
-    window.api.on('window-maximized', (isMaximized) => {
-      document.body.classList.toggle('window-maximized', isMaximized);
-    });
-  }
-
-  /**
-   * Connect managers and set up inter-manager communication
-   */
-  connectManagers() {
-    // Set up tab manager callbacks
-    this.tabManager.onLoadFullFile = (filePath) => {
-      this.fileOpsManager.loadFullFile(filePath);
-    };
-
-    // Auto-save safety net: flush pending edits when switching/closing tabs.
-    // (Auto-save debounce can otherwise be skipped if the user switches/close quickly.)
-    this.tabManager.onBeforeTabSwitch = async (fromTabId) => {
-      if (fromTabId) {
-        await this.maybeAutoSaveTab(fromTabId);
-      }
-    };
-
-    this.tabManager.onBeforeTabClose = async (tabId) => {
-      if (tabId) {
-        await this.maybeAutoSaveTab(tabId);
-      }
-    };
-
-    // Set up search manager callbacks
-    this.searchManager.openSearchResult = async (filePath, lineNumber) => {
-      await this.openSearchResult(filePath, lineNumber);
-    };
-
-    // Update search manager with workspace path when workspace changes
-    this.searchManager.setWorkspacePath(this.fileOpsManager.getCurrentWorkspacePath());
-
-    // Set up editor content change tracking
-    const wireEditorChangeListener = () => {
+    dialog.querySelector('#check-updates-now').onclick = async () => {
       try {
-        // If Monaco editor is available, use its model change event
-        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
-        if (monacoEditor && monacoEditor.onDidChangeModelContent) {
-          console.log('[UIController] Wiring Monaco editor change listener');
-          monacoEditor.onDidChangeModelContent(() => {
-            if (this.tabManager.activeTabId) {
-              const newContent = this.editorManager.getContent();
-              this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
-              this.triggerAutoSave();
-            }
-          });
-        } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
-          console.log('[UIController] Wiring legacy editor change listener');
-          // Fallback for the legacy DOM-based editor
-          this.editorManager.editor.addEventListener('input', () => {
-            if (this.tabManager.activeTabId) {
-              const newContent = this.editorManager.getContent();
-              this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
-              this.triggerAutoSave();
-            }
-          });
+        const result = await window.api.invoke('updater-check-now');
+        if (result && result.success) {
+          this.notificationManager.showInfo('Update check started. You will be notified if an update is available.');
         } else {
-          console.warn('[UIController] Editor not ready yet, will retry after monaco-loaded event');
+          this.notificationManager.showWarning(result && result.error ? result.error : 'Unable to check for updates.');
+        }
+      } catch (error) {
+        this.notificationManager.showError('Failed to check updates: ' + error.message);
+      }
+    };
+
+    dialog.querySelector('#save-update-settings').onclick = async () => {
+      const selectedChannel = channelSelect ? channelSelect.value : 'main';
+      try {
+        const result = await window.api.invoke('updater-set-channel', selectedChannel);
+        if (result && result.success) {
+          this.notificationManager.showSuccess(`Update channel saved: ${selectedChannel}`);
+          closeModal();
+        } else {
+          this.notificationManager.showError(result && result.error ? result.error : 'Failed to save update channel');
+        }
+      } catch (error) {
+        this.notificationManager.showError('Failed to save update settings: ' + error.message);
+      }
+    };
+
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+  }
+
+  async openBackendSettingsModal() {
+    let currentPath = '';
+
+    try {
+      const result = await window.api.invoke('backend-get-settings');
+      if (result && result.success && result.settings && result.settings.directBinaryPath) {
+        currentPath = result.settings.directBinaryPath;
+      }
+    } catch (err) {
+      console.warn('Failed to load backend settings:', err);
+    }
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: #0d1117; color: #f0f6fc;
+      padding: 24px; border-radius: 10px; width: 500px;
+      border: 1px solid #30363d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 8px 0; font-size:18px;">Backend Settings</h3>
+      <div style="font-size:12px; color:#8b949e; margin-bottom:18px; line-height:1.5;">
+        Optionally locate a native <code style="color:#79c0ff;">ctrace.exe</code> binary to run analysis
+        directly on Windows — no WSL or HTTP server required.<br><br>
+        When set, the GUI spawns the binary directly using CLI arguments.
+        Clear the path to revert to the default WSL-backed server mode.
+      </div>
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">ctrace.exe path</label>
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <input id="bs-binary-path" type="text"
+          placeholder="e.g. C:\\tools\\ctrace.exe"
+          style="flex:1; padding:8px; background:#161b22; color:#f0f6fc;
+                 border:1px solid #30363d; border-radius:6px; font-size:12px;" />
+        <button id="bs-browse"
+          style="padding:8px 12px; background:#21262d; border:1px solid #30363d;
+                 color:#f0f6fc; border-radius:6px; cursor:pointer; white-space:nowrap;">
+          Browse…
+        </button>
+      </div>
+      <div id="bs-mode-hint" style="font-size:11px; color:#8b949e; margin-bottom:16px;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button id="bs-clear" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Clear (use WSL mode)</button>
+        <button id="bs-close" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Cancel</button>
+        <button id="bs-save" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
+      </div>
+    `;
+
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
+
+    const pathInput = dialog.querySelector('#bs-binary-path');
+    const modeHint = dialog.querySelector('#bs-mode-hint');
+
+    const updateHint = (val) => {
+      if (val && val.trim()) {
+        modeHint.style.color = '#3fb950';
+        modeHint.textContent = 'Direct binary mode active — analysis will use this executable.';
+      } else {
+        modeHint.style.color = '#8b949e';
+        modeHint.textContent = 'No path set — WSL server mode will be used (default).';
+      }
+    };
+
+    pathInput.value = currentPath;
+    updateHint(currentPath);
+    pathInput.oninput = () => updateHint(pathInput.value);
+
+    const closeModal = () => { if (modal.parentNode) modal.parentNode.removeChild(modal); };
+
+    dialog.querySelector('#bs-close').onclick = closeModal;
+
+    dialog.querySelector('#bs-browse').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-browse-binary');
+        if (!result.canceled && result.filePath) {
+          pathInput.value = result.filePath;
+          updateHint(result.filePath);
         }
       } catch (err) {
-        console.warn('Failed to wire editor change listener:', err);
+        this.notificationManager.showError('Browse failed: ' + err.message);
       }
     };
 
-    // Try to wire immediately
-    wireEditorChangeListener();
+    dialog.querySelector('#bs-clear').onclick = async () => {
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: '' });
+        if (result && result.success) {
+          this.notificationManager.showSuccess('Backend reset to WSL server mode.');
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to clear backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to clear: ' + err.message);
+      }
+    };
 
-    // Also listen for monaco-loaded event in case editor wasn't ready yet
-    window.addEventListener('monaco-loaded', () => {
-      console.log('[UIController] Monaco loaded event received, re-wiring editor listener');
-      setTimeout(() => {
-        wireEditorChangeListener();
-      }, 100);
+    dialog.querySelector('#bs-save').onclick = async () => {
+      const val = pathInput.value.trim();
+      try {
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val });
+        if (result && result.success) {
+          this.notificationManager.showSuccess(val ? 'Direct binary mode enabled.' : 'Backend reset to WSL server mode.');
+          closeModal();
+        } else {
+          this.notificationManager.showError(result.error || 'Failed to save backend settings.');
+        }
+      } catch (err) {
+        this.notificationManager.showError('Failed to save: ' + err.message);
+      }
+    };
+
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+  }
+}
+
+window.UpdaterManager = UpdaterManager;
+
+// ----- src/renderer/managers/ResizeManager.js -----
+class ResizeManager {
+  constructor() {
+    this.isResizing = false;
+    this.resizeType = null;
+    this._boundDoResize = this._doResize.bind(this);
+    this._boundStopResize = this._stopResize.bind(this);
+  }
+
+  setup() {
+    const sidebar = document.getElementById('sidebar');
+    const toolsPanel = document.getElementById('toolsPanel');
+
+    const startResize = (e, type) => {
+      this.isResizing = true;
+      this.resizeType = type;
+
+      if (type === 'sidebar') {
+        sidebar.style.transition = 'none';
+      } else if (type === 'toolsPanel') {
+        toolsPanel.style.transition = 'none';
+      }
+
+      document.addEventListener('mousemove', this._boundDoResize);
+      document.addEventListener('mouseup', this._boundStopResize);
+      e.preventDefault();
+      document.body.style.userSelect = 'none';
+    };
+
+    window.initSidebarResize = (e) => startResize(e, 'sidebar');
+    window.initToolsPanelResize = (e) => startResize(e, 'toolsPanel');
+  }
+
+  _doResize(e) {
+    if (!this.isResizing) return;
+
+    const sidebar = document.getElementById('sidebar');
+    const toolsPanel = document.getElementById('toolsPanel');
+
+    requestAnimationFrame(() => {
+      if (this.resizeType === 'sidebar') {
+        const sidebarRect = sidebar.getBoundingClientRect();
+        const newWidth = e.clientX - sidebarRect.left;
+        const minWidth = 180;
+        const maxWidth = window.innerWidth * 0.5;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          sidebar.style.width = newWidth + 'px';
+        }
+      } else if (this.resizeType === 'toolsPanel') {
+        const containerRect = toolsPanel.parentElement.getBoundingClientRect();
+        const newWidth = containerRect.right - e.clientX;
+        const minWidth = 200;
+        const maxWidth = window.innerWidth * 0.6;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          toolsPanel.style.width = newWidth + 'px';
+        }
+      }
     });
   }
 
-  /**
-   * Setup event listeners for UI components
+  _stopResize() {
+    this.isResizing = false;
+
+    const sidebar = document.getElementById('sidebar');
+    const toolsPanel = document.getElementById('toolsPanel');
+
+    if (this.resizeType === 'sidebar') {
+      sidebar.style.transition = '';
+    } else if (this.resizeType === 'toolsPanel') {
+      toolsPanel.style.transition = '';
+    }
+
+    document.body.style.userSelect = '';
+    document.removeEventListener('mousemove', this._boundDoResize);
+    document.removeEventListener('mouseup', this._boundStopResize);
+    this.resizeType = null;
+  }
+}
+
+window.ResizeManager = ResizeManager;
+
+// ----- src/renderer/managers/CTraceRunner.js -----
+class CTraceRunner {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+  async run() {
+    const ui = this.ui;
+    const resultsArea = document.getElementById('ctrace-results-area');
+    ui.showToolsPanel();
+
+    if (!resultsArea) {
+      ui.notificationManager.showError('CTrace results area not found');
+      return;
+    }
+
+    const active = ui.tabManager.getActiveTab();
+    const currentFilePath = active && active.filePath ? active.filePath : null;
+
+    if (!currentFilePath) {
+      resultsArea.innerHTML = `
+        <div class="ctrace-error">
+          <div class="error-icon">⚠️</div>
+          <div class="error-text">No active file to analyze</div>
+          <div class="error-subtext">Please open a file first</div>
+        </div>
+      `;
+      ui.notificationManager.showWarning('Open a file to analyze with CTrace');
+      return;
+    }
+
+    if (ui.tabManager.activeTabId && ui.tabManager.isTabFileMissing(ui.tabManager.activeTabId)) {
+      resultsArea.innerHTML = `
+        <div class="ctrace-error">
+          <div class="error-icon">⚠️</div>
+          <div class="error-text">File not found on disk</div>
+          <div class="error-subtext">${currentFilePath}</div>
+          <div class="error-help">The file was moved or deleted. Open its new location to analyze it.</div>
+        </div>
+      `;
+      ui.notificationManager.showError('File not found — analysis blocked');
+      return;
+    }
+
+    const wslFilePath = ui.convertToWSLPath(currentFilePath);
+    ui.diagnosticsManager.clear();
+    resultsArea.innerHTML = `
+      <div class="ctrace-loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Analyzing ${ui.diagnosticsManager.getFileName(currentFilePath)}...</div>
+        <div class="loading-subtext">This may take a moment</div>
+      </div>
+    `;
+
+    try {
+      const argsInput = document.getElementById('ctrace-args');
+      const customArgs = argsInput ? argsInput.value.trim() : '';
+
+      let args = [];
+      if (customArgs) {
+        const matches = customArgs.match(/(?:[^\s"]+|"[^"]*")+/g);
+        if (matches) args = matches.map(arg => arg.replace(/^"(.*)"$/, '$1'));
+      }
+
+      args.unshift(`--input=${wslFilePath}`);
+
+      console.log('invoke run-ctrace with WSL path:', wslFilePath);
+      console.log('Custom arguments:', args);
+      const result = await window.api.invoke('run-ctrace', args);
+
+      if (result && result.success) {
+        if (!result.output || result.output.trim() === '') {
+          resultsArea.innerHTML = `
+            <div class="ctrace-error">
+              <div class="error-icon">⚠️</div>
+              <div class="error-text">No Output from CTrace</div>
+              <div class="error-details">CTrace completed successfully but produced no output. This might indicate:</div>
+              <div class="error-help">
+                • The file may not be supported by CTrace<br>
+                • The analysis produced no diagnostics<br>
+                • Check that your custom arguments are correct<br>
+                • Try adding <code>--sarif-format</code> for JSON output
+              </div>
+            </div>
+          `;
+          ui.notificationManager.showWarning('CTrace produced no output');
+          return;
+        }
+
+        const isParsed = ui.diagnosticsManager.parseOutput(result.output);
+
+        if (isParsed) {
+          await ui.diagnosticsManager.displayDiagnostics();
+          ui.notificationManager.showSuccess('CTrace analysis completed');
+        } else {
+          resultsArea.innerHTML = `
+            <div class="ctrace-raw-output">
+              <div class="raw-output-header"><span>Raw Output</span></div>
+              <pre class="raw-output-content">${ui.diagnosticsManager.escapeHtml(result.output)}</pre>
+            </div>
+          `;
+          ui.notificationManager.showSuccess('CTrace completed');
+        }
+      } else {
+        const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
+        const clean = this._stripAnsi(details);
+
+        if (details.includes('WSL') && details.includes('distributions')) {
+          resultsArea.innerHTML = `
+            <div class="ctrace-error">
+              <div class="error-icon">⚠️</div>
+              <div class="error-text">WSL Setup Required</div>
+              <div class="error-details">${clean}</div>
+              <div class="error-help">
+                <strong>Quick Setup:</strong><br>
+                1. Open PowerShell as Administrator<br>
+                2. Run: <code>wsl --install Ubuntu</code><br>
+                3. Restart when prompted<br>
+                4. Restart this application
+              </div>
+            </div>
+          `;
+          ui.notificationManager.showWarning('WSL setup required');
+        } else {
+          resultsArea.innerHTML = `
+            <div class="ctrace-error">
+              <div class="error-icon">❌</div>
+              <div class="error-text">CTrace Error</div>
+              <pre class="error-details">${clean}</pre>
+            </div>
+          `;
+          ui.notificationManager.showError('Failed to run CTrace');
+        }
+      }
+    } catch (err) {
+      resultsArea.innerHTML = `
+        <div class="ctrace-error">
+          <div class="error-icon">❌</div>
+          <div class="error-text">Exception</div>
+          <pre class="error-details">${err.message}</pre>
+        </div>
+      `;
+      ui.notificationManager.showError('Error invoking CTrace');
+    }
+  }
+
+  _stripAnsi(input) {
+    if (!input || typeof input !== 'string') return input;
+    return input.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+}
+
+window.CTraceRunner = CTraceRunner;
+
+// ----- src/renderer/components/ActivityBar.js -----
+class ActivityBar {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+/**
+   * Activity bar management
    */
-  setupEventListeners() {
-    // Close menus when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.menu-item')) {
-        this.hideAllMenus();
+  setActiveActivity(activityId) {
+    document.querySelectorAll('.activity-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    const element = document.getElementById(activityId);
+    if (element) {
+      element.classList.add('active');
+    }
+  }
+
+  showExplorer() {
+    this.ui.setActiveActivity('explorer-activity');
+    const sidebarTitle = document.getElementById('sidebar-title');
+    const explorerView = document.getElementById('explorer-view');
+    const searchView = document.getElementById('search-view');
+    const sidebar = document.getElementById('sidebar');
+    
+    if (sidebarTitle) sidebarTitle.textContent = 'Explorer';
+    if (explorerView) explorerView.style.display = 'block';
+    if (searchView) searchView.style.display = 'none';
+    if (sidebar && sidebar.style.display === 'none') {
+      sidebar.style.display = 'flex';
+    }
+    if (sidebar && sidebar.style.width === '0px') {
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    }
+  }
+
+  showSearch() {
+    this.ui.setActiveActivity('search-activity');
+    const sidebarTitle = document.getElementById('sidebar-title');
+    const explorerView = document.getElementById('explorer-view');
+    const searchView = document.getElementById('search-view');
+    const sidebar = document.getElementById('sidebar');
+    const searchInput = document.getElementById('sidebar-search-input');
+    
+    if (sidebarTitle) sidebarTitle.textContent = 'Search';
+    if (explorerView) explorerView.style.display = 'none';
+    if (searchView) searchView.style.display = 'block';
+    if (sidebar && sidebar.style.display === 'none') {
+      sidebar.style.display = 'flex';
+    }
+    if (sidebar && sidebar.style.width === '0px') {
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    }
+    setTimeout(() => searchInput && searchInput.focus(), 100);
+  }
+
+/**
+   * Sidebar toggle
+   */
+  toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    if (sidebar.style.width === '0px' || sidebar.style.display === 'none') {
+      sidebar.style.display = 'flex';
+      sidebar.offsetHeight; // force reflow so transition fires
+      sidebar.style.minWidth = '180px';
+      sidebar.style.width = '280px';
+    } else {
+      sidebar.style.minWidth = '0px';
+      sidebar.style.width = '0px';
+      setTimeout(() => {
+        sidebar.style.display = 'none';
+      }, 200);
+    }
+  }
+
+}
+
+window.ActivityBar = ActivityBar;
+
+// ----- src/renderer/components/FileTree.js -----
+class FileTree {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+/**
+   * Setup file tree watcher to listen for automatic updates.
+   * Debounces refreshes to avoid UI freezes on large workspaces.
+   */
+  setupFileTreeWatcher() {
+    if (this.ui._fileTreeWatcherInitialized) return;
+    this.ui._fileTreeWatcherInitialized = true;
+
+    let refreshTimer = null;
+    window.api.on('workspace-changed', (data) => {
+      if (!data || !data.success) {
+        if (data && data.error) {
+          console.error('Error in workspace change notification:', data.error);
+        }
+        return;
       }
+
+      const workspacePath = this.ui.fileOpsManager.getCurrentWorkspacePath();
+      if (!workspacePath) return;
+      if (data.folderPath && data.folderPath !== workspacePath) return;
+
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        this.ui.refreshFileTree(true);
+      }, 1200);
     });
 
-    // Close file tree context menu when clicking anywhere
-    document.addEventListener('click', () => {
-      this.hideFileTreeContextMenu();
-    });
+    // Show a discrete loading indicator for slow workspace operations
+    this.ui._workspaceLoadingTimer = null;
+    this.ui._workspaceLoadingNotification = null;
+    this.ui._workspaceLoadingRequestId = null;
 
-    // Close file tree context menu on escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        this.hideFileTreeContextMenu();
+    window.api.on('workspace-loading', (data) => {
+      if (!data || !data.status) return;
+
+      // Only react for the active workspace.
+      const workspacePath = this.ui.fileOpsManager.getCurrentWorkspacePath();
+      if (workspacePath && data.folderPath && data.folderPath !== workspacePath && data.operation !== 'open') {
+        return;
+      }
+
+      if (data.status === 'start') {
+        this.ui._workspaceLoadingRequestId = data.requestId || null;
+        clearTimeout(this.ui._workspaceLoadingTimer);
+
+        this.ui._workspaceLoadingTimer = setTimeout(() => {
+          if (this.ui._workspaceLoadingNotification) return;
+          const folderName = (data.folderPath || '').split(/[/\\]/).pop() || 'workspace';
+          const label = data.operation === 'refresh'
+            ? `Refreshing "${folderName}"...`
+            : `Loading "${folderName}"...`;
+          this.ui._workspaceLoadingNotification = this.ui.notificationManager.showLoading(label);
+        }, 450);
+
+        return;
+      }
+
+      if (data.status === 'end') {
+        if (this.ui._workspaceLoadingRequestId && data.requestId && data.requestId !== this.ui._workspaceLoadingRequestId) {
+          return;
+        }
+
+        clearTimeout(this.ui._workspaceLoadingTimer);
+        this.ui._workspaceLoadingTimer = null;
+
+        if (this.ui._workspaceLoadingNotification) {
+          this.ui._workspaceLoadingNotification.dismiss();
+          this.ui._workspaceLoadingNotification = null;
+        }
+
+        this.ui._workspaceLoadingRequestId = null;
       }
     });
   }
 
-  /**
+/**
    * Setup a custom context menu for the explorer file tree.
    *
    * Requirements:
@@ -4741,12 +6013,12 @@ class UIController {
         e.preventDefault();
         e.stopPropagation();
 
-        const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+        const workspacePath = this.ui.fileOpsManager.getCurrentWorkspacePath();
         if (!workspacePath) return;
 
-        this.showFileTreeContextMenu(e.clientX, e.clientY, [{
+        this.ui.showFileTreeContextMenu(e.clientX, e.clientY, [{
           label: 'Close Folder',
-          action: () => this.fileOpsManager.closeWorkspace()
+          action: () => this.ui.fileOpsManager.closeWorkspace()
         }]);
       });
     }
@@ -4756,9 +6028,9 @@ class UIController {
       e.stopPropagation();
 
       // No workspace => no file operations
-      const workspacePath = this.fileOpsManager.getCurrentWorkspacePath();
+      const workspacePath = this.ui.fileOpsManager.getCurrentWorkspacePath();
       if (!workspacePath) {
-        this.notificationManager.showWarning('Open a workspace to use file operations');
+        this.ui.notificationManager.showWarning('Open a workspace to use file operations');
         return;
       }
 
@@ -4773,55 +6045,94 @@ class UIController {
       if (!itemEl) {
         menuItems.push({
           label: 'New file..',
-          action: () => this.createFileInDirectory(workspacePath)
+          action: () => this.ui.createFileInDirectory(workspacePath)
         });
         menuItems.push({
           label: 'New folder..',
-          action: () => this.createFolderInDirectory(workspacePath)
+          action: () => this.ui.createFolderInDirectory(workspacePath)
         });
         menuItems.push({
           label: 'Close Folder',
-          action: () => this.fileOpsManager.closeWorkspace()
+          action: () => this.ui.fileOpsManager.closeWorkspace()
         });
         menuItems.push({
           label: 'Close Folder',
-          action: () => this.fileOpsManager.closeWorkspace()
+          action: () => this.ui.fileOpsManager.closeWorkspace()
         });
       } else if (itemType === 'directory') {
         // Folder menu
         menuItems.push({
           label: 'New file..',
-          action: () => this.createFileInDirectory(itemPath)
+          action: () => this.ui.createFileInDirectory(itemPath)
         });
         menuItems.push({
           label: 'New folder..',
-          action: () => this.createFolderInDirectory(itemPath)
+          action: () => this.ui.createFolderInDirectory(itemPath)
         });
         menuItems.push({
           label: 'Rename',
-          action: () => this.renamePath(itemPath, itemName)
+          action: () => this.ui.renamePath(itemPath, itemName)
         });
         menuItems.push({
           label: 'Delete',
-          action: () => this.deletePath(itemPath, itemType)
+          action: () => this.ui.deletePath(itemPath, itemType)
         });
       } else {
         // File menu
         menuItems.push({
           label: 'Rename',
-          action: () => this.renamePath(itemPath, itemName)
+          action: () => this.ui.renamePath(itemPath, itemName)
         });
         menuItems.push({
           label: 'Delete',
-          action: () => this.deletePath(itemPath, itemType)
+          action: () => this.ui.deletePath(itemPath, itemType)
         });
       }
 
-      this.showFileTreeContextMenu(e.clientX, e.clientY, menuItems);
+      this.ui.showFileTreeContextMenu(e.clientX, e.clientY, menuItems);
     });
   }
 
-  /**
+  showFileTreeContextMenu(x, y, items) {
+    this.ui.hideFileTreeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+
+    items.forEach(({ label, action }) => {
+      const item = document.createElement('div');
+      item.className = 'context-menu-item';
+      item.textContent = label;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.ui.hideFileTreeContextMenu();
+        action();
+      });
+      menu.appendChild(item);
+    });
+
+    document.body.appendChild(menu);
+
+    // Position within viewport
+    const rect = menu.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width - 8;
+    const maxY = window.innerHeight - rect.height - 8;
+    const posX = Math.max(8, Math.min(x, maxX));
+    const posY = Math.max(8, Math.min(y, maxY));
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
+
+    this.ui.fileTreeContextMenu = menu;
+  }
+
+  hideFileTreeContextMenu() {
+    if (this.ui.fileTreeContextMenu) {
+      this.ui.fileTreeContextMenu.remove();
+      this.ui.fileTreeContextMenu = null;
+    }
+  }
+
+/**
    * Show a simple in-app input dialog (avoids relying on window.prompt).
    * @param {string} title
    * @param {string} [placeholder]
@@ -4917,761 +6228,210 @@ class UIController {
     });
   }
 
-  showFileTreeContextMenu(x, y, items) {
-    this.hideFileTreeContextMenu();
+/**
+   * Refreshes the file tree in the explorer view.
+   * 
+   * This method manually triggers a refresh of the file tree to show any
+   * new files or folders that may have been added to the workspace. It
+   * communicates with the main process to get an updated file tree structure.
+   * 
+   * @async
+   * @memberof UIController
+   * @throws {Error} When file tree refresh fails
+   * 
+   * @example
+   * // Refresh is typically triggered by the refresh button
+   * await uiController.refreshFileTree();
+   */
+  async refreshFileTree(silent = false) {
+    // Only refresh if workspace is open
+    const workspacePath = this.ui.fileOpsManager.getCurrentWorkspacePath();
+    if (!workspacePath) {
+      this.ui.notificationManager.showWarning('No workspace open to refresh');
+      return;
+    }
+    // Request updated file tree from main process
+    try {
+      const result = await window.api.invoke('get-file-tree', workspacePath);
+      if (result.success) {
+        const folderName = workspacePath.split(/[/\\]/).pop();
+        this.ui.fileOpsManager.updateWorkspaceUI(folderName, result.fileTree);
+        if (!silent) {
+          this.ui.notificationManager.showSuccess('File tree refreshed');
+        }
+      } else {
+        this.ui.notificationManager.showError('Failed to refresh file tree: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.ui.notificationManager.showError('Error refreshing file tree: ' + error.message);
+    }
+  }
 
-    const menu = document.createElement('div');
-    menu.className = 'context-menu';
+}
 
-    items.forEach(({ label, action }) => {
-      const item = document.createElement('div');
-      item.className = 'context-menu-item';
-      item.textContent = label;
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.hideFileTreeContextMenu();
-        action();
+window.FileTree = FileTree;
+
+// ----- src/renderer/components/EditorPanel.js -----
+class EditorPanel {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+/**
+   * Toggle auto save feature
+   */
+  toggleAutoSave() {
+    this.ui.autoSaveEnabled = !this.ui.autoSaveEnabled;
+    this.ui.updateAutoSaveStatus();
+    this.ui.saveAutoSaveState();
+    
+    const statusMsg = this.ui.autoSaveEnabled ? 'Auto Save enabled' : 'Auto Save disabled';
+    this.ui.notificationManager.showSuccess(statusMsg);
+  }
+
+/**
+   * Update auto save status in the status bar
+   */
+  updateAutoSaveStatus() {
+    const statusElement = document.getElementById('autoSaveStatus');
+    if (statusElement) {
+      if (this.ui.autoSaveEnabled) {
+        statusElement.style.display = 'inline-block';
+        statusElement.textContent = 'Auto Save: ON';
+        statusElement.style.background = 'rgba(31, 111, 235, 0.15)';
+        statusElement.style.color = '#58a6ff';
+      } else {
+        statusElement.style.display = 'none';
+      }
+    }
+  }
+
+/**
+   * Save auto save state to localStorage
+   */
+  saveAutoSaveState() {
+    try {
+      localStorage.setItem('autoSaveEnabled', JSON.stringify(this.ui.autoSaveEnabled));
+    } catch (error) {
+      console.error('Failed to save auto save state:', error);
+    }
+  }
+
+/**
+   * Load auto save state from localStorage
+   */
+  loadAutoSaveState() {
+    try {
+      const saved = localStorage.getItem('autoSaveEnabled');
+      if (saved !== null) {
+        this.ui.autoSaveEnabled = JSON.parse(saved);
+        this.ui.updateAutoSaveStatus();
+      }
+    } catch (error) {
+      console.error('Failed to load auto save state:', error);
+    }
+  }
+
+/**
+   * Setup auto save listener for editor content changes
+   */
+  setupAutoSaveListener() {
+    // Listen to editor content changes via Monaco
+    if (this.ui.editorManager && this.ui.editorManager.editor) {
+      this.ui.editorManager.editor.onDidChangeModelContent(() => {
+        this.ui.triggerAutoSave();
       });
-      menu.appendChild(item);
-    });
-
-    document.body.appendChild(menu);
-
-    // Position within viewport
-    const rect = menu.getBoundingClientRect();
-    const maxX = window.innerWidth - rect.width - 8;
-    const maxY = window.innerHeight - rect.height - 8;
-    const posX = Math.max(8, Math.min(x, maxX));
-    const posY = Math.max(8, Math.min(y, maxY));
-    menu.style.left = posX + 'px';
-    menu.style.top = posY + 'px';
-
-    this.fileTreeContextMenu = menu;
-  }
-
-  hideFileTreeContextMenu() {
-    if (this.fileTreeContextMenu) {
-      this.fileTreeContextMenu.remove();
-      this.fileTreeContextMenu = null;
-    }
-  }
-
-  async createFileInDirectory(directoryPath) {
-    const fileName = await this.promptForText('New file', 'e.g. main.c');
-    if (!fileName) return;
-
-    try {
-      const result = await window.api.invoke('create-file', directoryPath, fileName);
-      if (result.success) {
-        this.notificationManager.showSuccess(`Created file "${result.name}"`);
-        await this.refreshFileTree(true);
-      } else {
-        this.notificationManager.showError('Failed to create file: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      this.notificationManager.showError('Error creating file: ' + error.message);
-    }
-  }
-
-  async createFolderInDirectory(directoryPath) {
-    const folderName = await this.promptForText('New folder', 'e.g. include');
-    if (!folderName) return;
-
-    try {
-      const result = await window.api.invoke('create-folder', directoryPath, folderName);
-      if (result.success) {
-        this.notificationManager.showSuccess(`Created folder "${result.name}"`);
-        await this.refreshFileTree(true);
-      } else {
-        this.notificationManager.showError('Failed to create folder: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      this.notificationManager.showError('Error creating folder: ' + error.message);
-    }
-  }
-
-  async renamePath(targetPath, currentName = '') {
-    if (!targetPath) return;
-    const newName = await this.promptForText('Rename', '', currentName || '');
-    if (!newName) return;
-
-    try {
-      const result = await window.api.invoke('rename-path', targetPath, newName);
-      if (result.success) {
-        // Update open tab if the renamed item is an open file
-        if (result.isFile) {
-          const tabId = this.tabManager.findTabByPath(targetPath);
-          if (tabId) {
-            this.tabManager.updateTabFile(tabId, result.newPath, result.name);
-          }
-        }
-        this.notificationManager.showSuccess(`Renamed to "${result.name}"`);
-        await this.refreshFileTree(true);
-      } else {
-        this.notificationManager.showError('Failed to rename: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      this.notificationManager.showError('Error renaming: ' + error.message);
-    }
-  }
-
-  async deletePath(targetPath, itemType) {
-    if (!targetPath) return;
-    const isFolder = itemType === 'directory';
-
-    const ok = confirm(isFolder ? 'Delete this folder and all its contents?' : 'Delete this file?');
-    if (!ok) return;
-
-    // If deleting an open file, close the tab first (honor unsaved changes)
-    if (!isFolder) {
-      const tabId = this.tabManager.findTabByPath(targetPath);
-      if (tabId) {
-        const closed = await this.tabManager.closeTabById(tabId);
-        if (!closed) return;
-      }
-    }
-
-    try {
-      const result = await window.api.invoke('delete-path', targetPath);
-      if (result.success) {
-        this.notificationManager.showSuccess('Deleted successfully');
-        await this.refreshFileTree(true);
-      } else {
-        this.notificationManager.showError('Failed to delete: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      this.notificationManager.showError('Error deleting: ' + error.message);
-    }
-  }
-
-  /**
-   * Setup keyboard shortcuts
-   */
-  setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-      // File operations
-      if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        this.fileOpsManager.saveFile();
-      }
-      
-      if (e.ctrlKey && e.key === 'o') {
-        e.preventDefault();
-        this.fileOpsManager.openFile();
-      }
-      
-      if (e.ctrlKey && e.shiftKey && e.key === 'O') {
-        e.preventDefault();
-        this.fileOpsManager.openWorkspace();
-      }
-      
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        this.tabManager.createNewFile();
-      }
-      
-      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
-        e.preventDefault();
-        this.fileOpsManager.saveAsFile();
-      }
-      
-      // UI navigation
-      if (e.ctrlKey && e.key === 'b') {
-        e.preventDefault();
-        this.toggleSidebar();
-      }
-      
-      if (e.altKey && e.key === 'z') {
-        e.preventDefault();
-        this.editorManager.toggleWordWrap();
-      }
-      
-      if (e.shiftKey && e.altKey && e.key === 'F') {
-        e.preventDefault();
-        const formatted = this.editorManager.formatCode();
-        if (this.tabManager.activeTabId) {
-          this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
-        }
-      }
-      
-      if (e.ctrlKey && e.key === 'w') {
-        e.preventDefault();
-        if (this.tabManager.activeTabId) {
-          this.tabManager.closeTab(e, this.tabManager.activeTabId);
-        }
-      }
-      
-      if (e.ctrlKey && e.key === 'f') {
-        e.preventDefault();
-        const editor = this.editorManager.getMonacoInstance();
-        if (editor) editor.getAction('actions.find').run();
-      }
-
-      if (e.ctrlKey && e.key === 'g') {
-        e.preventDefault();
-        const editor = this.editorManager.getMonacoInstance();
-        if (editor) editor.getAction('editor.action.gotoLine').run();
-      }
-
-      if (e.ctrlKey && e.key === 'Tab') {
-        e.preventDefault();
-        this.tabManager.switchToNextTab();
-      }
-      
-      // Tab navigation with Ctrl+PageUp/PageDown
-      if (e.ctrlKey && e.key === 'PageDown') {
-        e.preventDefault();
-        this.tabManager.switchToNextTab();
-      }
-      
-      if (e.ctrlKey && e.key === 'PageUp') {
-        e.preventDefault();
-        this.tabManager.switchToPreviousTab();
-      }
-      
-      if (e.ctrlKey && e.key === '`') {
-        e.preventDefault();
-        this.toggleToolsPanel();
-      }
-      
-      if (e.ctrlKey && e.shiftKey && e.key === 'F') {
-        e.preventDefault();
-        this.showSearch();
-      }
-      
-      if (e.ctrlKey && e.shiftKey && e.key === 'E') {
-        e.preventDefault();
-        this.showExplorer();
-      }
-    });
-  }
-
-  /**
-   * Setup resizing functionality
-   */
-  setupResizing() {
-    const sidebar = document.getElementById('sidebar');
-    const toolsPanel = document.getElementById('toolsPanel');
-
-    const startResize = (e, type) => {
-      this.isResizing = true;
-      this.resizeType = type;
-      
-      if (type === 'sidebar') {
-        sidebar.style.transition = 'none';
-      } else if (type === 'toolsPanel') {
-        toolsPanel.style.transition = 'none';
-      }
-      
-      document.addEventListener('mousemove', this.doResize.bind(this));
-      document.addEventListener('mouseup', this.stopResize.bind(this));
-      e.preventDefault();
-      
-      document.body.style.userSelect = 'none';
-    };
-
-    window.initSidebarResize = (e) => startResize(e, 'sidebar');
-    window.initToolsPanelResize = (e) => startResize(e, 'toolsPanel');
-  }
-
-  doResize(e) {
-    if (!this.isResizing) return;
-    
-    const sidebar = document.getElementById('sidebar');
-    const toolsPanel = document.getElementById('toolsPanel');
-    
-    requestAnimationFrame(() => {
-      if (this.resizeType === 'sidebar') {
-        const containerRect = sidebar.parentElement.getBoundingClientRect();
-        const newWidth = e.clientX - containerRect.left;
-        const minWidth = 180;
-        const maxWidth = window.innerWidth * 0.5;
-        
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          sidebar.style.width = newWidth + 'px';
-        }
-      } else if (this.resizeType === 'toolsPanel') {
-        const containerRect = toolsPanel.parentElement.getBoundingClientRect();
-        const newWidth = containerRect.right - e.clientX;
-        const minWidth = 200;
-        const maxWidth = window.innerWidth * 0.6;
-        
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          toolsPanel.style.width = newWidth + 'px';
-        }
-      }
-    });
-  }
-
-  stopResize() {
-    this.isResizing = false;
-    
-    const sidebar = document.getElementById('sidebar');
-    const toolsPanel = document.getElementById('toolsPanel');
-    
-    if (this.resizeType === 'sidebar') {
-      sidebar.style.transition = '';
-    } else if (this.resizeType === 'toolsPanel') {
-      toolsPanel.style.transition = '';
-    }
-    
-    document.body.style.userSelect = '';
-    
-    document.removeEventListener('mousemove', this.doResize.bind(this));
-    document.removeEventListener('mouseup', this.stopResize.bind(this));
-    
-    this.resizeType = null;
-  }
-
-  /**
-   * Setup menu functionality
-   */
-  setupMenus() {
-    window.toggleMenu = (menuId) => {
-      const menu = document.getElementById(menuId);
-      const dropdown = menu.querySelector('.dropdown-menu');
-      
-      if (this.activeMenu && this.activeMenu !== menuId) {
-        this.hideAllMenus();
-      }
-      
-      if (dropdown.classList.contains('show')) {
-        this.hideAllMenus();
-      } else {
-        dropdown.classList.add('show');
-        menu.classList.add('active');
-        this.activeMenu = menuId;
-      }
-    };
-
-    window.hideAllMenus = () => this.hideAllMenus();
-    
-    // Add click handlers to all dropdown items to stop propagation
-    document.querySelectorAll('.dropdown-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        // hideAllMenus will be called by the onclick handler in HTML
-      });
-    });
-  }
-
-  hideAllMenus() {
-    document.querySelectorAll('.dropdown-menu').forEach(menu => {
-      menu.classList.remove('show');
-    });
-    document.querySelectorAll('.menu-item').forEach(item => {
-      item.classList.remove('active');
-    });
-    this.activeMenu = null;
-  }
-
-  /**
-   * Setup UI component functions
-   */
-  setupUIComponents() {
-    // Activity bar functions
-    window.showExplorer = () => this.showExplorer();
-    window.showSearch = () => this.showSearch();
-
-    // File operations
-    window.createNewFile = () => this.tabManager.createNewFile();
-    window.openFile = () => this.fileOpsManager.openFile();
-    window.openWorkspace = () => this.openWorkspace();
-    window.closeWorkspace = () => this.fileOpsManager.closeWorkspace();
-    window.saveFile = () => this.fileOpsManager.saveFile();
-    window.saveAsFile = () => this.fileOpsManager.saveAsFile();
-    window.autoSave = () => this.toggleAutoSave();
-    window.openUpdateSettings = () => this.openUpdateSettingsModal();
-
-    // Setup auto save status bar click handler
-    const autoSaveStatus = document.getElementById('autoSaveStatus');
-    if (autoSaveStatus) {
-      autoSaveStatus.onclick = () => this.toggleAutoSave();
-    }
-    window.closeCurrentTab = () => {
-      if (this.tabManager.activeTabId) {
-        this.tabManager.closeTab(new Event('click'), this.tabManager.activeTabId);
-      }
-    };
-
-    // Editor operations
-    window.formatCode = () => {
-      const formatted = this.editorManager.formatCode();
-      if (this.tabManager.activeTabId) {
-        this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
-      }
-    };
-    window.toggleWordWrap = () => this.editorManager.toggleWordWrap();
-
-    // Open Monaco's built-in find/go-to-line widgets
-    window.openMonacoFind = () => {
-      const editor = this.editorManager.getMonacoInstance();
-      if (editor) editor.getAction('actions.find').run();
-    };
-    window.openMonacoGoToLine = () => {
-      const editor = this.editorManager.getMonacoInstance();
-      if (editor) editor.getAction('editor.action.gotoLine').run();
-    };
-
-    // UI navigation
-    window.toggleSidebar = () => this.toggleSidebar();
-    window.toggleToolsPanel = () => this.toggleToolsPanel();
-    window.showToolsPanel = () => this.showToolsPanel();
-    window.hideToolsPanel = () => this.hideToolsPanel();
-    window.openCtracePanel = () => this.openCtracePanel();
-  window.openAssistantPanel = () => this.openAssistantPanel();
-
-    // Visualyzer operations
-    window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
-
-    // CTrace helpers
-    const stripAnsi = (input) => {
-      if (!input || typeof input !== 'string') return input;
-      const ansiRegex = /\x1b\[[0-9;]*m/g;
-      return input.replace(ansiRegex, '');
-    };
-
-    window.runCTrace = async () => {
-      const resultsArea = document.getElementById('ctrace-results-area');
-      this.showToolsPanel();
-      if (!resultsArea) {
-        this.notificationManager.showError('CTrace results area not found');
-        return;
-      }
-
-      const active = this.tabManager.getActiveTab();
-      const currentFilePath = active && active.filePath ? active.filePath : null;
-      if (!currentFilePath) {
-        resultsArea.innerHTML = `
-          <div class="ctrace-error">
-            <div class="error-icon">⚠️</div>
-            <div class="error-text">No active file to analyze</div>
-            <div class="error-subtext">Please open a file first</div>
-          </div>
-        `;
-        this.notificationManager.showWarning('Open a file to analyze with CTrace');
-        return;
-      }
-
-      // Convert Windows path to WSL path for Linux binary
-      const wslFilePath = this.convertToWSLPath(currentFilePath);
-      
-      // Clear previous diagnostics and show loading state
-      this.diagnosticsManager.clear();
-      resultsArea.innerHTML = `
-        <div class="ctrace-loading">
-          <div class="loading-spinner"></div>
-          <div class="loading-text">Analyzing ${this.diagnosticsManager.getFileName(currentFilePath)}...</div>
-          <div class="loading-subtext">This may take a moment</div>
-        </div>
-      `;
-      
-      try {
-        // Get custom arguments from input field
-        const argsInput = document.getElementById('ctrace-args');
-        const customArgs = argsInput ? argsInput.value.trim() : '';
-        
-        // Parse custom arguments (simple split by space, preserving quoted strings)
-        let args = [];
-        if (customArgs) {
-          // Simple parsing - split by space but respect quotes
-          const matches = customArgs.match(/(?:[^\s"]+|"[^"]*")+/g);
-          if (matches) {
-            args = matches.map(arg => arg.replace(/^"(.*)"$/, '$1'));
-          }
-        }
-        
-        // Always prepend --input parameter as first argument
-        args.unshift(`--input=${wslFilePath}`);
-        
-        console.log("invoke run-ctrace with WSL path:", wslFilePath);
-        console.log("Custom arguments:", args);
-        const result = await window.api.invoke('run-ctrace', args);
-        console.log("after exec result");
-        console.log(result);
-        if (result && result.success) {
-          console.log("result.output");
-          console.log(result.output);
-          
-          // Check if output is empty
-          if (!result.output || result.output.trim() === '') {
-            resultsArea.innerHTML = `
-              <div class="ctrace-error">
-                <div class="error-icon">⚠️</div>
-                <div class="error-text">No Output from CTrace</div>
-                <div class="error-details">CTrace completed successfully but produced no output. This might indicate:</div>
-                <div class="error-help">
-                  • The file may not be supported by CTrace<br>
-                  • The analysis produced no diagnostics<br>
-                  • Check that your custom arguments are correct<br>
-                  • Try adding <code>--sarif-format</code> for JSON output
-                </div>
-              </div>
-            `;
-            this.notificationManager.showWarning('CTrace produced no output');
-            return;
-          }
-          
-          // Try to parse as JSON for diagnostics
-          const isParsed = this.diagnosticsManager.parseOutput(result.output);
-          
-          if (isParsed) {
-            // Display diagnostics with rich UI
-            await this.diagnosticsManager.displayDiagnostics();
-            this.notificationManager.showSuccess('CTrace analysis completed');
-          } else {
-            // Fallback to plain text output
-            resultsArea.innerHTML = `
-              <div class="ctrace-raw-output">
-                <div class="raw-output-header">
-                  <span>Raw Output</span>
-                </div>
-                <pre class="raw-output-content">${this.diagnosticsManager.escapeHtml(result.output)}</pre>
-              </div>
-            `;
-            this.notificationManager.showSuccess('CTrace completed');
-          }
-        } else {
-          const details = (result && (result.stderr || result.output || result.error)) || 'Unknown error';
-          
-          // Check if this is a WSL setup error and provide helpful UI
-          if (details.includes('WSL') && details.includes('distributions')) {
-            resultsArea.innerHTML = `
-              <div class="ctrace-error">
-                <div class="error-icon">⚠️</div>
-                <div class="error-text">WSL Setup Required</div>
-                <div class="error-details">${stripAnsi(details)}</div>
-                <div class="error-help">
-                  <strong>Quick Setup:</strong><br>
-                  1. Open PowerShell as Administrator<br>
-                  2. Run: <code>wsl --install Ubuntu</code><br>
-                  3. Restart when prompted<br>
-                  4. Restart this application
-                </div>
-              </div>
-            `;
-            this.notificationManager.showWarning('WSL setup required');
-          } else {
-            resultsArea.innerHTML = `
-              <div class="ctrace-error">
-                <div class="error-icon">❌</div>
-                <div class="error-text">CTrace Error</div>
-                <pre class="error-details">${stripAnsi(details)}</pre>
-              </div>
-            `;
-            this.notificationManager.showError('Failed to run CTrace');
-          }
-        }
-      } catch (err) {
-        resultsArea.innerHTML = `
-          <div class="ctrace-error">
-            <div class="error-icon">❌</div>
-            <div class="error-text">Exception</div>
-            <pre class="error-details">${err.message}</pre>
-          </div>
-        `;
-        this.notificationManager.showError('Error invoking CTrace');
-      }
-    };
-
-    window.clearCTraceOutput = () => {
-      this.diagnosticsManager.clear();
-    };
-
-    // Tab manager reference for global access
-    window.tabManager = this.tabManager;
-    
-    // Diagnostics manager reference for global access
-    window.diagnosticsManager = this.diagnosticsManager;
-    window.searchManager = this.searchManager;
-  }
-
-  /**
-   * Open update settings modal to configure release channel (main/beta)
-   */
-  async openUpdateSettingsModal() {
-    let currentChannel = 'main';
-
-    try {
-      const result = await window.api.invoke('updater-get-settings');
-      if (result && result.success && result.settings && result.settings.channel) {
-        currentChannel = result.settings.channel;
-      }
-    } catch (error) {
-      console.warn('Failed to load updater settings:', error);
-    }
-
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    `;
-
-    const dialog = document.createElement('div');
-    dialog.style.cssText = `
-      background: #0d1117;
-      color: #f0f6fc;
-      padding: 20px;
-      border-radius: 10px;
-      width: 440px;
-      border: 1px solid #30363d;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    `;
-
-    dialog.innerHTML = `
-      <h3 style="margin: 0 0 12px 0; font-size: 18px;">Update Settings</h3>
-      <div style="font-size: 12px; color: #8b949e; margin-bottom: 14px; line-height: 1.5;">
-        Choose which update stream to receive.
-      </div>
-
-      <label for="update-release-channel" style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Release channel</label>
-      <select id="update-release-channel" style="width:100%; padding:8px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; margin-bottom:8px;">
-        <option value="main">Main (stable)</option>
-        <option value="beta">Beta (pre-release)</option>
-      </select>
-
-      <div style="font-size: 11px; color: #8b949e; margin-bottom: 16px;">
-        Beta may include pre-release builds and unstable changes.
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button id="check-updates-now" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Check now</button>
-        <button id="close-update-settings" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Close</button>
-        <button id="save-update-settings" style="padding:8px 12px; background:#238636; border:1px solid #2ea043; color:#fff; border-radius:6px; cursor:pointer;">Save</button>
-      </div>
-    `;
-
-    modal.appendChild(dialog);
-    document.body.appendChild(modal);
-
-    const channelSelect = dialog.querySelector('#update-release-channel');
-    if (channelSelect) {
-      channelSelect.value = currentChannel === 'beta' ? 'beta' : 'main';
-    }
-
-    const closeModal = () => {
-      if (modal && modal.parentNode) {
-        modal.parentNode.removeChild(modal);
-      }
-    };
-
-    const closeBtn = dialog.querySelector('#close-update-settings');
-    if (closeBtn) {
-      closeBtn.onclick = closeModal;
-    }
-
-    const checkBtn = dialog.querySelector('#check-updates-now');
-    if (checkBtn) {
-      checkBtn.onclick = async () => {
-        try {
-          const result = await window.api.invoke('updater-check-now');
-          if (result && result.success) {
-            this.notificationManager.showInfo('Update check started. You will be notified if an update is available.');
-          } else {
-            this.notificationManager.showWarning(result && result.error ? result.error : 'Unable to check for updates.');
-          }
-        } catch (error) {
-          this.notificationManager.showError('Failed to check updates: ' + error.message);
-        }
-      };
-    }
-
-    const saveBtn = dialog.querySelector('#save-update-settings');
-    if (saveBtn) {
-      saveBtn.onclick = async () => {
-        const selectedChannel = channelSelect ? channelSelect.value : 'main';
-
-        try {
-          const result = await window.api.invoke('updater-set-channel', selectedChannel);
-          if (result && result.success) {
-            this.notificationManager.showSuccess(`Update channel saved: ${selectedChannel}`);
-            closeModal();
-          } else {
-            this.notificationManager.showError(result && result.error ? result.error : 'Failed to save update channel');
-          }
-        } catch (error) {
-          this.notificationManager.showError('Failed to save update settings: ' + error.message);
-        }
-      };
-    }
-
-    modal.onclick = (e) => {
-      if (e.target === modal) closeModal();
-    };
-  }
-
-  /**
-   * Activity bar management
-   */
-  setActiveActivity(activityId) {
-    document.querySelectorAll('.activity-item').forEach(item => {
-      item.classList.remove('active');
-    });
-    const element = document.getElementById(activityId);
-    if (element) {
-      element.classList.add('active');
-    }
-  }
-
-  showExplorer() {
-    this.setActiveActivity('explorer-activity');
-    const sidebarTitle = document.getElementById('sidebar-title');
-    const explorerView = document.getElementById('explorer-view');
-    const searchView = document.getElementById('search-view');
-    const sidebar = document.getElementById('sidebar');
-    
-    if (sidebarTitle) sidebarTitle.textContent = 'Explorer';
-    if (explorerView) explorerView.style.display = 'block';
-    if (searchView) searchView.style.display = 'none';
-    if (sidebar && sidebar.style.display === 'none') {
-      sidebar.style.display = 'flex';
-    }
-  }
-
-  showSearch() {
-    this.setActiveActivity('search-activity');
-    const sidebarTitle = document.getElementById('sidebar-title');
-    const explorerView = document.getElementById('explorer-view');
-    const searchView = document.getElementById('search-view');
-    const sidebar = document.getElementById('sidebar');
-    const searchInput = document.getElementById('sidebar-search-input');
-    
-    if (sidebarTitle) sidebarTitle.textContent = 'Search';
-    if (explorerView) explorerView.style.display = 'none';
-    if (searchView) searchView.style.display = 'block';
-    if (sidebar && sidebar.style.display === 'none') {
-      sidebar.style.display = 'flex';
-    }
-    setTimeout(() => searchInput && searchInput.focus(), 100);
-  }
-
-  /**
-   * Sidebar toggle
-   */
-  toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar) return;
-
-    if (sidebar.style.width === '0px' || sidebar.style.display === 'none') {
-      sidebar.style.width = '280px';
-      sidebar.style.display = 'flex';
     } else {
-      sidebar.style.width = '0px';
-      setTimeout(() => {
-        sidebar.style.display = 'none';
-      }, 200);
+      // If Monaco isn't ready yet, wait for it
+      window.addEventListener('monaco-loaded', () => {
+        setTimeout(() => {
+          if (this.ui.editorManager && this.ui.editorManager.editor) {
+            this.ui.editorManager.editor.onDidChangeModelContent(() => {
+              this.ui.triggerAutoSave();
+            });
+          }
+        }, 500);
+      });
     }
   }
 
-  /**
+/**
+   * Trigger auto save with debounce
+   */
+  triggerAutoSave() {
+    if (!this.ui.autoSaveEnabled) return;
+    
+    // Clear existing timer
+    if (this.ui.autoSaveTimer) {
+      clearTimeout(this.ui.autoSaveTimer);
+    }
+    
+    // Set new timer
+    this.ui.autoSaveTimer = setTimeout(async () => {
+      const currentTab = this.ui.tabManager.getActiveTab();
+      const isDirty = !!(currentTab && (currentTab.modified || currentTab.isDirty));
+      if (currentTab && currentTab.filePath && isDirty) {
+        try {
+          await this.ui.fileOpsManager.saveFile({ silent: true, reason: 'autosave' });
+          console.log('Auto-saved:', currentTab.fileName);
+        } catch (error) {
+          console.error('Auto-save failed:', error);
+        }
+      }
+    }, this.ui.autoSaveDelay);
+  }
+
+/**
+   * Setup custom title bar controls for frameless window.
+   * 
+   * This method handles the custom window controls (minimize, maximize, close)
+   * and window state management for the frameless window.
+   * 
+   * @memberof UIController
+   * @private
+   */
+  setupTitleBarControls() {
+    // Setup IPC-based window controls (via secure preload bridge)
+    const minimizeBtn = document.getElementById('minimize-btn');
+    const maximizeBtn = document.getElementById('maximize-btn');
+    const closeBtn = document.getElementById('close-btn');
+    
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener('click', () => {
+        window.api.send('window-minimize');
+      });
+    }
+    
+    if (maximizeBtn) {
+      maximizeBtn.addEventListener('click', () => {
+        window.api.send('window-maximize-toggle');
+      });
+    }
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        window.api.send('window-close');
+      });
+    }
+    
+    // Listen for window state changes
+    window.api.on('window-maximized', (isMaximized) => {
+      document.body.classList.toggle('window-maximized', isMaximized);
+    });
+  }
+
+}
+
+if (typeof window !== 'undefined') window.EditorPanel = EditorPanel;
+if (typeof module !== 'undefined') module.exports = EditorPanel;
+
+// ----- src/renderer/components/AssistantPanel.js -----
+class AssistantPanel {
+  constructor(ui) {
+    this.ui = ui;
+  }
+
+/**
    * Tools panel management
    */
   showToolsPanel() {
@@ -5697,33 +6457,9 @@ class UIController {
     const toolsPanel = document.getElementById('toolsPanel');
     if (toolsPanel) {
       if (toolsPanel.style.display === 'none' || !toolsPanel.classList.contains('active')) {
-        this.showToolsPanel();
+        this.ui.showToolsPanel();
       } else {
-        this.hideToolsPanel();
-      }
-    }
-  }
-
-  /**
-   * Visualyzer panel management
-   */
-  toggleVisualyzerPanel() {
-    // Open visualyzer in a separate window
-    window.api.send('open-visualyzer');
-  }
-
-  closeVisualyzer() {
-    // This method is no longer needed since visualyzer is in separate window
-    // Kept for backward compatibility
-  }
-
-  toggleToolsPanel() {
-    const toolsPanel = document.getElementById('toolsPanel');
-    if (toolsPanel) {
-      if (toolsPanel.classList.contains('active')) {
-        this.hideToolsPanel();
-      } else {
-        this.showToolsPanel();
+        this.ui.hideToolsPanel();
       }
     }
   }
@@ -5732,55 +6468,55 @@ class UIController {
     const toolsPanel = document.getElementById('toolsPanel');
     
     // If already in assistant mode and panel is visible, hide it
-    if (this._toolsPanelMode === 'assistant' && toolsPanel && toolsPanel.classList.contains('active')) {
-      this.hideToolsPanel();
+    if (this.ui._toolsPanelMode === 'assistant' && toolsPanel && toolsPanel.classList.contains('active')) {
+      this.ui.hideToolsPanel();
       return;
     }
     
     // Ensure assistant is configured at least once before opening
-    const ensure = this.ensureAssistantConfigured();
+    const ensure = this.ui.ensureAssistantConfigured();
     Promise.resolve(ensure).then(() => {
       if (toolsPanel) {
         // Mark that we're in assistant mode
-        this._toolsPanelMode = 'assistant';
-        this.showToolsPanel();
+        this.ui._toolsPanelMode = 'assistant';
+        this.ui.showToolsPanel();
         // Inject assistant chat UI into tools panel
-        this.renderAssistantUI();
+        this.ui.renderAssistantUI();
       }
     });
   }
 
-  /**
+/**
    * Open CTrace Tools panel with original content
    */
   openCtracePanel() {
     const toolsPanel = document.getElementById('toolsPanel');
     
     // If already in ctrace mode and panel is visible, hide it
-    if (this._toolsPanelMode === 'ctrace' && toolsPanel && toolsPanel.classList.contains('active')) {
-      this.hideToolsPanel();
+    if (this.ui._toolsPanelMode === 'ctrace' && toolsPanel && toolsPanel.classList.contains('active')) {
+      this.ui.hideToolsPanel();
       return;
     }
     
     if (toolsPanel) {
       // Mark that we're in ctrace mode
-      this._toolsPanelMode = 'ctrace';
+      this.ui._toolsPanelMode = 'ctrace';
       // Restore original CTrace content if we have it saved
-      if (this._toolsPanelOriginal) {
+      if (this.ui._toolsPanelOriginal) {
         const header = toolsPanel.querySelector('.tools-panel-header');
         const content = toolsPanel.querySelector('.tools-panel-content');
-        if (header && this._toolsPanelOriginal.headerHTML) {
-          header.innerHTML = this._toolsPanelOriginal.headerHTML;
+        if (header && this.ui._toolsPanelOriginal.headerHTML) {
+          header.innerHTML = this.ui._toolsPanelOriginal.headerHTML;
         }
-        if (content && this._toolsPanelOriginal.contentHTML) {
-          content.innerHTML = this._toolsPanelOriginal.contentHTML;
+        if (content && this.ui._toolsPanelOriginal.contentHTML) {
+          content.innerHTML = this.ui._toolsPanelOriginal.contentHTML;
         }
       }
-      this.showToolsPanel();
+      this.ui.showToolsPanel();
     }
   }
 
-  /**
+/**
    * Inject a simple chat UI into the tools panel (like VSCode Copilot sidebar)
    */
   renderAssistantUI() {
@@ -5788,10 +6524,10 @@ class UIController {
     if (!toolsPanel) return;
 
     // Save original content so we can restore it later
-    if (!this._toolsPanelOriginal) {
+    if (!this.ui._toolsPanelOriginal) {
       const header = toolsPanel.querySelector('.tools-panel-header');
       const content = toolsPanel.querySelector('.tools-panel-content');
-      this._toolsPanelOriginal = {
+      this.ui._toolsPanelOriginal = {
         headerHTML: header ? header.innerHTML : null,
         contentHTML: content ? content.innerHTML : null
       };
@@ -5806,7 +6542,7 @@ class UIController {
     if (titleSpan) titleSpan.textContent = 'Assistant';
 
     // Build assistant UI
-    const cfg = this.getAssistantConfig() || { provider: 'none' };
+    const cfg = this.ui.getAssistantConfig() || { provider: 'none' };
     
     // Get display name for the assistant
     let displayName = 'Not configured';
@@ -5841,7 +6577,7 @@ class UIController {
           </div>
           <div style="display:flex; gap:8px; align-items:flex-end">
             <textarea id="assistant-input" placeholder="Ask the assistant..." style="flex:1; min-height:44px; max-height:120px; resize:none; padding:8px; border-radius:6px; border:1px solid #2b3036; background:#0d1117; color:#fff"></textarea>
-            <button id="assistant-send" style="padding:10px; background:transparent; color:#8b949e; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" title="Send message (Enter)" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">
+            <button id="assistant-send" style="padding:10px; background:transparent; color:#8b949e; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" title="Send message (Enter)" onmouseover="this.ui.style.color='#c9d1d9'" onmouseout="this.ui.style.color='#8b949e'">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="currentColor"/>
               </svg>
@@ -6051,7 +6787,7 @@ class UIController {
     
     inputEl.addEventListener('focus', () => {
       try {
-        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+        const monacoEditor = this.ui.editorManager.getMonacoInstance ? this.ui.editorManager.getMonacoInstance() : null;
         if (monacoEditor) {
           const selection = monacoEditor.getSelection();
           const model = monacoEditor.getModel();
@@ -6061,7 +6797,7 @@ class UIController {
               capturedSelection = selectedText;
               const startLine = selection.startLineNumber;
               const endLine = selection.endLineNumber;
-              const activeTab = this.tabManager.getActiveTab();
+              const activeTab = this.ui.tabManager.getActiveTab();
               const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
               capturedLineInfo = startLine === endLine ? `${fileName}: ${startLine}` : `${fileName}: ${startLine}-${endLine}`;
               contextText.textContent = capturedLineInfo;
@@ -6070,7 +6806,7 @@ class UIController {
           }
         } else {
           // Fallback for legacy textarea editor
-          const editor = this.editorManager.editor;
+          const editor = this.ui.editorManager.editor;
           const start = editor.selectionStart;
           const end = editor.selectionEnd;
           const selection = editor.value.substring(start, end);
@@ -6080,7 +6816,7 @@ class UIController {
             const textBeforeEnd = editor.value.substring(0, end);
             const startLine = (textBeforeStart.match(/\n/g) || []).length + 1;
             const endLine = (textBeforeEnd.match(/\n/g) || []).length + 1;
-            const activeTab = this.tabManager.getActiveTab();
+            const activeTab = this.ui.tabManager.getActiveTab();
             const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'Untitled';
             if (startLine === endLine) {
               capturedLineInfo = `${fileName}: ${startLine}`;
@@ -6146,7 +6882,7 @@ class UIController {
       inputEl.value = '';
 
       // Get current assistant config
-      const cfg = this.getAssistantConfig();
+      const cfg = this.ui.getAssistantConfig();
       if (!cfg || cfg.provider === 'none' || cfg.skipped) {
         const bubble = addMessage('assistant', '', { typing: true });
         if (bubble) {
@@ -6232,7 +6968,7 @@ class UIController {
           const base64Code = btn.getAttribute('data-code-b64');
           const code = decodeURIComponent(escape(atob(base64Code)));
           try {
-            const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+            const monacoEditor = this.ui.editorManager.getMonacoInstance ? this.ui.editorManager.getMonacoInstance() : null;
             if (monacoEditor) {
               const model = monacoEditor.getModel();
               const selection = monacoEditor.getSelection();
@@ -6255,15 +6991,15 @@ class UIController {
 
               monacoEditor.executeEdits('assistant', [{ range: rangeObj, text: code, forceMoveMarkers: true }]);
               // Update tab state
-              if (this.tabManager.activeTabId && model) {
-                this.tabManager.handleContentChange(this.tabManager.activeTabId, model.getValue());
+              if (this.ui.tabManager.activeTabId && model) {
+                this.ui.tabManager.handleContentChange(this.ui.tabManager.activeTabId, model.getValue());
               }
               btn.textContent = actionLabel;
               setTimeout(() => btn.textContent = 'Replace', 2000);
               monacoEditor.focus();
             } else {
               // Fallback to legacy textarea editor
-              const editor = this.editorManager.editor;
+              const editor = this.ui.editorManager.editor;
               const start = editor.selectionStart;
               const end = editor.selectionEnd;
               if (start !== end) {
@@ -6271,8 +7007,8 @@ class UIController {
                 const before = editor.value.substring(0, start);
                 const after = editor.value.substring(end);
                 editor.value = before + code + after;
-                if (this.tabManager.activeTabId) {
-                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+                if (this.ui.tabManager.activeTabId) {
+                  this.ui.tabManager.handleContentChange(this.ui.tabManager.activeTabId, editor.value);
                 }
                 btn.textContent = 'Replaced!';
                 setTimeout(() => btn.textContent = 'Replace', 2000);
@@ -6280,8 +7016,8 @@ class UIController {
                 const before = editor.value.substring(0, start);
                 const after = editor.value.substring(start);
                 editor.value = before + code + after;
-                if (this.tabManager.activeTabId) {
-                  this.tabManager.handleContentChange(this.tabManager.activeTabId, editor.value);
+                if (this.ui.tabManager.activeTabId) {
+                  this.ui.tabManager.handleContentChange(this.ui.tabManager.activeTabId, editor.value);
                 }
                 btn.textContent = 'Inserted!';
                 setTimeout(() => btn.textContent = 'Replace', 2000);
@@ -6299,14 +7035,14 @@ class UIController {
 
     settingsBtn.onclick = () => {
       // Open the assistant setup modal for reconfiguration
-      this.showAssistantSetupGuide((cfg) => {
+      this.ui.showAssistantSetupGuide((cfg) => {
         // Re-render assistant UI to reflect changes
-        this.renderAssistantUI();
+        this.ui.renderAssistantUI();
       });
     };
   }
 
-  /**
+/**
    * Retrieve assistant configuration from localStorage
    * @returns {Object|null}
    */
@@ -6321,39 +7057,27 @@ class UIController {
     }
   }
 
-  /**
+/**
    * Save assistant configuration to localStorage
    * @param {Object} cfg
    */
   saveAssistantConfig(cfg) {
     try {
       localStorage.setItem('assistantConfig', JSON.stringify(cfg));
-      this.notificationManager.showSuccess('Assistant settings saved');
+      this.ui.notificationManager.showSuccess('Assistant settings saved');
     } catch (err) {
       console.error('Failed to save assistantConfig', err);
-      this.notificationManager.showError('Failed to save assistant settings');
+      this.ui.notificationManager.showError('Failed to save assistant settings');
     }
   }
 
-  /**
-   * Ensure assistant is configured; if not, show guided setup modal
-   */
-  async ensureAssistantConfigured() {
-    const cfg = this.getAssistantConfig();
-    if (cfg && cfg.provider) return cfg;
-    // Show setup guide modal and wait for user to complete or cancel
-    return new Promise((resolve) => {
-      this.showAssistantSetupGuide(resolve);
-    });
-  }
-
-  /**
+/**
    * Render a first-time setup modal for Assistant configuration.
    * Calls the done callback with saved config or null if cancelled.
    */
   showAssistantSetupGuide(done) {
     // Load existing config to pre-fill form
-    const existingConfig = this.getAssistantConfig() || {};
+    const existingConfig = this.ui.getAssistantConfig() || {};
     
     // Modal overlay
     const modal = document.createElement('div');
@@ -6502,7 +7226,7 @@ class UIController {
                 }
               } catch (err) {
                 console.error('Error selecting model file', err);
-                this.notificationManager.showError('Unable to open file selector');
+                this.ui.notificationManager.showError('Unable to open file selector');
               }
             };
           }
@@ -6575,14 +7299,14 @@ class UIController {
     btnSkip.onclick = () => {
       // Save a lightweight config indicating user skipped
       const cfg = { provider: 'none', skipped: true };
-      this.saveAssistantConfig(cfg);
+      this.ui.saveAssistantConfig(cfg);
       closeModal(cfg);
     };
 
     btnSave.onclick = () => {
       const selected = Array.from(providerRadios).find(r => r.checked);
       if (!selected) {
-        this.notificationManager.showError('Please select a provider');
+        this.ui.notificationManager.showError('Please select a provider');
         return;
       }
       const provider = selected.value;
@@ -6620,7 +7344,7 @@ class UIController {
         }
 
         if (!cfg.apiKey) {
-          this.notificationManager.showError('Please enter an API key for the external provider');
+          this.ui.notificationManager.showError('Please enter an API key for the external provider');
           return;
         }
       } else if (provider === 'local') {
@@ -6630,7 +7354,7 @@ class UIController {
         
         cfg.localModelPath = pathEl ? pathEl.value : '';
         if (!cfg.localModelPath) {
-          this.notificationManager.showError('Please choose a local GGUF model file');
+          this.ui.notificationManager.showError('Please choose a local GGUF model file');
           return;
         }
         
@@ -6642,7 +7366,7 @@ class UIController {
       }
 
       // Persist and close
-      this.saveAssistantConfig(cfg);
+      this.ui.saveAssistantConfig(cfg);
       // Notify main process in case it needs to warm things up
       try { window.api.send('assistant-config-updated', cfg); } catch (_) {}
       closeModal(cfg);
@@ -6651,108 +7375,945 @@ class UIController {
     // Dismiss modal when clicking outside the dialog
     modal.onclick = (e) => { if (e.target === modal) closeModal(null); };
   }
-  /**
-   * Toggle auto save feature
+
+/**
+   * Visualyzer panel management
    */
-  toggleAutoSave() {
-    this.autoSaveEnabled = !this.autoSaveEnabled;
-    this.updateAutoSaveStatus();
-    this.saveAutoSaveState();
+  toggleVisualyzerPanel() {
+    // Open visualyzer in a separate window
+    window.api.send('open-visualyzer');
+  }
+
+  closeVisualyzer() {
+    // This method is no longer needed since visualyzer is in separate window
+    // Kept for backward compatibility
+  }
+
+}
+
+window.AssistantPanel = AssistantPanel;
+
+// ----- src/renderer/UIController.js -----
+;(function() {
+// Manager classes and utilities are loaded via <script> tags in index.html
+// and are available as globals: NotificationManager, MonacoEditorManager,
+// TabManager, SearchManager, FileOperationsManager, DiagnosticsManager,
+// StateManager, fileTypeUtils (window.detectFileType, etc.)
+
+const appLaunchStartedAt = Date.now();
+const appLaunchPerfStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
+
+function formatStartupTimestamp(timestamp) {
+  return new Date(timestamp).toISOString();
+}
+
+function runAfterFirstPaint(callback) {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    setTimeout(callback, 0);
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    setTimeout(callback, 0);
+  });
+}
+
+console.log(`[StartupTiming] App launch detected at ${formatStartupTimestamp(appLaunchStartedAt)}`);
+
+/**
+ * Main UI Controller - Coordinates all managers and components
+ * 
+ * This is the central coordinator for the entire application UI. It manages
+ * the interaction between different managers and handles global UI state.
+ * 
+ * @class UIController
+ * @author CTrace GUI Team
+ * @version 1.0.0
+ * 
+ * @example
+ * // UIController is automatically instantiated in the HTML
+ * const uiController = new UIController();
+ */
+class UIController {
+  /**
+   * Creates an instance of UIController and initializes all managers.
+   * 
+   * @constructor
+   * @memberof UIController
+   */
+  constructor() {
+    /**
+     * Notification manager instance
+     * @type {NotificationManager}
+     * @private
+     */
+    this.notificationManager = new NotificationManager();
     
-    const statusMsg = this.autoSaveEnabled ? 'Auto Save enabled' : 'Auto Save disabled';
-    this.notificationManager.showSuccess(statusMsg);
+    /**
+     * Editor manager instance
+     * @type {MonacoEditorManager}
+     * @private
+     */
+    this.editorManager = new MonacoEditorManager();
+    
+    /**
+     * Tab manager instance
+     * @type {TabManager}
+     * @private
+     */
+    this.tabManager = new TabManager(this.editorManager, this.notificationManager);
+    
+    /**
+     * Search manager instance
+     * @type {SearchManager}
+     * @private
+     */
+    this.searchManager = new SearchManager(this.editorManager, this.notificationManager);
+    
+    /**
+     * File operations manager instance
+     * @type {FileOperationsManager}
+     * @private
+     */
+    this.fileOpsManager = new FileOperationsManager(this.tabManager, this.notificationManager);
+
+    /**
+     * Diagnostics manager instance
+     * @type {DiagnosticsManager}
+     * @private
+     */
+    this.diagnosticsManager = new DiagnosticsManager(this.editorManager);
+
+    /**
+     * State manager instance for work loss prevention
+     * @type {StateManager}
+     * @private
+     */
+    this.stateManager = new StateManager(this.tabManager, this.editorManager, this.diagnosticsManager);
+
+    /**
+     * Terminal manager instance
+     * @type {TerminalManager}
+     * @private
+     */
+    this.terminalManager = new TerminalManager();
+    this.performanceManager = new PerformanceManager();
+    this.resizeManager = new ResizeManager();
+    this.wslManager = new WSLManager(this);
+    this.updaterManager = new UpdaterManager(this.notificationManager);
+    this.ctraceRunner = new CTraceRunner(this);
+
+    this.activeMenu = null;
+    this.fileTreeContextMenu = null;
+    this.autoSaveEnabled = false;
+    this.autoSaveTimer = null;
+    this.autoSaveDelay = 1000;
+    this.wslAvailable = true;
+    this.platform = 'unknown';
+
+    this.activityBar = new ActivityBar(this);
+    this.fileTree = new FileTree(this);
+    this.editorPanel = new EditorPanel(this);
+    this.assistantPanel = new AssistantPanel(this);
+
+
+    this.init();
   }
 
   /**
-   * Update auto save status in the status bar
+   * Convert Windows path to WSL path
+   * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
+   * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
+   * @private
    */
-  updateAutoSaveStatus() {
-    const statusElement = document.getElementById('autoSaveStatus');
-    if (statusElement) {
-      if (this.autoSaveEnabled) {
-        statusElement.style.display = 'inline-block';
-        statusElement.textContent = '💾 Auto Save: ON';
-        statusElement.style.background = 'rgba(31, 111, 235, 0.15)';
-        statusElement.style.color = '#58a6ff';
-      } else {
-        statusElement.style.display = 'none';
-      }
-    }
+  convertToWSLPath(windowsPath) {
+    if (!windowsPath) return windowsPath;
+    
+    // Convert backslashes to forward slashes
+    let wslPath = windowsPath.replace(/\\/g, '/');
+    
+    // Convert drive letter (C: -> /mnt/c)
+    wslPath = wslPath.replace(/^([A-Z]):/i, (match, drive) => `/mnt/${drive.toLowerCase()}`);
+    
+    return wslPath;
   }
 
   /**
-   * Save auto save state to localStorage
+   * Initializes the UI Controller and sets up all necessary components.
+   * 
+   * This method is called automatically by the constructor and sets up:
+   * - Event listeners for UI interactions
+   * - Keyboard shortcuts
+   * - Resizing functionality
+   * - Menu systems
+   * - UI components
+   * - Manager interconnections
+   * - File tree watcher
+   * 
+   * @memberof UIController
+   * @private
    */
-  saveAutoSaveState() {
-    try {
-      localStorage.setItem('autoSaveEnabled', JSON.stringify(this.autoSaveEnabled));
-    } catch (error) {
-      console.error('Failed to save auto save state:', error);
-    }
-  }
+  init() {
+    this.setupEventListeners();
+    this.setupKeyboardShortcuts();
+    this.setupResizing();
+    this.setupMenus();
+    this.setupUIComponents();
 
-  /**
-   * Load auto save state from localStorage
-   */
-  loadAutoSaveState() {
-    try {
-      const saved = localStorage.getItem('autoSaveEnabled');
-      if (saved !== null) {
-        this.autoSaveEnabled = JSON.parse(saved);
-        this.updateAutoSaveStatus();
-      }
-    } catch (error) {
-      console.error('Failed to load auto save state:', error);
-    }
-  }
+    // Connect managers
+    this.connectManagers();
 
-  /**
-   * Setup auto save listener for editor content changes
-   */
-  setupAutoSaveListener() {
-    // Listen to editor content changes via Monaco
-    if (this.editorManager && this.editorManager.editor) {
-      this.editorManager.editor.onDidChangeModelContent(() => {
-        this.triggerAutoSave();
+    // Initialize with explorer view and welcome screen
+    this.showExplorer();
+    this.tabManager.showWelcomeScreen();
+
+    // Add refresh button event listener
+    const refreshBtn = document.getElementById('refresh-file-tree');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.refreshFileTree();
       });
-    } else {
-      // If Monaco isn't ready yet, wait for it
-      window.addEventListener('monaco-loaded', () => {
-        setTimeout(() => {
-          if (this.editorManager && this.editorManager.editor) {
-            this.editorManager.editor.onDidChangeModelContent(() => {
+    }
+
+    // Set up state management for work loss prevention
+    this.setupStateManagement();
+    this.setupTitleBarControls();
+    this.deferNonCriticalStartup();
+  }
+
+  /**
+   * Update status bar app version label from package metadata.
+   */
+  async updateAppVersionLabel() {
+    const versionEl = document.getElementById('tool_version');
+    if (!versionEl) return;
+
+    try {
+      const appInfo = await window.api.getAppInfo();
+      const appName = appInfo.name;
+      const appVersion = appInfo.version;
+      versionEl.textContent = `${appName} v${appVersion}`;
+    } catch (error) {
+      console.warn('Failed to load app version from package.json:', error);
+    }
+  }
+
+  deferNonCriticalStartup() {
+    runAfterFirstPaint(() => {
+      this.updateAppVersionLabel();
+      this.performanceManager.init();
+      this.setupFileTreeWatcher();
+      this.loadAutoSaveState();
+      this.setupAutoSaveListener();
+      this.setupFileTreeContextMenu();
+      this.setupWSLStatusListener();
+      this.setupUpdaterStatusListener();
+      this.terminalManager.init();
+    });
+  }
+
+  // --- PerformanceManager delegation ---
+  togglePerformanceHud(forceVisible) {
+    this.performanceManager.toggle(forceVisible);
+  }
+
+
+  updateBackendVersionLabel(releaseTag, statusText = '') {
+    return this.updaterManager.updateBackendVersionLabel(releaseTag, statusText);
+  }
+  
+  async refreshFileTree(silent = false) {
+    return await this.fileTree.refreshFileTree(silent);
+  }
+
+  
+  setupFileTreeWatcher() {
+    return this.fileTree.setupFileTreeWatcher();
+  }
+
+  setupWSLStatusListener() {
+    return this.wslManager.setupListeners();
+  }
+
+  setupUpdaterStatusListener() {
+    return this.updaterManager.setupListeners();
+  }
+
+    updateWSLStatusIndicator(wslStatus) {
+    return this.wslManager._updateIndicator(wslStatus);
+  }
+
+  showWSLSetupDialog(wslStatus) {
+    return this.wslManager._showSetupDialog(wslStatus);
+  }
+
+  
+  setupTitleBarControls() {
+    return this.editorPanel.setupTitleBarControls();
+  }
+
+  /**
+   * Connect managers and set up inter-manager communication
+   */
+  connectManagers() {
+    // Set up tab manager callbacks
+    this.tabManager.onLoadFullFile = (filePath) => {
+      this.fileOpsManager.loadFullFile(filePath);
+    };
+
+    // Auto-save safety net: flush pending edits when switching/closing tabs.
+    // (Auto-save debounce can otherwise be skipped if the user switches/close quickly.)
+    this.tabManager.onBeforeTabSwitch = async (fromTabId) => {
+      if (fromTabId) {
+        await this.maybeAutoSaveTab(fromTabId);
+      }
+    };
+
+    this.tabManager.onBeforeTabClose = async (tabId) => {
+      if (tabId) {
+        await this.maybeAutoSaveTab(tabId);
+      }
+    };
+
+    // Set up search manager callbacks
+    this.searchManager.openSearchResult = async (filePath, lineNumber) => {
+      await this.openSearchResult(filePath, lineNumber);
+    };
+
+    // Update search manager with workspace path when workspace changes
+    this.searchManager.setWorkspacePath(this.fileOpsManager.getCurrentWorkspacePath());
+
+    // Set up editor content change tracking
+    const wireEditorChangeListener = () => {
+      try {
+        // If Monaco editor is available, use its model change event
+        const monacoEditor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+        if (monacoEditor && monacoEditor.onDidChangeModelContent) {
+          console.log('[UIController] Wiring Monaco editor change listener');
+          monacoEditor.onDidChangeModelContent(() => {
+            if (this.tabManager.activeTabId) {
+              const newContent = this.editorManager.getContent();
+              this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
               this.triggerAutoSave();
-            });
+            }
+          });
+        } else if (this.editorManager.editor && this.editorManager.editor.addEventListener) {
+          console.log('[UIController] Wiring legacy editor change listener');
+          // Fallback for the legacy DOM-based editor
+          this.editorManager.editor.addEventListener('input', () => {
+            if (this.tabManager.activeTabId) {
+              const newContent = this.editorManager.getContent();
+              this.tabManager.handleContentChange(this.tabManager.activeTabId, newContent);
+              this.triggerAutoSave();
+            }
+          });
+        } else {
+          console.warn('[UIController] Editor not ready yet, will retry after monaco-loaded event');
+        }
+      } catch (err) {
+        console.warn('Failed to wire editor change listener:', err);
+      }
+    };
+
+    // Try to wire immediately
+    wireEditorChangeListener();
+
+    // Also listen for monaco-loaded event in case editor wasn't ready yet
+    window.addEventListener('monaco-loaded', () => {
+      console.log('[UIController] Monaco loaded event received, re-wiring editor listener');
+      setTimeout(() => {
+        wireEditorChangeListener();
+      }, 100);
+    });
+  }
+
+  /**
+   * Setup event listeners for UI components
+   */
+  setupEventListeners() {
+    // Close dialogs when clicking outside
+    document.addEventListener('click', (e) => {
+      const searchWidget = document.getElementById('search-widget');
+      const gotoDialog = document.getElementById('goto-dialog');
+      
+      if (searchWidget.classList.contains('visible') && 
+          !searchWidget.contains(e.target)) {
+        this.searchManager.closeSearchWidget();
+      }
+      
+      if (gotoDialog.classList.contains('visible') && 
+          !gotoDialog.contains(e.target)) {
+        this.searchManager.closeGoToLineDialog();
+      }
+    });
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.menu-item')) {
+        this.hideAllMenus();
+      }
+    });
+
+    // Close file tree context menu when clicking anywhere
+    document.addEventListener('click', () => {
+      this.hideFileTreeContextMenu();
+    });
+
+    // Close file tree context menu on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.hideFileTreeContextMenu();
+      }
+    });
+  }
+
+  
+  setupFileTreeContextMenu() {
+    return this.fileTree.setupFileTreeContextMenu();
+  }
+
+  
+  promptForText(title, placeholder = '', defaultValue = '') {
+    return this.fileTree.promptForText(title, placeholder, defaultValue);
+  }
+
+
+  showFileTreeContextMenu(x, y, items) {
+    return this.fileTree.showFileTreeContextMenu(x, y, items);
+  }
+
+
+  hideFileTreeContextMenu() {
+    return this.fileTree.hideFileTreeContextMenu();
+  }
+
+  async createFileInDirectory(directoryPath) {
+    const fileName = await this.promptForText('New file', 'e.g. main.c');
+    if (!fileName) return;
+
+    try {
+      const result = await window.api.invoke('create-file', directoryPath, fileName);
+      if (result.success) {
+        this.notificationManager.showSuccess(`Created file "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to create file: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error creating file: ' + error.message);
+    }
+  }
+
+  async createFolderInDirectory(directoryPath) {
+    const folderName = await this.promptForText('New folder', 'e.g. include');
+    if (!folderName) return;
+
+    try {
+      const result = await window.api.invoke('create-folder', directoryPath, folderName);
+      if (result.success) {
+        this.notificationManager.showSuccess(`Created folder "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to create folder: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error creating folder: ' + error.message);
+    }
+  }
+
+  async renamePath(targetPath, currentName = '') {
+    if (!targetPath) return;
+    const newName = await this.promptForText('Rename', '', currentName || '');
+    if (!newName) return;
+
+    try {
+      const result = await window.api.invoke('rename-path', targetPath, newName);
+      if (result.success) {
+        // Update open tab if the renamed item is an open file
+        if (result.isFile) {
+          const tabId = this.tabManager.findTabByPath(targetPath);
+          if (tabId) {
+            this.tabManager.updateTabFile(tabId, result.newPath, result.name);
           }
-        }, 500);
-      });
+        }
+        this.notificationManager.showSuccess(`Renamed to "${result.name}"`);
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to rename: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error renaming: ' + error.message);
+    }
+  }
+
+  async deletePath(targetPath, itemType) {
+    if (!targetPath) return;
+    const isFolder = itemType === 'directory';
+
+    const ok = confirm(isFolder ? 'Delete this folder and all its contents?' : 'Delete this file?');
+    if (!ok) return;
+
+    // If deleting an open file, close the tab first (honor unsaved changes)
+    if (!isFolder) {
+      const tabId = this.tabManager.findTabByPath(targetPath);
+      if (tabId) {
+        const closed = await this.tabManager.closeTabById(tabId);
+        if (!closed) return;
+      }
+    }
+
+    try {
+      const result = await window.api.invoke('delete-path', targetPath);
+      if (result.success) {
+        this.notificationManager.showSuccess('Deleted successfully');
+        await this.refreshFileTree(true);
+      } else {
+        this.notificationManager.showError('Failed to delete: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error deleting: ' + error.message);
     }
   }
 
   /**
-   * Trigger auto save with debounce
+   * Setup keyboard shortcuts
    */
-  triggerAutoSave() {
-    if (!this.autoSaveEnabled) return;
-    
-    // Clear existing timer
-    if (this.autoSaveTimer) {
-      clearTimeout(this.autoSaveTimer);
-    }
-    
-    // Set new timer
-    this.autoSaveTimer = setTimeout(async () => {
-      const currentTab = this.tabManager.getActiveTab();
-      const isDirty = !!(currentTab && (currentTab.modified || currentTab.isDirty));
-      if (currentTab && currentTab.filePath && isDirty) {
-        try {
-          await this.fileOpsManager.saveFile({ silent: true, reason: 'autosave' });
-          console.log('Auto-saved:', currentTab.fileName);
-        } catch (error) {
-          console.error('Auto-save failed:', error);
+  setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      const searchWidget = document.getElementById('search-widget');
+      const gotoDialog = document.getElementById('goto-dialog');
+      const isSearchVisible = searchWidget.classList.contains('visible');
+      const isGotoVisible = gotoDialog.classList.contains('visible');
+
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        this.togglePerformanceHud();
+        return;
+      }
+
+      // Handle Enter key
+      if (e.key === 'Enter') {
+        if (isSearchVisible) {
+          e.preventDefault();
+          this.searchManager.searchNext();
+        } else if (isGotoVisible) {
+          e.preventDefault();
+          this.searchManager.performGoToLine();
         }
       }
-    }, this.autoSaveDelay);
+      
+      // Handle Escape key
+      if (e.key === 'Escape') {
+        if (isSearchVisible) {
+          e.preventDefault();
+          this.searchManager.closeSearchWidget();
+        } else if (isGotoVisible) {
+          e.preventDefault();
+          this.searchManager.closeGoToLineDialog();
+        }
+      }
+
+      // Handle F3/Shift+F3 for search navigation
+      if (e.key === 'F3' && isSearchVisible) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          this.searchManager.searchPrev();
+        } else {
+          this.searchManager.searchNext();
+        }
+      }
+
+      // File operations
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        this.fileOpsManager.saveFile();
+      }
+      
+      if (e.ctrlKey && e.key === 'o') {
+        e.preventDefault();
+        this.fileOpsManager.openFile();
+      }
+      
+      if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+        e.preventDefault();
+        this.fileOpsManager.openWorkspace();
+      }
+      
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        this.tabManager.createNewFile();
+      }
+      
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        this.fileOpsManager.saveAsFile();
+      }
+      
+      // UI navigation
+      if (e.ctrlKey && e.key === 'b') {
+        e.preventDefault();
+        this.toggleSidebar();
+      }
+      
+      if (e.altKey && e.key === 'z') {
+        e.preventDefault();
+        this.editorManager.toggleWordWrap();
+      }
+      
+      if (e.shiftKey && e.altKey && e.key === 'F') {
+        e.preventDefault();
+        const formatted = this.editorManager.formatCode();
+        if (this.tabManager.activeTabId) {
+          this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
+        }
+      }
+      
+      if (e.ctrlKey && e.key === 'w') {
+        e.preventDefault();
+        if (this.tabManager.activeTabId) {
+          this.tabManager.closeTab(e, this.tabManager.activeTabId);
+        }
+      }
+      
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        this.searchManager.showFindDialog();
+      }
+      
+      if (e.ctrlKey && e.key === 'g') {
+        e.preventDefault();
+        this.searchManager.showGoToLineDialog();
+      }
+      
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        this.tabManager.switchToNextTab();
+      }
+      
+      // Tab navigation with Ctrl+PageUp/PageDown
+      if (e.ctrlKey && e.key === 'PageDown') {
+        e.preventDefault();
+        this.tabManager.switchToNextTab();
+      }
+      
+      if (e.ctrlKey && e.key === 'PageUp') {
+        e.preventDefault();
+        this.tabManager.switchToPreviousTab();
+      }
+      
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        this.toggleToolsPanel();
+      }
+
+      if (e.ctrlKey && e.key === 'j') {
+        e.preventDefault();
+        this.terminalManager.toggle();
+        this._syncTerminalActivityIcon();
+      }
+
+      if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+        e.preventDefault();
+        this.showSearch();
+      }
+      
+      if (e.ctrlKey && e.shiftKey && e.key === 'E') {
+        e.preventDefault();
+        this.showExplorer();
+      }
+    });
+  }
+
+  setupResizing() {
+    return this.resizeManager.setup();
+  }
+
+  doResize(e) {
+    return this.resizeManager._doResize(e);
+  }
+
+  stopResize() {
+    return this.resizeManager._stopResize();
+  }
+
+  /**
+   * Setup menu functionality
+   */
+  setupMenus() {
+    window.toggleMenu = (menuId) => {
+      const menu = document.getElementById(menuId);
+      const dropdown = menu.querySelector('.dropdown-menu');
+      
+      if (this.activeMenu && this.activeMenu !== menuId) {
+        this.hideAllMenus();
+      }
+      
+      if (dropdown.classList.contains('show')) {
+        this.hideAllMenus();
+      } else {
+        dropdown.classList.add('show');
+        menu.classList.add('active');
+        this.activeMenu = menuId;
+      }
+    };
+
+    window.hideAllMenus = () => this.hideAllMenus();
+    
+    // Add click handlers to all dropdown items to stop propagation
+    document.querySelectorAll('.dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // hideAllMenus will be called by the onclick handler in HTML
+      });
+    });
+  }
+
+  hideAllMenus() {
+    document.querySelectorAll('.dropdown-menu').forEach(menu => {
+      menu.classList.remove('show');
+    });
+    document.querySelectorAll('.menu-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    this.activeMenu = null;
+  }
+
+  /**
+   * Setup UI component functions
+   */
+  setupUIComponents() {
+    // Activity bar functions
+    window.showExplorer = () => this.showExplorer();
+    window.showSearch = () => this.showSearch();
+
+    // File operations
+    window.createNewFile = () => this.tabManager.createNewFile();
+    window.openFile = () => this.fileOpsManager.openFile();
+    window.openWorkspace = () => this.openWorkspace();
+    window.closeWorkspace = () => this.fileOpsManager.closeWorkspace();
+    window.saveFile = () => this.fileOpsManager.saveFile();
+    window.saveAsFile = () => this.fileOpsManager.saveAsFile();
+    window.autoSave = () => this.toggleAutoSave();
+    window.openUpdateSettings = () => this.openUpdateSettingsModal();
+    window.openBackendSettings = () => this.openBackendSettingsModal();
+
+    // Setup auto save status bar click handler
+    const autoSaveStatus = document.getElementById('autoSaveStatus');
+    if (autoSaveStatus) {
+      autoSaveStatus.onclick = () => this.toggleAutoSave();
+    }
+    window.closeCurrentTab = () => {
+      if (this.tabManager.activeTabId) {
+        this.tabManager.closeTab(new Event('click'), this.tabManager.activeTabId);
+      }
+    };
+
+    // Editor operations
+    window.formatCode = () => {
+      const formatted = this.editorManager.formatCode();
+      if (this.tabManager.activeTabId) {
+        this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
+      }
+    };
+    window.toggleWordWrap = () => this.editorManager.toggleWordWrap();
+
+    // Search operations
+    window.showFindDialog = () => this.searchManager.showFindDialog();
+    window.closeSearchWidget = () => this.searchManager.closeSearchWidget();
+    window.searchNext = () => this.searchManager.searchNext();
+    window.searchPrev = () => this.searchManager.searchPrev();
+    window.showGoToLineDialog = () => this.searchManager.showGoToLineDialog();
+    window.closeGoToLineDialog = () => this.searchManager.closeGoToLineDialog();
+    window.performGoToLine = () => this.searchManager.performGoToLine();
+
+    // UI navigation
+    window.toggleSidebar = () => this.toggleSidebar();
+    window.toggleToolsPanel = () => this.toggleToolsPanel();
+    window.showToolsPanel = () => this.showToolsPanel();
+    window.hideToolsPanel = () => this.hideToolsPanel();
+    window.openCtracePanel = () => this.openCtracePanel();
+    window.openAssistantPanel = () => this.openAssistantPanel();
+
+    // Terminal panel
+    window.toggleTerminalPanel = () => {
+      this.terminalManager.toggle();
+      this._syncTerminalActivityIcon();
+    };
+    window.terminalNew = () => this.terminalManager.createTerminal();
+    window.terminalKill = () => {
+      const id = this.terminalManager.activeId;
+      if (id !== null) {
+        const term = this.terminalManager.terminals.get(id);
+        if (term && term.running) {
+          window.api.invoke('terminal-kill-current', id).catch(() => {});
+        }
+      }
+    };
+    window.terminalToggleShellDropdown = () => this.terminalManager.toggleShellDropdown();
+
+    // Visualyzer operations
+    window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
+
+    // CTrace helpers
+    window.runCTrace = () => this.ctraceRunner.run();
+
+    window.clearCTraceOutput = () => {
+      this.diagnosticsManager.clear();
+    };
+
+    // Tab manager reference for global access
+    window.tabManager = this.tabManager;
+    
+    // Diagnostics manager reference for global access
+    window.diagnosticsManager = this.diagnosticsManager;
+    window.searchManager = this.searchManager;
+  }
+
+  async openUpdateSettingsModal() {
+    return this.updaterManager.openUpdateSettingsModal();
+  }
+
+  async openBackendSettingsModal() {
+    return this.updaterManager.openBackendSettingsModal();
+  }
+
+  /**
+   * Sync the terminal activity bar icon active state with panel visibility.
+   */
+  _syncTerminalActivityIcon() {
+    const icon = document.getElementById('terminal-activity');
+    if (!icon) return;
+    if (this.terminalManager.isVisible()) {
+      icon.classList.add('active');
+    } else {
+      icon.classList.remove('active');
+    }
+  }
+
+  setActiveActivity(activityId) {
+    return this.activityBar.setActiveActivity(activityId);
+  }
+
+
+  showExplorer() {
+    return this.activityBar.showExplorer();
+  }
+
+
+  showSearch() {
+    return this.activityBar.showSearch();
+  }
+
+  
+  toggleSidebar() {
+    return this.activityBar.toggleSidebar();
+  }
+
+  
+  showToolsPanel() {
+    return this.assistantPanel.showToolsPanel();
+  }
+
+
+  hideToolsPanel() {
+    return this.assistantPanel.hideToolsPanel();
+  }
+
+
+  toggleToolsPanel() {
+    return this.assistantPanel.toggleToolsPanel();
+  }
+
+  
+  toggleVisualyzerPanel() {
+    return this.assistantPanel.toggleVisualyzerPanel();
+  }
+
+
+  closeVisualyzer() {
+    return this.assistantPanel.closeVisualyzer();
+  }
+
+  toggleToolsPanel() {
+    const toolsPanel = document.getElementById('toolsPanel');
+    if (toolsPanel) {
+      if (toolsPanel.classList.contains('active')) {
+        this.hideToolsPanel();
+      } else {
+        this.showToolsPanel();
+      }
+    }
+  }
+
+
+  openAssistantPanel() {
+    return this.assistantPanel.openAssistantPanel();
+  }
+
+  
+  openCtracePanel() {
+    return this.assistantPanel.openCtracePanel();
+  }
+
+  
+  renderAssistantUI() {
+    return this.assistantPanel.renderAssistantUI();
+  }
+
+  
+  getAssistantConfig() {
+    return this.assistantPanel.getAssistantConfig();
+  }
+
+  
+  saveAssistantConfig(cfg) {
+    return this.assistantPanel.saveAssistantConfig(cfg);
+  }
+
+  /**
+   * Ensure assistant is configured; if not, show guided setup modal
+   */
+  async ensureAssistantConfigured() {
+    const cfg = this.getAssistantConfig();
+    if (cfg && cfg.provider) return cfg;
+    // Show setup guide modal and wait for user to complete or cancel
+    return new Promise((resolve) => {
+      this.showAssistantSetupGuide(resolve);
+    });
+  }
+
+  
+  showAssistantSetupGuide(done) {
+    return this.assistantPanel.showAssistantSetupGuide(done);
+  }
+  
+  toggleAutoSave() {
+    return this.editorPanel.toggleAutoSave();
+  }
+
+  
+  updateAutoSaveStatus() {
+    return this.editorPanel.updateAutoSaveStatus();
+  }
+
+  
+  saveAutoSaveState() {
+    return this.editorPanel.saveAutoSaveState();
+  }
+
+  
+  loadAutoSaveState() {
+    return this.editorPanel.loadAutoSaveState();
+  }
+
+  
+  setupAutoSaveListener() {
+    return this.editorPanel.setupAutoSaveListener();
+  }
+
+  
+  triggerAutoSave() {
+    return this.editorPanel.triggerAutoSave();
   }
 
   /**

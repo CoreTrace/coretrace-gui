@@ -1,9 +1,11 @@
 const { ipcMain } = require('electron');
+const { spawn } = require('child_process');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 
 const { callApi, ensureServerRunning, shutdownServer, resolveBinaryPath, getCapturedSince, waitForCapturedJson } = require('../utils/ctraceServeClient');
+const { loadBackendSettings } = require('./backendSettingsHandlers');
 
 const DEBUG_BACKEND_REQUESTS = process.env.CTRACE_GUI_DEBUG_BACKEND === '1' || process.env.NODE_ENV === 'development';
 
@@ -358,6 +360,9 @@ function argsToRunAnalysisParams(args = []) {
   if (typeof out.dynamic_analysis === 'undefined') out.dynamic_analysis = false;
   if (typeof out.async === 'undefined') out.async = false;
 
+  // Default to full analysis profile so all functions (not just entry points) are analyzed.
+  if (typeof out.analysis_profile === 'undefined') out.analysis_profile = 'full';
+
   // `input` is required by the backend.
   if (out.input && !Array.isArray(out.input)) out.input = ensureArray(out.input);
 
@@ -376,13 +381,222 @@ function deriveCwdFromInputPath(inputPath) {
 }
 
 // ==========================================
+// DIRECT BINARY EXECUTION (no WSL, no HTTP server)
+// ==========================================
+
+/**
+ * Convert a WSL-style path (/mnt/c/...) back to a Windows path (C:\...).
+ * Returns the path unchanged if it doesn't match the WSL pattern.
+ */
+function wslPathToWindows(p) {
+  if (!p || typeof p !== 'string') return p;
+  const m = p.match(/^\/mnt\/([a-z])(\/.*)?$/);
+  if (!m) return p;
+  const drive = m[1].toUpperCase();
+  const rest = (m[2] || '').replace(/\//g, '\\');
+  return `${drive}:${rest}`;
+}
+
+/**
+ * Walk through args array and convert any WSL paths to Windows paths.
+ * Handles --input=/mnt/... , --input /mnt/... , and bare /mnt/... values.
+ */
+function convertArgsPathsToWindows(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = String(args[i]);
+    if (a.startsWith('--input=')) {
+      const val = a.slice('--input='.length);
+      const files = val.split(',').map(f => wslPathToWindows(f.trim())).join(',');
+      out.push(`--input=${files}`);
+    } else if (a.startsWith('/mnt/')) {
+      out.push(wslPathToWindows(a));
+    } else {
+      out.push(a);
+    }
+  }
+  return out;
+}
+
+/**
+ * Strip server-mode-only flags from an args array so they aren't forwarded
+ * to a standalone ctrace.exe invocation.
+ */
+function stripServerFlags(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--ipc' || a === '--ipc-path' || a === '--serve-host' || a === '--serve-port' || a === '--shutdown-token') {
+      const next = args[i + 1];
+      if (next && !next.startsWith('--')) i++; // skip value too
+      continue;
+    }
+    if (a.startsWith('--ipc=') || a.startsWith('--ipc-path=') || a.startsWith('--serve-host=') || a.startsWith('--serve-port=') || a.startsWith('--shutdown-token=')) {
+      continue;
+    }
+    out.push(a);
+  }
+  return out;
+}
+
+/** Extract all complete JSON objects/arrays from a string. */
+function extractJsonFromText(text) {
+  const results = [];
+  let buf = text;
+  let i = 0;
+  while (i < buf.length) {
+    const sObj = buf.indexOf('{', i);
+    const sArr = buf.indexOf('[', i);
+    let start, opening;
+    if (sObj === -1 && sArr === -1) break;
+    if (sObj === -1) { start = sArr; opening = '['; }
+    else if (sArr === -1) { start = sObj; opening = '{'; }
+    else if (sObj < sArr) { start = sObj; opening = '{'; }
+    else { start = sArr; opening = '['; }
+
+    let depth = 0, inStr = false, esc = false, end = -1;
+    for (let j = start; j < buf.length; j++) {
+      const ch = buf[j];
+      if (inStr) {
+        if (esc) { esc = false; continue; }
+        if (ch === '\\') { esc = true; continue; }
+        if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === '{' || ch === '[') { depth++; continue; }
+      if (ch === '}' || ch === ']') {
+        depth--;
+        if (depth === 0) { end = j + 1; break; }
+      }
+    }
+    if (end === -1) break;
+    try {
+      results.push(JSON.parse(buf.slice(start, end)));
+    } catch (_) {}
+    i = end;
+  }
+  return results;
+}
+
+/**
+ * Spawn ctrace.exe directly (Windows native, no WSL) and return parsed output.
+ * Returns { success, output } on success or { success: false, error } on failure.
+ */
+async function runDirectBinary(binaryPath, rawArgs) {
+  // Validate binary
+  console.log(`!!!! Running ctrace in direct mode with binary path: ${binaryPath} and args: ${rawArgs.join(' ') } !!!!`);
+  try {
+    await fs.access(binaryPath);
+  } catch (e) {
+    return { success: false, error: `ctrace binary not found at ${binaryPath}: ${e.message}` };
+  }
+
+  const args = stripServerFlags(convertArgsPathsToWindows(rawArgs));
+
+  console.log(`[ctrace-direct] spawning: ${binaryPath} ${args.join(' ')}`);
+
+  const { code, stdout, stderr } = await new Promise((resolve, reject) => {
+    let out = '', err = '';
+    const proc = spawn(binaryPath, args, { stdio: 'pipe', windowsHide: true });
+    proc.stdout.on('data', d => { out += d.toString(); });
+    proc.stderr.on('data', d => { err += d.toString(); });
+    proc.on('error', reject);
+    proc.on('close', code => resolve({ code, stdout: out, stderr: err }));
+
+    // 5-minute hard timeout
+    const timer = setTimeout(() => {
+      try { proc.kill(); } catch (_) {}
+      reject(new Error('ctrace direct execution timed out after 5 minutes'));
+    }, 300000);
+    proc.on('close', () => clearTimeout(timer));
+  });
+
+  console.log(`[ctrace-direct] exited code=${code}`);
+  if (stderr.trim()) console.error(`[ctrace-direct stderr]: ${stderr.trimEnd()}`);
+
+  // Try to find useful JSON in stdout
+  const jsonObjects = extractJsonFromText(stdout);
+
+  // Prefer stack analyzer JSON (has meta + diagnostics)
+  const stackJson = [...jsonObjects].reverse().find(looksLikeStackAnalyzerJson) || null;
+  // Prefer SARIF with results
+  const sarifs = jsonObjects.filter(isSarif);
+  const bestSarif = sarifs.find(s => sarifResultsCount(s) > 0) || sarifs[0] || null;
+
+  const inputFile = (() => {
+    const inputArg = args.find(a => a.startsWith('--input='));
+    if (inputArg) {
+      const val = inputArg.slice('--input='.length);
+      return val.split(',')[0];
+    }
+    return '';
+  })();
+
+  // Build tool error diagnostics from stderr/stdout text
+  const textEntries = [];
+  for (const line of (stdout + '\n' + stderr).split('\n')) {
+    if (line.trim()) textEntries.push(line);
+  }
+  const toolErrorDiags = buildToolErrorDiagnostics(textEntries, inputFile);
+
+  if (stackJson) {
+    const combined = {
+      ...stackJson,
+      sarif: bestSarif || null,
+      diagnostics: Array.isArray(stackJson.diagnostics)
+        ? [...stackJson.diagnostics, ...toolErrorDiags]
+        : toolErrorDiags
+    };
+    return { success: true, output: JSON.stringify(combined, null, 2) };
+  }
+
+  if (bestSarif) {
+    return { success: true, output: JSON.stringify(bestSarif, null, 2) };
+  }
+
+  if (toolErrorDiags.length > 0) {
+    const combined = {
+      meta: { tool: 'coretrace', note: 'Tool execution errors from direct binary run' },
+      functions: [],
+      diagnostics: toolErrorDiags
+    };
+    return { success: true, output: JSON.stringify(combined, null, 2) };
+  }
+
+  // If binary failed and no JSON output, surface the error
+  if (code !== 0 && !stdout.trim()) {
+    return { success: false, error: stderr.trim() || `ctrace exited with code ${code}` };
+  }
+
+  // Return raw stdout if nothing else
+  return { success: true, output: stdout.trim() };
+}
+
+// ==========================================
 // MAIN HANDLER
 // ==========================================
 
 function setupCtraceHandlers() {
   ipcMain.handle('run-ctrace', async (_event, args = []) => {
+    // Check if user configured a direct binary path
+    let directBinaryPath = null;
+    try {
+      const settings = await loadBackendSettings();
+      if (settings && settings.directBinaryPath) {
+        directBinaryPath = settings.directBinaryPath;
+      }
+    } catch (_) {}
+
+    if (directBinaryPath) {
+      // Direct mode: ensure server is shut down, then run the exe directly
+      try { await shutdownServer(); } catch (_) {}
+      return runDirectBinary(directBinaryPath, args);
+    }
+
     // Validate binary presence early (for a clear error message).
     try {
+      console.log('[ctrace debug] Binary path:', resolveBinaryPath());
       await fs.access(resolveBinaryPath());
     } catch (e) {
       return { success: false, error: `ctrace binary not found: ${e.message}` };
@@ -396,15 +610,13 @@ function setupCtraceHandlers() {
 
     try {
       const params = argsToRunAnalysisParams(args);
-      const cwd = deriveCwdFromInputPath(Array.isArray(params.input) ? params.input[0] : null);
 
       if (DEBUG_BACKEND_REQUESTS) {
         console.log('[ctrace debug] run-ctrace args:', JSON.stringify(args));
         console.log('[ctrace debug] run-ctrace params:', JSON.stringify(params));
-        console.log('[ctrace debug] run-ctrace cwd:', cwd || '(empty)');
       }
 
-      await ensureServerRunning({ cwd });
+      await ensureServerRunning();
       const captureSince = Date.now();
       const apiRes = await callApi('run_analysis', params);
 

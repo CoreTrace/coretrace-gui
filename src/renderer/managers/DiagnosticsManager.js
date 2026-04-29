@@ -254,15 +254,15 @@ class DiagnosticsManager {
     return `
       <div class="ctrace-metadata-compact">
         <div class="metadata-header">
-          <span class="metadata-icon">📊</span>
+          <span class="metadata-accent" aria-hidden="true"></span>
           <span class="metadata-file-name" title="${this.escapeHtml(meta.inputFile || 'N/A')}">${this.escapeHtml(this.getFileName(meta.inputFile))}</span>
           <span class="metadata-mode-badge">${this.escapeHtml(meta.mode || 'N/A')}</span>
         </div>
         <div class="metadata-stats">
-          <span class="stat-item" title="Tool Used">🔧 ${this.escapeHtml(meta.tool || 'ctrace')}</span>
-          <span class="stat-item" title="Functions Analyzed">⚡ ${this.currentFunctions.length} functions</span>
-          <span class="stat-item" title="Analysis Time">${meta.analysisTimeMs >= 0 ? '⏱️ ' + meta.analysisTimeMs + ' ms' : ''}</span>
-          <span class="stat-item" title="Stack Limit">💾 ${meta.stackLimit ? this.formatBytes(meta.stackLimit) : 'N/A'}</span>
+          <span class="stat-item" title="Tool Used"><span class="stat-label">Tool</span><span class="stat-value">${this.escapeHtml(meta.tool || 'ctrace')}</span></span>
+          <span class="stat-item" title="Functions Analyzed"><span class="stat-label">Functions</span><span class="stat-value">${this.currentFunctions.length}</span></span>
+          <span class="stat-item" title="Analysis Time"><span class="stat-label">Time</span><span class="stat-value">${meta.analysisTimeMs >= 0 ? meta.analysisTimeMs + ' ms' : 'Pending'}</span></span>
+          <span class="stat-item" title="Stack Limit"><span class="stat-label">Stack</span><span class="stat-value">${meta.stackLimit ? this.formatBytes(meta.stackLimit) : 'N/A'}</span></span>
         </div>
       </div>
     `;
@@ -278,12 +278,11 @@ class DiagnosticsManager {
         <div class="diagnostics-container">
           <div class="diagnostics-toolbar">
             <div class="diagnostics-count">
-              <span class="count-icon">✅</span>
+              <span class="count-badge count-badge-clear">Clear</span>
               <span class="count-text">No Issues Found</span>
             </div>
           </div>
           <div class="diagnostics-empty">
-            <div class="empty-icon">🎉</div>
             <div class="empty-text">All clear! No diagnostics reported.</div>
           </div>
         </div>
@@ -320,18 +319,16 @@ class DiagnosticsManager {
       return `
         <div class="diagnostic-item" data-diag-id="${this.escapeHtml(diag.id)}" onclick="window.diagnosticsManager.jumpToDiagnostic('${this.escapeHtml(diag.id)}')">
           <div class="diagnostic-item-header">
-            <div class="diagnostic-severity-icon" style="background: ${severityColor};">
+            <div class="diagnostic-severity-icon diagnostic-severity-icon-${String(diag.severity || '').toLowerCase()}" style="background: ${severityColor};">
               ${icon}
             </div>
             <div class="diagnostic-item-info">
               <div class="diagnostic-title">
                 <span class="diagnostic-rule">${this.escapeHtml(presentation.title)}</span>
-                <span class="diagnostic-separator">•</span>
+                <span class="diagnostic-separator">·</span>
                 <span class="diagnostic-function">${this.escapeHtml(diag.location.function)}</span>
               </div>
-              <div class="diagnostic-location">
-                📍 Line ${diag.location.startLine}${diag.location.startColumn ? ':' + diag.location.startColumn : ''}
-              </div>
+              <div class="diagnostic-location">Line ${diag.location.startLine}${diag.location.startColumn ? ':' + diag.location.startColumn : ''}</div>
             </div>
           </div>
           <div class="diagnostic-item-details">
@@ -349,7 +346,7 @@ class DiagnosticsManager {
       <div class="diagnostics-container">
         <div class="diagnostics-toolbar">
           <div class="diagnostics-count">
-            <span class="count-icon">🔍</span>
+            <span class="count-badge">${this.currentSeverityFilter === 'ALL' ? 'Overview' : this.escapeHtml(this.currentSeverityFilter)}</span>
             <span class="count-text">${summaryText}</span>
           </div>
           ${this.renderFilterDropdown()}
@@ -369,10 +366,10 @@ class DiagnosticsManager {
     return `
       <div class="severity-filter">
         <select id="severity-filter-select" onchange="window.diagnosticsManager.changeSeverityFilter(this.value)">
-          <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>🔍 All Issues</option>
-          <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>❌ Errors</option>
-          <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>⚠️ Warnings</option>
-          <option value="INFO" ${this.currentSeverityFilter === 'INFO' ? 'selected' : ''}>ℹ️ Info</option>
+          <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>All issues</option>
+          <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>Errors</option>
+          <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>Warnings</option>
+          <option value="INFO" ${this.currentSeverityFilter === 'INFO' ? 'selected' : ''}>Info</option>
         </select>
       </div>
     `;
@@ -602,9 +599,9 @@ class DiagnosticsManager {
    */
   getSeverityIcon(severity) {
     switch (severity) {
-      case 'ERROR': return '❌';
-      case 'WARNING': return '⚠️';
-      case 'INFO': return 'ℹ️';
+      case 'ERROR': return 'E';
+      case 'WARNING': return 'W';
+      case 'INFO': return 'I';
       default: return '•';
     }
   }
@@ -656,7 +653,7 @@ class DiagnosticsManager {
     if (resultsArea) {
       resultsArea.innerHTML = `
         <div class="ctrace-placeholder">
-          <div class="placeholder-icon">🔍</div>
+          <div class="placeholder-mark" aria-hidden="true"></div>
           <div class="placeholder-text">Run CTrace to analyze your code</div>
           <div class="placeholder-subtext">Click the button above to start</div>
         </div>

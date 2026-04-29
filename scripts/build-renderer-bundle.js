@@ -7,7 +7,6 @@ const outputPath = path.join(rootDir, 'src', 'renderer', 'bundle.js');
 const inputFiles = [
   'src/renderer/utils/fileTypeUtils.js',
   'src/renderer/utils/syntaxHighlighter.js',
-  'src/renderer/utils/debounce.js',
   'src/renderer/managers/NotificationManager.js',
   'src/renderer/managers/MonacoEditorManager.js',
   'src/renderer/managers/TabManager.js',
@@ -15,6 +14,16 @@ const inputFiles = [
   'src/renderer/managers/FileOperationsManager.js',
   'src/renderer/managers/DiagnosticsManager.js',
   'src/renderer/managers/StateManager.js',
+  'src/renderer/managers/TerminalManager.js',
+  'src/renderer/managers/PerformanceManager.js',
+  'src/renderer/managers/WSLManager.js',
+  'src/renderer/managers/UpdaterManager.js',
+  'src/renderer/managers/ResizeManager.js',
+  'src/renderer/managers/CTraceRunner.js',
+  'src/renderer/components/ActivityBar.js',
+  'src/renderer/components/FileTree.js',
+  'src/renderer/components/EditorPanel.js',
+  'src/renderer/components/AssistantPanel.js',
   'src/renderer/UIController.js',
 ];
 

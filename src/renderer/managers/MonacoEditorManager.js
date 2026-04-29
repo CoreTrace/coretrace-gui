@@ -335,7 +335,8 @@ class MonacoEditorManager {
         showIcons: true,
         maxVisibleSuggestions: 12,
         filteredTypes: { 'keyword': false, 'snippet': true }
-      }
+      },
+      fixedOverflowWidgets: true
     });
 
     // Debugging for "blank" autocomplete dropdown.
