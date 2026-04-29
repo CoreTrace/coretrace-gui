@@ -14,6 +14,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const chokidar = require('chokidar');
 const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT } = require('../utils/fileUtils');
+const { formatFileError } = require('../utils/errorUtils');
 
 const FILE_TREE_MAX_DEPTH = 3;
 
@@ -99,11 +100,11 @@ function setupFileHandlers(mainWindow) {
         } catch (_) {}
         return {
           success: false,
-          error: error.message
+          error: formatFileError(error, folderPath, 'open folder')
         };
       }
     }
-    
+
     return { success: false, canceled: true };
   });
 
@@ -143,12 +144,12 @@ function setupFileHandlers(mainWindow) {
           folderPath,
           requestId,
           success: false,
-          error: error.message
+          error: formatFileError(error, folderPath, 'refresh file tree for')
         });
       } catch (_) {}
       return {
         success: false,
-        error: error.message
+        error: formatFileError(error, folderPath, 'refresh file tree for')
       };
     }
   });
@@ -164,7 +165,7 @@ function setupFileHandlers(mainWindow) {
     } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: formatFileError(error, dirPath, 'read directory contents for')
       };
     }
   });
@@ -233,11 +234,11 @@ function setupFileHandlers(mainWindow) {
       } catch (error) {
         return {
           success: false,
-          error: error.message
+          error: formatFileError(error, filePath, 'open')
         };
       }
     }
-    
+
     return { success: false, canceled: true };
   });
 
@@ -264,7 +265,7 @@ function setupFileHandlers(mainWindow) {
       await fs.writeFile(filePath, content, 'utf8');
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, filePath, 'save') };
     }
   });
 
@@ -290,10 +291,10 @@ function setupFileHandlers(mainWindow) {
           fileName: path.basename(result.filePath)
         };
       } catch (error) {
-        return { success: false, error: error.message };
+        return { success: false, error: formatFileError(error, result.filePath, 'save') };
       }
     }
-    
+
     return { success: false, canceled: true };
   });
 
@@ -317,7 +318,7 @@ function setupFileHandlers(mainWindow) {
 
       return { success: true, path: newPath, name: trimmed };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, newPath, 'create file') };
     }
   });
 
@@ -340,7 +341,7 @@ function setupFileHandlers(mainWindow) {
 
       return { success: true, path: newPath, name: trimmed };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, newPath, 'create folder') };
     }
   });
 
@@ -364,7 +365,7 @@ function setupFileHandlers(mainWindow) {
 
       return { success: true, newPath, name: trimmed, isFile: stats.isFile() };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, targetPath, 'rename') };
     }
   });
 
@@ -382,7 +383,7 @@ function setupFileHandlers(mainWindow) {
 
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, targetPath, 'delete') };
     }
   });
 
@@ -424,7 +425,7 @@ function setupFileHandlers(mainWindow) {
         loadedSize: isPartial ? FILE_SIZE_LIMIT : fileInfo.size
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, filePath, 'read') };
     }
   });
 
@@ -451,7 +452,7 @@ function setupFileHandlers(mainWindow) {
         loadedSize: fileInfo.size
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, filePath, 'load') };
     }
   });
 
@@ -492,7 +493,7 @@ function setupFileHandlers(mainWindow) {
         encodingWarning: !fileInfo.isUTF8
       };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, filePath, 'open') };
     }
   });
 
@@ -502,7 +503,7 @@ function setupFileHandlers(mainWindow) {
       const results = await searchInDirectory(folderPath, searchTerm);
       return { success: true, results };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: formatFileError(error, folderPath, 'search in') };
     }
   });
 
@@ -519,10 +520,10 @@ function setupFileHandlers(mainWindow) {
         fileName: path.basename(filePath)
       };
     } catch (error) {
-      console.error('Error force loading full file:', error);
+      console.error(`[force-load-full-file] ${formatFileError(error, filePath, 'read')}`);
       return {
         success: false,
-        error: error.message
+        error: formatFileError(error, filePath, 'read')
       };
     }
   });

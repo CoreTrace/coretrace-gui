@@ -192,12 +192,11 @@ async function buildFileTree(dirPath, loadChildren = true) {
 
     return tree;
   } catch (error) {
-    // Handle directory-level permission errors
     if (error.code === 'EPERM' || error.code === 'EACCES') {
-      console.warn(`Permission denied accessing directory: ${dirPath}`);
+      console.warn(`[buildFileTree] Permission denied (${error.code}) reading directory: "${path.normalize(dirPath)}"`);
       return [];
     }
-    console.error('Error building file tree:', error);
+    console.error(`[buildFileTree] Failed to read directory "${path.normalize(dirPath)}": [${error.code || 'ERR'}] ${error.message}`);
     return [];
   }
 }
@@ -255,13 +254,14 @@ async function searchInDirectory(dirPath, searchTerm, maxResults = 100) {
                 }
               });
             } catch (error) {
-              // Skip files that can't be read as text
+              // Skip files that can't be read as text (binary, locked, permission-denied, etc.)
+              console.warn(`[searchInDirectory] Skipping unreadable file "${path.normalize(itemPath)}": [${error.code || 'ERR'}] ${error.message}`);
             }
           }
         }
       }
     } catch (error) {
-      console.error('Error searching directory:', error);
+      console.error(`[searchInDirectory] Failed to read directory "${path.normalize(currentPath)}": [${error.code || 'ERR'}] ${error.message}`);
     }
   }
   
