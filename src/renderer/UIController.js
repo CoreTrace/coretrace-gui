@@ -335,22 +335,6 @@ class UIController {
    * Setup event listeners for UI components
    */
   setupEventListeners() {
-    // Close dialogs when clicking outside
-    document.addEventListener('click', (e) => {
-      const searchWidget = document.getElementById('search-widget');
-      const gotoDialog = document.getElementById('goto-dialog');
-      
-      if (searchWidget.classList.contains('visible') && 
-          !searchWidget.contains(e.target)) {
-        this.searchManager.closeSearchWidget();
-      }
-      
-      if (gotoDialog.classList.contains('visible') && 
-          !gotoDialog.contains(e.target)) {
-        this.searchManager.closeGoToLineDialog();
-      }
-    });
-
     // Close menus when clicking outside
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.menu-item')) {
@@ -581,14 +565,16 @@ class UIController {
       
       if (e.ctrlKey && e.key === 'f') {
         e.preventDefault();
-        this.searchManager.showFindDialog();
+        const editor = this.editorManager.getMonacoInstance();
+        if (editor) editor.getAction('actions.find').run();
       }
-      
+
       if (e.ctrlKey && e.key === 'g') {
         e.preventDefault();
-        this.searchManager.showGoToLineDialog();
+        const editor = this.editorManager.getMonacoInstance();
+        if (editor) editor.getAction('editor.action.gotoLine').run();
       }
-      
+
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
         this.tabManager.switchToNextTab();
@@ -721,14 +707,15 @@ class UIController {
     };
     window.toggleWordWrap = () => this.editorManager.toggleWordWrap();
 
-    // Search operations
-    window.showFindDialog = () => this.searchManager.showFindDialog();
-    window.closeSearchWidget = () => this.searchManager.closeSearchWidget();
-    window.searchNext = () => this.searchManager.searchNext();
-    window.searchPrev = () => this.searchManager.searchPrev();
-    window.showGoToLineDialog = () => this.searchManager.showGoToLineDialog();
-    window.closeGoToLineDialog = () => this.searchManager.closeGoToLineDialog();
-    window.performGoToLine = () => this.searchManager.performGoToLine();
+    // Open Monaco's built-in find/go-to-line widgets
+    window.openMonacoFind = () => {
+      const editor = this.editorManager.getMonacoInstance();
+      if (editor) editor.getAction('actions.find').run();
+    };
+    window.openMonacoGoToLine = () => {
+      const editor = this.editorManager.getMonacoInstance();
+      if (editor) editor.getAction('editor.action.gotoLine').run();
+    };
 
     // UI navigation
     window.toggleSidebar = () => this.toggleSidebar();

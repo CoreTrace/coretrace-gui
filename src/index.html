@@ -228,7 +228,7 @@
         <div class="menu-item" id="edit-menu" onclick="toggleMenu('edit-menu')">
           Edit
           <div class="dropdown-menu" id="edit-dropdown">
-            <div class="dropdown-item" onclick="showFindDialog(); hideAllMenus();">
+            <div class="dropdown-item" onclick="openMonacoFind(); hideAllMenus();">
               <span>Find</span>
               <span class="shortcut">Ctrl+F</span>
             </div>
@@ -242,7 +242,7 @@
               <span class="shortcut">Alt+Z</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="showGoToLineDialog(); hideAllMenus();">
+            <div class="dropdown-item" onclick="openMonacoGoToLine(); hideAllMenus();">
               <span>Go to Line...</span>
               <span class="shortcut">Ctrl+G</span>
             </div>
@@ -293,32 +293,6 @@
 
       <!-- Editor Container -->
       <div class="editor-container">
-        <!-- VS Code Style Search Widget -->
-        <div id="search-widget" class="search-widget">
-          <div class="search-input-container">
-            <input type="text" id="widget-search-input" class="search-input" placeholder="Find" />
-            <button class="search-close" onclick="closeSearchWidget()">×</button>
-          </div>
-          <div class="search-results">
-            <span id="search-results-text">No results</span>
-            <div class="search-navigation">
-              <button class="search-nav-btn" id="search-prev" onclick="searchPrev()" disabled>↑</button>
-              <button class="search-nav-btn" id="search-next" onclick="searchNext()" disabled>↓</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="goto-dialog" id="goto-dialog">
-          <div class="goto-header">
-            <span>Go to Line</span>
-            <button class="goto-close" onclick="closeGoToLineDialog()">×</button>
-          </div>
-          <input type="number" id="goto-input" class="goto-input" placeholder="Line number (e.g. 42)" min="1" />
-          <div class="goto-buttons">
-            <button class="goto-btn primary" onclick="performGoToLine()">Go</button>
-          </div>
-        </div>
-
         <div class="editor-main">
           <!-- Welcome Screen (shown by default) -->
           <div class="welcome-screen" id="welcome-screen">
