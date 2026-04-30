@@ -430,8 +430,8 @@ class FileOperationsManager {
         this.notificationManager.showError('Failed to load full file: ' + result.error);
       }
     } catch (error) {
-      console.error('Error loading full file:', error);
-      this.notificationManager.showError('Error loading full file');
+      console.error(`[loadFullFile] Failed to load "${filePath}": ${error.message}`);
+      this.notificationManager.showError('Error loading full file: ' + error.message);
     }
   }
 
@@ -563,8 +563,8 @@ class FileOperationsManager {
         loadingDiv.style.color = '#f85149';
       }
     } catch (error) {
-      console.error('Failed to load directory contents:', error);
-      loadingDiv.textContent = 'Error: ' + error.message;
+      console.error(`[loadDirectoryContents] Failed to load "${item.path}": ${error.message}`);
+      loadingDiv.textContent = `Error loading "${item.name}": ${error.message}`;
       loadingDiv.style.color = '#f85149';
     }
   }

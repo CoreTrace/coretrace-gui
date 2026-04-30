@@ -21,13 +21,13 @@ function setupEditorHandlers() {
         command = 'x-terminal-emulator -e nano'; // or just 'nano' if terminal already open
         break;
       default:
-        console.log('Unsupported OS');
+        console.warn(`[open-editor] Unsupported platform: ${process.platform}`);
         return;
     }
 
     exec(command, (err) => {
       if (err) {
-        console.error('Failed to open editor:', err);
+        console.error(`[open-editor] Failed to launch external editor on ${process.platform} (command: "${command}"): [${err.code || 'ERR'}] ${err.message}`);
       }
     });
   });

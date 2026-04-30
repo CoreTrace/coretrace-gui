@@ -110,7 +110,14 @@ function setupStateHandlers() {
         
         return state;
       } catch (error) {
-        console.warn('[StateHandlers] Error loading state from', filePath, ':', error.message);
+        if (error.code === 'ENOENT') {
+          // File not found is normal on first launch — not an error worth logging loudly.
+          console.log(`[StateHandlers] State file not found (ENOENT): "${path.normalize(filePath)}" — starting fresh`);
+        } else if (error instanceof SyntaxError) {
+          console.warn(`[StateHandlers] State file corrupted (invalid JSON) at "${path.normalize(filePath)}" — discarding and falling back to backup`);
+        } else {
+          console.warn(`[StateHandlers] Failed to load state from "${path.normalize(filePath)}": [${error.code || 'ERR'}] ${error.message}`);
+        }
         return null;
       }
     }
@@ -145,15 +152,19 @@ function setupStateHandlers() {
         await fs.unlink(statePath);
         console.log('[StateHandlers] Removed main state file');
       } catch (err) {
-        // File might not exist, that's okay
+        if (err.code !== 'ENOENT') {
+          console.warn(`[StateHandlers] Failed to remove state file "${path.normalize(statePath)}": [${err.code || 'ERR'}] ${err.message}`);
+        }
       }
-      
+
       // Remove backup state file
       try {
         await fs.unlink(backupPath);
         console.log('[StateHandlers] Removed backup state file');
       } catch (err) {
-        // File might not exist, that's okay
+        if (err.code !== 'ENOENT') {
+          console.warn(`[StateHandlers] Failed to remove backup state file "${path.normalize(backupPath)}": [${err.code || 'ERR'}] ${err.message}`);
+        }
       }
       
       return { success: true };
