@@ -4,6 +4,9 @@ const path = require('path');
 // File size limit for initial display (1MB)
 const FILE_SIZE_LIMIT = 1024 * 1024;
 
+// Files larger than this threshold trigger a UI warning before opening (5MB)
+const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024;
+
 /**
  * Check if file is UTF-8 encoded
  * @param {Buffer} buffer - File buffer to check
@@ -71,23 +74,31 @@ function isValidUTF8(buffer) {
 }
 
 /**
- * Detect file encoding
+ * Detect file encoding — reads at most FILE_SIZE_LIMIT bytes so large files
+ * never fully load into memory.
  * @param {string} filePath - Path to the file
  * @returns {Object} - File info with encoding and size data
  */
 async function detectFileEncoding(filePath) {
+  const stat = await fs.stat(filePath);
+  const size = stat.size;
+
+  if (size === 0) {
+    return { isUTF8: true, size: 0, buffer: Buffer.alloc(0) };
+  }
+
+  const readSize = Math.min(size, FILE_SIZE_LIMIT);
+  const fd = await fs.open(filePath, 'r');
   try {
-    const buffer = await fs.readFile(filePath);
-    const isUTF8 = isValidUTF8(buffer);
-    console.log(`File: ${filePath}, Size: ${buffer.length}, IsUTF8: ${isUTF8}`);
-    console.log(`First 100 bytes:`, buffer.slice(0, 100).toString('hex'));
-    return {
-      isUTF8,
-      size: buffer.length,
-      buffer
-    };
-  } catch (error) {
-    throw error;
+    const buffer = Buffer.allocUnsafe(readSize);
+    const { bytesRead } = await fd.read(buffer, 0, readSize, 0);
+    const sliced = buffer.slice(0, bytesRead);
+    const isUTF8 = isValidUTF8(sliced);
+    console.log(`File: ${filePath}, Size: ${size}, ReadSize: ${readSize}, IsUTF8: ${isUTF8}`);
+    console.log(`First 100 bytes:`, sliced.slice(0, 100).toString('hex'));
+    return { isUTF8, size, buffer: sliced };
+  } finally {
+    await fd.close();
   }
 }
 
@@ -338,5 +349,6 @@ module.exports = {
   searchInDirectory,
   isValidUTF8,
   validatePathInWorkspace,
-  FILE_SIZE_LIMIT
+  FILE_SIZE_LIMIT,
+  LARGE_FILE_THRESHOLD
 };
