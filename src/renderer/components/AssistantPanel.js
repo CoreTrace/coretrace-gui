@@ -124,7 +124,8 @@ class AssistantPanel {
       const filename = pathParts[pathParts.length - 1];
       displayName = filename.replace(/\.gguf$/i, '');
     } else if (cfg.provider === 'external') {
-      displayName = cfg.externalProvider || 'External';
+      const providerLabel = cfg.externalProvider === 'ChatGPT5' ? 'OpenAI' : (cfg.externalProvider || 'External');
+      displayName = cfg.model ? `${providerLabel} — ${cfg.model}` : providerLabel;
     } else if (cfg.provider === 'ollama') {
       displayName = 'Ollama';
     } else if (cfg.provider !== 'none') {
@@ -327,8 +328,13 @@ class AssistantPanel {
     };
 
     // Prefill a small welcome message with typing effect (only first time)
-    const providerName = cfg.provider === 'external' ? (cfg.externalProvider || 'External') : cfg.provider;
-    const welcomeText = `Hi — I'm your assistant. Using: ${providerName}. Ask me something or open Settings to change providers.`;
+    const providerLabel = cfg.provider === 'external'
+      ? (() => {
+          const base = cfg.externalProvider === 'ChatGPT5' ? 'OpenAI' : (cfg.externalProvider || 'External');
+          return cfg.model ? `${base} — ${cfg.model}` : base;
+        })()
+      : cfg.provider;
+    const welcomeText = `Hi — I'm your assistant. Using: ${providerLabel}. Ask me something or open Settings to change providers.`;
     
     // Check if welcome message has been shown before
     const hasShownWelcome = sessionStorage.getItem('assistantWelcomeShown');
@@ -615,30 +621,65 @@ class AssistantPanel {
   }
 
 /**
-   * Retrieve assistant configuration from localStorage
+   * Return the in-memory cached assistant configuration (synchronous).
+   * Call loadAssistantConfig() first to ensure the cache is populated.
    * @returns {Object|null}
    */
   getAssistantConfig() {
+    return this._cachedConfig || null;
+  }
+
+/**
+   * Load assistant configuration from secure storage via IPC.
+   * Migrates any existing plaintext config from localStorage on first run,
+   * then removes it. Updates the in-memory cache.
+   * @returns {Promise<Object|null>}
+   */
+  async loadAssistantConfig() {
     try {
+      const result = await window.api.invoke('assistant-config-load');
+      if (result.success) {
+        this._cachedConfig = result.config;
+        return this._cachedConfig;
+      }
+
+      // Migration path: lift any legacy plaintext config from localStorage
       const raw = localStorage.getItem('assistantConfig');
-      if (!raw) return null;
-      return JSON.parse(raw);
+      if (raw) {
+        try {
+          const legacy = JSON.parse(raw);
+          await window.api.invoke('assistant-config-save', legacy);
+          localStorage.removeItem('assistantConfig');
+          this._cachedConfig = legacy;
+          console.log('[AssistantPanel] Migrated assistant config from localStorage to secure storage');
+          return this._cachedConfig;
+        } catch (migErr) {
+          console.warn('[AssistantPanel] Migration from localStorage failed:', migErr);
+        }
+      }
+
+      this._cachedConfig = null;
+      return null;
     } catch (err) {
-      console.error('Failed to parse assistantConfig from localStorage', err);
+      console.error('[AssistantPanel] Failed to load assistant config:', err);
+      this._cachedConfig = null;
       return null;
     }
   }
 
 /**
-   * Save assistant configuration to localStorage
+   * Persist assistant configuration via secure IPC storage and update cache.
    * @param {Object} cfg
+   * @returns {Promise<void>}
    */
-  saveAssistantConfig(cfg) {
+  async saveAssistantConfig(cfg) {
     try {
-      localStorage.setItem('assistantConfig', JSON.stringify(cfg));
+      const result = await window.api.invoke('assistant-config-save', cfg);
+      if (!result.success) throw new Error(result.error || 'Unknown error');
+      this._cachedConfig = cfg;
       this.ui.notificationManager.showSuccess('Assistant settings saved');
     } catch (err) {
-      console.error('Failed to save assistantConfig', err);
+      console.error('[AssistantPanel] Failed to save assistant config:', err);
       this.ui.notificationManager.showError('Failed to save assistant settings');
     }
   }
@@ -648,7 +689,7 @@ class AssistantPanel {
    * Calls the done callback with saved config or null if cancelled.
    */
   showAssistantSetupGuide(done) {
-    // Load existing config to pre-fill form
+    // Use the in-memory cache (should already be loaded by ensureAssistantConfigured)
     const existingConfig = this.ui.getAssistantConfig() || {};
     
     // Modal overlay
@@ -660,33 +701,33 @@ class AssistantPanel {
 
     const dialog = document.createElement('div');
     dialog.style.cssText = `
-      width: 720px; max-width: 95%; background: #fff; border-radius:8px; padding:20px; box-shadow:0 8px 30px rgba(0,0,0,0.3);
-      font-family: sans-serif; color: #222;
+      width: 720px; max-width: 95%; background: #161b22; border-radius:8px; padding:20px; box-shadow:0 8px 30px rgba(0,0,0,0.6); border:1px solid #30363d;
+      font-family: sans-serif; color: #e6edf3;
     `;
 
     dialog.innerHTML = `
       <h2 style="margin-top:0">Assistant setup</h2>
       <p>Choose how you'd like to connect the Assistant. You can use Ollama, an external API (ChatGPT5, Deepseek, or other), or point to a local GGUF model on your machine.</p>
       <div style="display:flex; gap:12px; margin-top:12px;">
-        <label style="flex:1; border:1px solid #e2e2e2; padding:12px; border-radius:6px; cursor:pointer;" id="assist-opt-ollama">
+        <label style="flex:1; border:1px solid #30363d; padding:12px; border-radius:6px; cursor:pointer; background:#0d1117;" id="assist-opt-ollama">
           <input type="radio" name="assist-provider" value="ollama" style="margin-right:8px"> Ollama (local or remote)
-          <div style="font-size:12px; color:#555; margin-top:6px">Connect to an Ollama server (default: http://localhost:11434)</div>
+          <div style="font-size:12px; color:#8b949e; margin-top:6px">Connect to an Ollama server (default: http://localhost:11434)</div>
         </label>
-        <label style="flex:1; border:1px solid #e2e2e2; padding:12px; border-radius:6px; cursor:pointer;" id="assist-opt-external">
+        <label style="flex:1; border:1px solid #30363d; padding:12px; border-radius:6px; cursor:pointer; background:#0d1117;" id="assist-opt-external">
           <input type="radio" name="assist-provider" value="external" style="margin-right:8px"> External API
-          <div style="font-size:12px; color:#555; margin-top:6px">Use ChatGPT5, Deepseek or other hosted APIs (requires API key)</div>
+          <div style="font-size:12px; color:#8b949e; margin-top:6px">Use ChatGPT5, Deepseek or other hosted APIs (requires API key)</div>
         </label>
-        <label style="flex:1; border:1px solid #e2e2e2; padding:12px; border-radius:6px; cursor:pointer;" id="assist-opt-local">
+        <label style="flex:1; border:1px solid #30363d; padding:12px; border-radius:6px; cursor:pointer; background:#0d1117;" id="assist-opt-local">
           <input type="radio" name="assist-provider" value="local" style="margin-right:8px"> Local GGUF model
-          <div style="font-size:12px; color:#555; margin-top:6px">Point to a GGUF model file on your computer</div>
+          <div style="font-size:12px; color:#8b949e; margin-top:6px">Point to a GGUF model file on your computer</div>
         </label>
       </div>
 
       <div id="assist-extra" style="margin-top:16px"></div>
 
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:18px;">
-        <button id="assist-skip" style="padding:8px 12px; background:transparent; border:1px solid #cfcfcf; border-radius:6px; cursor:pointer">Skip for now</button>
-        <button id="assist-cancel" style="padding:8px 12px; background:#ddd; border:none; border-radius:6px; cursor:pointer">Cancel</button>
+        <button id="assist-skip" style="padding:8px 12px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer">Skip for now</button>
+        <button id="assist-cancel" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#e6edf3; border-radius:6px; cursor:pointer">Cancel</button>
         <button id="assist-save" style="padding:8px 12px; background:#007acc; color:white; border:none; border-radius:6px; cursor:pointer">Save</button>
       </div>
     `;
@@ -702,8 +743,8 @@ class AssistantPanel {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; flex-direction:column; gap:6px; margin-top:8px;';
       row.innerHTML = `
-        <label style="font-size:13px; color:#333">${labelText}</label>
-        <input id="${inputId}" style="padding:8px; border:1px solid #e2e2e2; border-radius:4px; font-size:13px" placeholder="${placeholder}">
+        <label style="font-size:13px; color:#8b949e">${labelText}</label>
+        <input id="${inputId}" style="padding:8px; border:1px solid #30363d; border-radius:4px; font-size:13px; background:#0d1117; color:#e6edf3" placeholder="${placeholder}">
       `;
       return row;
     };
@@ -715,9 +756,9 @@ class AssistantPanel {
 
     const selectProvider = (value) => {
       providerRadios.forEach(r => r.checked = (r.value === value));
-      optOllama.style.borderColor = value === 'ollama' ? '#007acc' : '#e2e2e2';
-      optExternal.style.borderColor = value === 'external' ? '#007acc' : '#e2e2e2';
-      optLocal.style.borderColor = value === 'local' ? '#007acc' : '#e2e2e2';
+      optOllama.style.borderColor = value === 'ollama' ? '#388bfd' : '#30363d';
+      optExternal.style.borderColor = value === 'external' ? '#388bfd' : '#30363d';
+      optLocal.style.borderColor = value === 'local' ? '#388bfd' : '#30363d';
 
       clearExtra();
       if (value === 'ollama') {
@@ -740,22 +781,97 @@ class AssistantPanel {
         selRow.style.cssText = 'display:flex; gap:8px; align-items:center; margin-top:8px;';
         selRow.innerHTML = `
           <label style="font-size:13px">Provider</label>
-          <select id="external-provider" style="padding:6px; border:1px solid #e2e2e2; border-radius:4px">
-            <option value="ChatGPT5">ChatGPT5</option>
+          <select id="external-provider" style="padding:6px; border:1px solid #30363d; border-radius:4px; background:#0d1117; color:#e6edf3">
+            <option value="ChatGPT5">OpenAI</option>
             <option value="Deepseek">Deepseek</option>
-            <option value="Other">Other</option>
           </select>
         `;
         extra.appendChild(selRow);
         extra.appendChild(makeInputRow('API Key', 'external-api-key', 'sk-...'));
-        extra.appendChild(makeInputRow('Model Name', 'external-model', 'gpt-4'));
+
+        // Model list row — starts as a text input, upgraded to select after fetch
+        const modelRow = document.createElement('div');
+        modelRow.style.cssText = 'display:flex; flex-direction:column; gap:6px; margin-top:8px;';
+        modelRow.innerHTML = `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="font-size:13px; color:#8b949e">Model list</label>
+            <span id="model-fetch-status" style="font-size:11px; color:#6e7681;"></span>
+          </div>
+          <select id="external-model" style="padding:8px; border:1px solid #30363d; border-radius:4px; font-size:13px; background:#0d1117; color:#e6edf3; display:none;"></select>
+          <input id="external-model-input" style="padding:8px; border:1px solid #30363d; border-radius:4px; font-size:13px; background:#0d1117; color:#e6edf3" placeholder="Enter API key above to load models">
+        `;
+        extra.appendChild(modelRow);
         extra.appendChild(makeInputRow('System prompt (optional)', 'system-prompt', 'You are a helpful assistant...'));
-        
-        // Pre-fill with saved values
-        setTimeout(() => {
+
+        // Helper: map UI provider name → IPC providerId
+        const toProviderId = (name) => name === 'Deepseek' ? 'deepseek' : 'openai';
+
+        // Helper: populate model dropdown from fetched list
+        const populateModelSelect = (models, savedModel) => {
+          const sel = document.getElementById('external-model');
+          const inp = document.getElementById('external-model-input');
+          if (!sel || !inp) return;
+          sel.innerHTML = models.map(m =>
+            `<option value="${m.id}"${m.id === savedModel ? ' selected' : ''}>${m.id}</option>`
+          ).join('');
+          sel.style.display = 'block';
+          inp.style.display = 'none';
+        };
+
+        // Fetch models when API key field loses focus
+        const attachFetchListener = () => {
+          const apiKeyInput = document.getElementById('external-api-key');
+          const providerSelect = document.getElementById('external-provider');
+          const statusEl = document.getElementById('model-fetch-status');
+          if (!apiKeyInput) return;
+
+          apiKeyInput.addEventListener('blur', async () => {
+            const key = apiKeyInput.value.trim();
+            if (!key) return;
+            const providerId = toProviderId(providerSelect ? providerSelect.value : 'ChatGPT5');
+            if (statusEl) statusEl.textContent = 'Fetching models…';
+            try {
+              const result = await window.api.invoke('assistant-list-models', { providerId, apiKey: key });
+              if (result.success && result.models.length > 0) {
+                const currentModel = document.getElementById('external-model-input').value.trim();
+                populateModelSelect(result.models, currentModel);
+                if (statusEl) statusEl.textContent = `${result.models.length} models loaded`;
+              } else {
+                if (statusEl) statusEl.textContent = result.error ? `Error: ${result.error}` : 'No models returned';
+              }
+            } catch (err) {
+              if (statusEl) statusEl.textContent = 'Failed to fetch models';
+            }
+          });
+
+          // Re-fetch when provider changes (if key already present)
+          if (providerSelect) {
+            providerSelect.addEventListener('change', async () => {
+              const key = apiKeyInput.value.trim();
+              if (!key) return;
+              const providerId = toProviderId(providerSelect.value);
+              if (statusEl) statusEl.textContent = 'Fetching models…';
+              try {
+                const result = await window.api.invoke('assistant-list-models', { providerId, apiKey: key });
+                if (result.success && result.models.length > 0) {
+                  const currentModel = document.getElementById('external-model-input')?.value.trim() || '';
+                  populateModelSelect(result.models, currentModel);
+                  if (statusEl) statusEl.textContent = `${result.models.length} models loaded`;
+                } else {
+                  if (statusEl) statusEl.textContent = result.error ? `Error: ${result.error}` : 'No models returned';
+                }
+              } catch (err) {
+                if (statusEl) statusEl.textContent = 'Failed to fetch models';
+              }
+            });
+          }
+        };
+
+        // Pre-fill with saved values and auto-fetch if key already exists
+        setTimeout(async () => {
           const providerSelect = document.getElementById('external-provider');
           const apiKeyInput = document.getElementById('external-api-key');
-          const modelInput = document.getElementById('external-model');
+          const modelInput = document.getElementById('external-model-input');
           const systemInput = document.getElementById('system-prompt');
           if (providerSelect && existingConfig.externalProvider) {
             providerSelect.value = existingConfig.externalProvider;
@@ -769,12 +885,30 @@ class AssistantPanel {
           if (systemInput && existingConfig.systemPrompt) {
             systemInput.value = existingConfig.systemPrompt;
           }
+
+          // If a saved API key exists, fetch models immediately
+          if (existingConfig.apiKey) {
+            const providerId = toProviderId(existingConfig.externalProvider || 'ChatGPT5');
+            const statusEl = document.getElementById('model-fetch-status');
+            if (statusEl) statusEl.textContent = 'Fetching models…';
+            try {
+              const result = await window.api.invoke('assistant-list-models', { providerId, apiKey: existingConfig.apiKey });
+              if (result.success && result.models.length > 0) {
+                populateModelSelect(result.models, existingConfig.model);
+                if (statusEl) statusEl.textContent = `${result.models.length} models loaded`;
+              } else {
+                if (statusEl) statusEl.textContent = result.error ? `Error: ${result.error}` : '';
+              }
+            } catch (_) { /* non-fatal */ }
+          }
+
+          attachFetchListener();
         }, 0);
       } else if (value === 'local') {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-top:8px;';
         row.innerHTML = `
-          <input id="local-model-path" placeholder="Select GGUF model file..." style="flex:1; padding:8px; border:1px solid #e2e2e2; border-radius:4px" readonly>
+          <input id="local-model-path" placeholder="Select GGUF model file..." style="flex:1; padding:8px; border:1px solid #30363d; border-radius:4px; background:#0d1117; color:#e6edf3" readonly>
           <button id="local-browse" style="padding:8px 10px; border-radius:4px; border:none; background:#007acc; color:white; cursor:pointer">Browse</button>
         `;
         extra.appendChild(row);
@@ -808,9 +942,9 @@ class AssistantPanel {
         const contextRow = document.createElement('div');
         contextRow.style.cssText = 'margin-top:12px;';
         contextRow.innerHTML = `
-          <label style="display:block; margin-bottom:4px; color:#333; font-size:13px">Context Size (tokens):</label>
-          <input id="context-size" type="number" placeholder="8192" style="width:100%; padding:8px; border:1px solid #e2e2e2; border-radius:4px" value="8192" min="512" max="32768">
-          <div style="margin-top:4px; font-size:11px; color:#666">Lower values use less VRAM. Recommended: 2048-8192. Default model max: 40960</div>
+          <label style="display:block; margin-bottom:4px; color:#8b949e; font-size:13px">Context Size (tokens):</label>
+          <input id="context-size" type="number" placeholder="8192" style="width:100%; padding:8px; border:1px solid #30363d; border-radius:4px; background:#0d1117; color:#e6edf3" value="8192" min="512" max="32768">
+          <div style="margin-top:4px; font-size:11px; color:#6e7681">Lower values use less VRAM. Recommended: 2048-8192. Default model max: 40960</div>
         `;
         extra.appendChild(contextRow);
         
@@ -818,9 +952,9 @@ class AssistantPanel {
         const gpuRow = document.createElement('div');
         gpuRow.style.cssText = 'margin-top:12px;';
         gpuRow.innerHTML = `
-          <label style="display:block; margin-bottom:4px; color:#333; font-size:13px">GPU Layers (0 = CPU only, -1 = all layers):</label>
-          <input id="gpu-layers" type="number" placeholder="0" style="width:100%; padding:8px; border:1px solid #e2e2e2; border-radius:4px" value="0">
-          <div style="margin-top:4px; font-size:11px; color:#666">Higher values offload more layers to GPU for faster inference. Use -1 to offload all layers.</div>
+          <label style="display:block; margin-bottom:4px; color:#8b949e; font-size:13px">GPU Layers (0 = CPU only, -1 = all layers):</label>
+          <input id="gpu-layers" type="number" placeholder="0" style="width:100%; padding:8px; border:1px solid #30363d; border-radius:4px; background:#0d1117; color:#e6edf3" value="0">
+          <div style="margin-top:4px; font-size:11px; color:#6e7681">Higher values offload more layers to GPU for faster inference. Use -1 to offload all layers.</div>
         `;
         extra.appendChild(gpuRow);
         
@@ -868,14 +1002,14 @@ class AssistantPanel {
     };
 
     btnCancel.onclick = () => closeModal(null);
-    btnSkip.onclick = () => {
+    btnSkip.onclick = async () => {
       // Save a lightweight config indicating user skipped
       const cfg = { provider: 'none', skipped: true };
-      this.ui.saveAssistantConfig(cfg);
+      await this.ui.saveAssistantConfig(cfg);
       closeModal(cfg);
     };
 
-    btnSave.onclick = () => {
+    btnSave.onclick = async () => {
       const selected = Array.from(providerRadios).find(r => r.checked);
       if (!selected) {
         this.ui.notificationManager.showError('Please select a provider');
@@ -896,11 +1030,16 @@ class AssistantPanel {
       } else if (provider === 'external') {
         const prov = document.getElementById('external-provider');
         const key = document.getElementById('external-api-key');
-        const model = document.getElementById('external-model');
-        
+        // Model is either the populated select or the fallback text input
+        const modelSel = document.getElementById('external-model');
+        const modelInp = document.getElementById('external-model-input');
+        const modelValue = (modelSel && modelSel.style.display !== 'none')
+          ? modelSel.value.trim()
+          : (modelInp ? modelInp.value.trim() : '');
+
         cfg.externalProvider = prov ? prov.value : 'ChatGPT5';
         cfg.apiKey = key ? key.value.trim() : '';
-        cfg.model = model ? model.value.trim() : '';
+        cfg.model = modelValue;
 
         // Map UI selection to backend provider ID
         if (cfg.externalProvider === 'Deepseek') {
@@ -938,7 +1077,7 @@ class AssistantPanel {
       }
 
       // Persist and close
-      this.ui.saveAssistantConfig(cfg);
+      await this.ui.saveAssistantConfig(cfg);
       // Notify main process in case it needs to warm things up
       try { window.api.send('assistant-config-updated', cfg); } catch (_) {}
       closeModal(cfg);
