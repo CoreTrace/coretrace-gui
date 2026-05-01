@@ -13,7 +13,7 @@ const { ipcMain, dialog } = require('electron');
 const fs = require('fs').promises;
 const path = require('path');
 const chokidar = require('chokidar');
-const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT } = require('../utils/fileUtils');
+const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, validatePathInWorkspace } = require('../utils/fileUtils');
 const { formatFileError } = require('../utils/errorUtils');
 
 const FILE_TREE_MAX_DEPTH = 3;
@@ -33,6 +33,24 @@ let fileWatcher = null;
 let currentWatchPath = null;
 
 let workspaceLoadingSeq = 0;
+
+/**
+ * Validates that targetPath is inside the current workspace root (currentWatchPath).
+ * Returns an error response object when validation fails, or null when the path is safe.
+ * When no workspace is open the check is skipped (returns null) so that standalone
+ * file editing—where paths originate from native OS dialogs—continues to work.
+ *
+ * @param {string} targetPath
+ * @returns {{ success: false, error: string }|null}
+ */
+function requireInWorkspace(targetPath) {
+  if (!currentWatchPath) return null; // no workspace open – skip validation
+  const { valid } = validatePathInWorkspace(targetPath, currentWatchPath);
+  if (!valid) {
+    return { success: false, error: 'Access denied: path is outside the current workspace' };
+  }
+  return null;
+}
 
 /**
  * Sets up all IPC handlers for file operations.
@@ -111,6 +129,8 @@ function setupFileHandlers(mainWindow) {
   // Check if a file path exists on disk (lightweight, no content read)
   ipcMain.handle('check-file-exists', async (_event, filePath) => {
     if (!filePath) return { exists: false };
+    const violation = requireInWorkspace(filePath);
+    if (violation) return { exists: false };
     try {
       await fs.access(filePath);
       return { exists: true };
@@ -121,6 +141,8 @@ function setupFileHandlers(mainWindow) {
 
   // Get file tree for refresh (now uses lazy loading)
   ipcMain.handle('get-file-tree', async (event, folderPath) => {
+    const violation = requireInWorkspace(folderPath);
+    if (violation) return { success: false, error: violation.error };
     const requestId = ++workspaceLoadingSeq;
     try {
       try {
@@ -167,6 +189,8 @@ function setupFileHandlers(mainWindow) {
 
   // Get directory contents for lazy loading
   ipcMain.handle('get-directory-contents', async (event, dirPath) => {
+    const violation = requireInWorkspace(dirPath);
+    if (violation) return { success: false, error: violation.error };
     try {
       const contents = await buildFileTree(dirPath, false);
       return {
@@ -272,6 +296,8 @@ function setupFileHandlers(mainWindow) {
 
   // Save file
   ipcMain.handle('save-file', async (event, filePath, content) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
     try {
       await fs.writeFile(filePath, content, 'utf8');
       return { success: true };
@@ -311,6 +337,8 @@ function setupFileHandlers(mainWindow) {
 
   // Create a new empty file in a directory
   ipcMain.handle('create-file', async (event, directoryPath, fileName) => {
+    const violation = requireInWorkspace(directoryPath);
+    if (violation) return violation;
     try {
       if (!directoryPath) return { success: false, error: 'No directory provided' };
       if (!fileName || typeof fileName !== 'string') return { success: false, error: 'Invalid file name' };
@@ -335,6 +363,8 @@ function setupFileHandlers(mainWindow) {
 
   // Create a new folder in a directory
   ipcMain.handle('create-folder', async (event, directoryPath, folderName) => {
+    const violation = requireInWorkspace(directoryPath);
+    if (violation) return violation;
     try {
       if (!directoryPath) return { success: false, error: 'No directory provided' };
       if (!folderName || typeof folderName !== 'string') return { success: false, error: 'Invalid folder name' };
@@ -358,6 +388,8 @@ function setupFileHandlers(mainWindow) {
 
   // Rename a file or folder
   ipcMain.handle('rename-path', async (event, targetPath, newName) => {
+    const violation = requireInWorkspace(targetPath);
+    if (violation) return violation;
     try {
       if (!targetPath) return { success: false, error: 'No target path provided' };
       if (!newName || typeof newName !== 'string') return { success: false, error: 'Invalid new name' };
@@ -382,6 +414,9 @@ function setupFileHandlers(mainWindow) {
 
   // Delete a file or folder (recursive for folders)
   ipcMain.handle('delete-path', async (event, targetPath) => {
+    if (!currentWatchPath) return { success: false, error: 'Access denied: no workspace is currently open' };
+    const violation = requireInWorkspace(targetPath);
+    if (violation) return violation;
     try {
       if (!targetPath) return { success: false, error: 'No target path provided' };
 
@@ -400,6 +435,8 @@ function setupFileHandlers(mainWindow) {
 
   // Read file content
   ipcMain.handle('read-file', async (event, filePath) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
     try {
       const fileInfo = await detectFileEncoding(filePath);
       
@@ -442,6 +479,8 @@ function setupFileHandlers(mainWindow) {
 
   // Load complete file (for large files that were partially loaded)
   ipcMain.handle('load-complete-file', async (event, filePath) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
     try {
       const fileInfo = await detectFileEncoding(filePath);
       
@@ -469,6 +508,8 @@ function setupFileHandlers(mainWindow) {
 
   // Force open file (ignore encoding warnings)
   ipcMain.handle('force-open-file', async (event, filePath) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
     try {
       const fileInfo = await detectFileEncoding(filePath);
       
@@ -510,6 +551,8 @@ function setupFileHandlers(mainWindow) {
 
   // Search in files
   ipcMain.handle('search-in-files', async (event, searchTerm, folderPath) => {
+    const violation = requireInWorkspace(folderPath);
+    if (violation) return violation;
     try {
       const results = await searchInDirectory(folderPath, searchTerm);
       return { success: true, results };
@@ -520,6 +563,8 @@ function setupFileHandlers(mainWindow) {
 
   // Handler to force load full file (bypass size limits)
   ipcMain.handle('force-load-full-file', async (event, filePath) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
     try {
       const buffer = await fs.readFile(filePath);
       const content = buffer.toString('utf8');
