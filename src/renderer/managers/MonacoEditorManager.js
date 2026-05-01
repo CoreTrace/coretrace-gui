@@ -304,7 +304,7 @@ class MonacoEditorManager {
       showFoldingControls: 'mouseover',
       wordWrap: 'off',
       wrappingIndent: 'indent',
-      tabSize: 2,
+      tabSize: 4,
       insertSpaces: true,
       detectIndentation: true,
       trimAutoWhitespace: true,

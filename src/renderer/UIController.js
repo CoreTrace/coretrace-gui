@@ -327,7 +327,93 @@ class UIController {
       console.log('[UIController] Monaco loaded event received, re-wiring editor listener');
       setTimeout(() => {
         wireEditorChangeListener();
+        this.registerMonacoShortcuts();
       }, 100);
+    });
+
+    // Try registering shortcuts immediately too (editor may already be ready)
+    this.registerMonacoShortcuts();
+  }
+
+  /**
+   * Register app keyboard shortcuts directly on the Monaco editor instance.
+   * This is required because Monaco calls stopPropagation() on keydown events
+   * it handles, preventing them from ever reaching the document-level listener.
+   * Using editor.addCommand() overrides Monaco's own bindings for these keys.
+   */
+  registerMonacoShortcuts() {
+    const editor = this.editorManager.getMonacoInstance ? this.editorManager.getMonacoInstance() : null;
+    if (!editor || !window.monaco) return;
+
+    const K = window.monaco.KeyCode;
+    const M = window.monaco.KeyMod;
+
+    // Ctrl+W — close active tab (overrides Monaco's built-in "close editor")
+    editor.addCommand(M.CtrlCmd | K.KeyW, () => {
+      if (this.tabManager.activeTabId) {
+        this.tabManager.closeTab({}, this.tabManager.activeTabId);
+      }
+    });
+
+    // Ctrl+S — save
+    editor.addCommand(M.CtrlCmd | K.KeyS, () => {
+      this.fileOpsManager.saveFile();
+    });
+
+    // Ctrl+Shift+S — save as
+    editor.addCommand(M.CtrlCmd | M.Shift | K.KeyS, () => {
+      this.fileOpsManager.saveAsFile();
+    });
+
+    // Ctrl+N — new file
+    editor.addCommand(M.CtrlCmd | K.KeyN, () => {
+      this.tabManager.createNewFile();
+    });
+
+    // Ctrl+O — open file
+    editor.addCommand(M.CtrlCmd | K.KeyO, () => {
+      this.fileOpsManager.openFile();
+    });
+
+    // Ctrl+B — toggle sidebar
+    editor.addCommand(M.CtrlCmd | K.KeyB, () => {
+      this.toggleSidebar();
+    });
+
+    // Ctrl+J — toggle terminal
+    editor.addCommand(M.CtrlCmd | K.KeyJ, () => {
+      this.terminalManager.toggle();
+      this._syncTerminalActivityIcon();
+    });
+
+    // Ctrl+` — toggle tools panel
+    editor.addCommand(M.CtrlCmd | K.Backquote, () => {
+      this.toggleToolsPanel();
+    });
+
+    // Ctrl+Shift+F — workspace search
+    editor.addCommand(M.CtrlCmd | M.Shift | K.KeyF, () => {
+      this.showSearch();
+    });
+
+    // Ctrl+Shift+E — explorer
+    editor.addCommand(M.CtrlCmd | M.Shift | K.KeyE, () => {
+      this.showExplorer();
+    });
+
+    // Ctrl+Tab — next tab
+    editor.addCommand(M.CtrlCmd | K.Tab, () => {
+      this.tabManager.switchToNextTab();
+    });
+
+    // Ctrl+PageDown — next tab
+    editor.addCommand(M.CtrlCmd | K.PageDown, () => {
+      this.tabManager.switchToNextTab();
+    });
+
+    // Ctrl+PageUp — previous tab
+    editor.addCommand(M.CtrlCmd | K.PageUp, () => {
+      this.tabManager.switchToPreviousTab();
     });
   }
 
@@ -464,16 +550,38 @@ class UIController {
   }
 
   /**
-   * Setup keyboard shortcuts
+   * Setup keyboard shortcuts.
+   * Uses capture phase (true) so this fires BEFORE Monaco's stopPropagation()
+   * and before any focused element (terminal input, Monaco, etc.) can swallow
+   * the event. Each handled shortcut also calls e.stopPropagation() so Monaco
+   * doesn't additionally process the same key.
    */
   setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
+    // Give body keyboard focus so shortcuts work before the user ever
+    // clicks into the Monaco editor.  tabIndex=-1 makes it focusable
+    // programmatically without adding it to the tab order.
+    document.body.tabIndex = -1;
+    document.body.focus({ preventScroll: true });
+
+    // Re-focus body whenever a click lands on a non-focusable element
+    // (toolbar buttons, sidebar items, tabs, title bar, etc.) so that
+    // the webContents keeps OS keyboard focus and events keep firing.
+    window.addEventListener('mousedown', () => {
+      requestAnimationFrame(() => {
+        if (!document.activeElement || document.activeElement === document.body) {
+          document.body.focus({ preventScroll: true });
+        }
+      });
+    }, true);
+
+    window.addEventListener('keydown', (e) => {
       const searchWidget = document.getElementById('search-widget');
       const gotoDialog = document.getElementById('goto-dialog');
       const isSearchVisible = searchWidget.classList.contains('visible');
       const isGotoVisible = gotoDialog.classList.contains('visible');
 
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+        e.stopPropagation();
         e.preventDefault();
         this.togglePerformanceHud();
         return;
@@ -482,20 +590,24 @@ class UIController {
       // Handle Enter key
       if (e.key === 'Enter') {
         if (isSearchVisible) {
+          e.stopPropagation();
           e.preventDefault();
           this.searchManager.searchNext();
         } else if (isGotoVisible) {
+          e.stopPropagation();
           e.preventDefault();
           this.searchManager.performGoToLine();
         }
       }
-      
+
       // Handle Escape key
       if (e.key === 'Escape') {
         if (isSearchVisible) {
+          e.stopPropagation();
           e.preventDefault();
           this.searchManager.closeSearchWidget();
         } else if (isGotoVisible) {
+          e.stopPropagation();
           e.preventDefault();
           this.searchManager.closeGoToLineDialog();
         }
@@ -503,6 +615,7 @@ class UIController {
 
       // Handle F3/Shift+F3 for search navigation
       if (e.key === 'F3' && isSearchVisible) {
+        e.stopPropagation();
         e.preventDefault();
         if (e.shiftKey) {
           this.searchManager.searchPrev();
@@ -512,106 +625,124 @@ class UIController {
       }
 
       // File operations
-      if (e.ctrlKey && e.key === 's') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 's') {
+        e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.saveFile();
       }
-      
-      if (e.ctrlKey && e.key === 'o') {
+
+      if (e.ctrlKey && !e.shiftKey && e.key === 'o') {
+        e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.openFile();
       }
-      
+
       if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+        e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.openWorkspace();
       }
-      
-      if (e.ctrlKey && e.key === 'n') {
+
+      if (e.ctrlKey && !e.shiftKey && e.key === 'n') {
+        e.stopPropagation();
         e.preventDefault();
         this.tabManager.createNewFile();
       }
-      
+
       if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.saveAsFile();
       }
-      
+
       // UI navigation
-      if (e.ctrlKey && e.key === 'b') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'b') {
+        e.stopPropagation();
         e.preventDefault();
         this.toggleSidebar();
       }
-      
-      if (e.altKey && e.key === 'z') {
+
+      if (e.altKey && !e.ctrlKey && e.key === 'z') {
+        e.stopPropagation();
         e.preventDefault();
         this.editorManager.toggleWordWrap();
       }
-      
+
       if (e.shiftKey && e.altKey && e.key === 'F') {
+        e.stopPropagation();
         e.preventDefault();
         const formatted = this.editorManager.formatCode();
         if (this.tabManager.activeTabId) {
           this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
         }
       }
-      
-      if (e.ctrlKey && e.key === 'w') {
+
+      if (e.ctrlKey && !e.shiftKey && e.key === 'w') {
+        e.stopPropagation();
         e.preventDefault();
         if (this.tabManager.activeTabId) {
           this.tabManager.closeTab(e, this.tabManager.activeTabId);
         }
       }
-      
-      if (e.ctrlKey && e.key === 'f') {
+
+      if (e.ctrlKey && !e.shiftKey && e.key === 'f') {
+        e.stopPropagation();
         e.preventDefault();
         const editor = this.editorManager.getMonacoInstance();
         if (editor) editor.getAction('actions.find').run();
       }
 
-      if (e.ctrlKey && e.key === 'g') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'g') {
+        e.stopPropagation();
         e.preventDefault();
         const editor = this.editorManager.getMonacoInstance();
         if (editor) editor.getAction('editor.action.gotoLine').run();
       }
 
       if (e.ctrlKey && e.key === 'Tab') {
+        e.stopPropagation();
         e.preventDefault();
         this.tabManager.switchToNextTab();
       }
-      
+
       // Tab navigation with Ctrl+PageUp/PageDown
       if (e.ctrlKey && e.key === 'PageDown') {
+        e.stopPropagation();
         e.preventDefault();
         this.tabManager.switchToNextTab();
       }
-      
+
       if (e.ctrlKey && e.key === 'PageUp') {
+        e.stopPropagation();
         e.preventDefault();
         this.tabManager.switchToPreviousTab();
       }
-      
-      if (e.ctrlKey && e.key === '`') {
+
+      if (e.ctrlKey && !e.shiftKey && e.key === '`') {
+        e.stopPropagation();
         e.preventDefault();
         this.toggleToolsPanel();
       }
 
-      if (e.ctrlKey && e.key === 'j') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'j') {
+        e.stopPropagation();
         e.preventDefault();
         this.terminalManager.toggle();
         this._syncTerminalActivityIcon();
       }
 
       if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+        e.stopPropagation();
         e.preventDefault();
         this.showSearch();
       }
-      
+
       if (e.ctrlKey && e.shiftKey && e.key === 'E') {
+        e.stopPropagation();
         e.preventDefault();
         this.showExplorer();
       }
-    });
+    }, true);
   }
 
   setupResizing() {
