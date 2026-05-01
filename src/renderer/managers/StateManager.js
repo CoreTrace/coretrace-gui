@@ -223,7 +223,7 @@ class StateManager {
       
       if (result.success) {
         this.lastSaveTime = new Date();
-        console.log('[StateManager] State saved successfully at', this.lastSaveTime.toLocaleTimeString());
+        // console.log('[StateManager] State saved successfully at', this.lastSaveTime.toLocaleTimeString());
         return true;
       } else {
         console.error('[StateManager] Failed to save state:', result.error);
@@ -404,17 +404,20 @@ class StateManager {
    * @param {Array} tabs - Restored tab data array
    */
   async _checkRestoredFilesExist(tabs) {
-    for (const tabData of tabs) {
-      if (!tabData.filePath || !tabData.tabId) continue;
-      try {
-        const res = await window.api.invoke('check-file-exists', tabData.filePath);
-        if (!res.exists) {
-          this.tabManager.markTabMissing(tabData.tabId, true);
+    // Run all checks in parallel instead of sequentially to avoid blocking startup.
+    const checks = tabs
+      .filter(tabData => tabData.filePath && tabData.tabId)
+      .map(async (tabData) => {
+        try {
+          const res = await window.api.invoke('check-file-exists', tabData.filePath);
+          if (!res.exists) {
+            this.tabManager.markTabMissing(tabData.tabId, true);
+          }
+        } catch {
+          // IPC unavailable, skip silently
         }
-      } catch {
-        // IPC unavailable, skip silently
-      }
-    }
+      });
+    await Promise.all(checks);
   }
 
   /**

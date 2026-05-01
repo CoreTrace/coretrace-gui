@@ -577,8 +577,8 @@ class UIController {
     window.addEventListener('keydown', (e) => {
       const searchWidget = document.getElementById('search-widget');
       const gotoDialog = document.getElementById('goto-dialog');
-      const isSearchVisible = searchWidget.classList.contains('visible');
-      const isGotoVisible = gotoDialog.classList.contains('visible');
+      const isSearchVisible = searchWidget?.classList.contains('visible') ?? false;
+      const isGotoVisible = gotoDialog?.classList.contains('visible') ?? false;
 
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
         e.stopPropagation();
@@ -987,8 +987,11 @@ class UIController {
     return this.assistantPanel.getAssistantConfig();
   }
 
-  
-  saveAssistantConfig(cfg) {
+  async loadAssistantConfig() {
+    return this.assistantPanel.loadAssistantConfig();
+  }
+
+  async saveAssistantConfig(cfg) {
     return this.assistantPanel.saveAssistantConfig(cfg);
   }
 
@@ -996,7 +999,7 @@ class UIController {
    * Ensure assistant is configured; if not, show guided setup modal
    */
   async ensureAssistantConfigured() {
-    const cfg = this.getAssistantConfig();
+    const cfg = await this.loadAssistantConfig();
     if (cfg && cfg.provider) return cfg;
     // Show setup guide modal and wait for user to complete or cancel
     return new Promise((resolve) => {

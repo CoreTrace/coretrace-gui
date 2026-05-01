@@ -17,6 +17,7 @@ const providerRegistry = require('../external_llm/ProviderRegistry');
 let localLLM = null;
 let loadedModelPath = null;
 let loadedGpuLayers = null;
+let loadedSystemPrompt = null;
 
 /**
  * Setup IPC handlers for assistant chat
@@ -84,6 +85,65 @@ function setupAssistantHandlers(mainWindow) {
         error: error.message
       };
     }
+  });
+
+  /**
+   * List models available for a given provider using the provider's own API.
+   * Input: { providerId: 'openai'|'deepseek', apiKey: string }
+   * Returns: { success, models: [{ id, owned_by }] }
+   */
+  ipcMain.handle('assistant-list-models', async (_event, { providerId, apiKey }) => {
+    if (!apiKey) return { success: false, error: 'API key is required' };
+
+    const endpointMap = {
+      openai: 'https://api.openai.com',
+      deepseek: 'https://api.deepseek.com',
+    };
+
+    const baseUrl = endpointMap[providerId];
+    if (!baseUrl) return { success: false, error: `Unknown provider: ${providerId}` };
+
+    return new Promise((resolve) => {
+      const url = new URL('/v1/models', baseUrl);
+      const options = {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname,
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            // Both OpenAI and DeepSeek return { data: [{ id, owned_by, ... }] }
+            if (parsed.data && Array.isArray(parsed.data)) {
+              const models = parsed.data
+                .map((m) => ({ id: m.id, owned_by: m.owned_by || '' }))
+                .sort((a, b) => a.id.localeCompare(b.id));
+              resolve({ success: true, models });
+            } else if (parsed.error) {
+              resolve({ success: false, error: parsed.error.message || 'API error' });
+            } else {
+              resolve({ success: false, error: 'Unexpected response format' });
+            }
+          } catch (err) {
+            resolve({ success: false, error: 'Failed to parse response: ' + err.message });
+          }
+        });
+      });
+
+      req.on('error', (err) => resolve({ success: false, error: err.message }));
+      req.on('timeout', () => { req.destroy(); resolve({ success: false, error: 'Request timed out' }); });
+      req.end();
+    });
   });
 
   /**
@@ -255,8 +315,7 @@ async function handleLocalChat(message, config) {
 
       // Initialize llama
       const llama = await getLlama({
-        // Enable verbose logging to see GPU initialization
-        logLevel: 'debug'
+        logLevel: 'warn'
       });
       
       console.log('=== GPU Detection ===');
@@ -296,30 +355,46 @@ async function handleLocalChat(message, config) {
         contextSize: contextSize // Use configured context size instead of model default (40960)
       });
       
-      // Create chat session
+      // Create chat session with system prompt via constructor (not as raw text)
+      const systemPromptValue = config.systemPrompt || undefined;
+      const sequence = context.getSequence();
       const session = new LlamaChatSession({
-        contextSequence: context.getSequence()
+        contextSequence: sequence,
+        systemPrompt: systemPromptValue
       });
 
-      localLLM = { model, context, session };
+      localLLM = { model, context, sequence, session };
       loadedModelPath = modelPath;
       loadedGpuLayers = gpuLayers;
+      loadedSystemPrompt = config.systemPrompt || null;
       console.log('✓ Model ready for inference');
       console.log('=====================');
     } else {
       console.log('Using cached model (same path and GPU layers)');
+      // Recreate session if system prompt changed (without reloading the model)
+      const currentSystemPrompt = config.systemPrompt || null;
+      if (loadedSystemPrompt !== currentSystemPrompt) {
+        console.log('System prompt changed — recreating chat session');
+        // Dispose the old sequence to free it before acquiring a new one.
+        // A LlamaContext only has one sequence slot; calling getSequence() a
+        // second time without disposing the first throws "No sequences left".
+        try { localLLM.sequence.dispose(); } catch { /* ignore */ }
+        const newSequence = localLLM.context.getSequence();
+        localLLM.sequence = newSequence;
+        localLLM.session = new LlamaChatSession({
+          contextSequence: newSequence,
+          systemPrompt: currentSystemPrompt || undefined
+        });
+        loadedSystemPrompt = currentSystemPrompt;
+      }
     }
 
     // Generate response
     console.log('Generating response for:', message);
     
-    // Prepend system prompt to the message if provided
-    let fullMessage = message;
-    if (config.systemPrompt) {
-      fullMessage = `System: ${config.systemPrompt}\n\nUser: ${message}`;
-    }
-    
-    const response = await localLLM.session.prompt(fullMessage);
+    const response = await localLLM.session.prompt(message, {
+      maxTokens: config.maxTokens || 2048
+    });
     
     return {
       success: true,
@@ -341,6 +416,7 @@ async function handleLocalChat(message, config) {
     localLLM = null;
     loadedModelPath = null;
     loadedGpuLayers = null;
+    loadedSystemPrompt = null;
 
     return {
       success: false,
