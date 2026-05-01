@@ -49,8 +49,31 @@
 
 .monaco-editor,
 .monaco-editor .margin,
-.monaco-editor .gutter {
+.monaco-editor .gutter,
+.monaco-editor .overflow-guard,
+.monaco-editor .sticky-widget,
+.monaco-editor .sticky-widget .sticky-line-root {
   background-color: var(--editor-bg) !important;
+}
+
+/* Monaco uses a hidden <textarea class="inputarea"> for keyboard input.
+   Without explicit overrides, Electron on Windows can render it as a visible
+   white box with an orange/yellow OS focus ring in the top-left corner.
+   Suppress every visible property — the textarea is only needed for key events. */
+.monaco-editor .inputarea {
+  opacity: 0 !important;
+  /* clip-path crops to zero area — suppresses native OS textarea chrome
+     (white box + focus ring) that opacity alone cannot fully hide in Electron. */
+  clip-path: inset(50%) !important;
+  background: transparent !important;
+  color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  resize: none !important;
+  caret-color: transparent !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
 .monaco-editor .current-line {
