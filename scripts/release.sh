@@ -21,8 +21,8 @@ RELEASE_INPUT="$1"
 COMMIT_MSG="${2:-chore: prepare release}"
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [ "$CURRENT_BRANCH" != "main" ]; then
-  echo "Error: release must be cut from main (current: $CURRENT_BRANCH)."
+if [ "$CURRENT_BRANCH" != "master" ]; then
+  echo "Error: release must be cut from master (current: $CURRENT_BRANCH)."
   exit 1
 fi
 
@@ -57,8 +57,8 @@ else
   npm version "$NORMALIZED_RELEASE" -m "chore(release): %s"
 fi
 
-echo "Pushing commit(s) to origin/main..."
-git push origin main --follow-tags
+echo "Pushing commit(s) to origin/master..."
+git push origin master --follow-tags
 
 if git rev-parse "$TARGET_TAG" >/dev/null 2>&1; then
   echo "Pushing tag ${TARGET_TAG} to origin..."
