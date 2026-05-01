@@ -114,4 +114,8 @@ IPC channel reference (all renderer ↔ main channels): [docs/ipc-channels.md](d
 
 ## License
 
-// To determine
+Licensed under the Apache License, Version 2.0.
+
+You may obtain a copy of the License in this repository at [LICENSE](LICENSE) or at:
+
+http://www.apache.org/licenses/LICENSE-2.0

@@ -35,7 +35,7 @@
     "electron"
   ],
   "author": "CTrace GUI Team",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "chokidar": "^4.0.3",
     "electron-updater": "^6.8.3",

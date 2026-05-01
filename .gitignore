@@ -7,3 +7,4 @@ node_modules
 .claw-cache
 .claw-logs
 ctrace-report.txt
+bundle.js
