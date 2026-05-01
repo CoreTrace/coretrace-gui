@@ -94,6 +94,12 @@
   justify-content: center;
 }
 
+.file-tree-item .icon .file-icon-svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .file-tree-item .name {
   flex: 1;
   white-space: nowrap;

@@ -40,23 +40,53 @@ function updateFileTypeStatus(filename) {
 function getFileIcon(filename) {
   const ext = filename.split('.').pop().toLowerCase();
   const iconMap = {
-    'js': '🟨',
-    'ts': '🔷',
-    'html': '🟧',
-    'css': '🎨',
-    'json': '📋',
-    'md': '📝',
-    'py': '🐍',
-    'cpp': '⚙️',
-    'c': '⚙️',
-    'h': '📄',
-    'java': '☕',
-    'php': '🐘',
-    'rb': '💎',
-    'go': '🐹',
-    'rs': '🦀'
+    js: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg',
+    ts: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg',
+    html: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg',
+    css: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg',
+    py: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg',
+    cpp: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+    c: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
+    cc: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+    cxx: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+    h: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
+    java: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg',
+    php: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-original.svg',
+    go: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original.svg',
+    rs: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-plain.svg',
+    md: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/markdown/markdown-original.svg',
+    json: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/json/json-original.svg',
+    sh: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg'
   };
-  return iconMap[ext] || '📄';
+  const fallbackIconMap = {
+    js: '🟨',
+    ts: '🔷',
+    html: '🟧',
+    css: '🎨',
+    json: '📋',
+    md: '📝',
+    py: '🐍',
+    cpp: '⚙️',
+    c: '⚙️',
+    h: '📄',
+    java: '☕',
+    php: '🐘',
+    rb: '💎',
+    go: '🐹',
+    rs: '🦀',
+    cc: '⚙️',
+    cxx: '⚙️',
+    hpp: '📄',
+    hh: '📄',
+    hxx: '📄'
+  };
+
+  if (iconMap[ext]) {
+    const safeExt = ext.replace(/[^a-z0-9]/gi, '');
+    return `<img src="${iconMap[ext]}" alt="${safeExt} icon" class="file-icon-svg" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='${fallbackIconMap[ext] || '📄'}'">`;
+  }
+
+  return fallbackIconMap[ext] || '📄';
 }
 
 /**

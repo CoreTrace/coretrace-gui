@@ -232,31 +232,54 @@ async function searchInDirectory(dirPath, searchTerm, maxResults = 100) {
         if (stats.isDirectory()) {
           await searchRecursively(itemPath, depth + 1);
         } else if (stats.isFile()) {
-          // Only search in text files
+          // Skip known binary extensions immediately (fast path)
           const ext = path.extname(item).toLowerCase();
-          const textExtensions = ['.txt', '.js', '.ts', '.html', '.css', '.json', '.md', '.py', '.cpp', '.c', '.h', '.java', '.php', '.rb', '.go', '.rs'];
-          
-          if (textExtensions.includes(ext) || !ext) {
-            try {
-              const content = await fs.readFile(itemPath, 'utf8');
-              const lines = content.split('\n');
-              
-              lines.forEach((line, lineNumber) => {
-                const matches = line.match(searchRegex);
-                if (matches) {
-                  results.push({
-                    file: itemPath,
-                    fileName: item,
-                    line: lineNumber + 1,
-                    content: line.trim(),
-                    matches: matches.length
-                  });
-                }
-              });
-            } catch (error) {
-              // Skip files that can't be read as text (binary, locked, permission-denied, etc.)
-              console.warn(`[searchInDirectory] Skipping unreadable file "${path.normalize(itemPath)}": [${error.code || 'ERR'}] ${error.message}`);
+          const binaryExtensions = new Set([
+            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
+            '.pdf', '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
+            '.exe', '.dll', '.so', '.dylib', '.bin', '.obj', '.o', '.a',
+            '.wasm', '.class', '.jar', '.war', '.ear',
+            '.mp3', '.mp4', '.wav', '.ogg', '.flac', '.mkv', '.avi', '.mov',
+            '.ttf', '.otf', '.woff', '.woff2', '.eot',
+            '.db', '.sqlite', '.sqlite3',
+            '.pyc', '.pyo',
+            '.node'
+          ]);
+
+          if (binaryExtensions.has(ext)) continue;
+
+          try {
+            // Binary detection: sample the first 1 KB before reading the whole file
+            const fd = await fs.open(itemPath, 'r');
+            const sampleBuf = Buffer.alloc(1024);
+            const { bytesRead } = await fd.read(sampleBuf, 0, 1024, 0);
+            await fd.close();
+            if (bytesRead > 0 && !isValidUTF8(sampleBuf.slice(0, bytesRead))) {
+              continue; // binary file — skip
             }
+          } catch {
+            continue; // can't sample — skip
+          }
+
+          try {
+            const content = await fs.readFile(itemPath, 'utf8');
+            const lines = content.split('\n');
+
+            lines.forEach((line, lineNumber) => {
+              const matches = line.match(searchRegex);
+              if (matches) {
+                results.push({
+                  file: itemPath,
+                  fileName: item,
+                  line: lineNumber + 1,
+                  content: line.trim(),
+                  matches: matches.length
+                });
+              }
+            });
+          } catch (error) {
+            // Skip files that can't be read as text (binary, locked, permission-denied, etc.)
+            console.warn(`[searchInDirectory] Skipping unreadable file "${path.normalize(itemPath)}": [${error.code || 'ERR'}] ${error.message}`);
           }
         }
       }
@@ -269,10 +292,51 @@ async function searchInDirectory(dirPath, searchTerm, maxResults = 100) {
   return results;
 }
 
+/**
+ * Validates that a path is contained within the given workspace directory.
+ *
+ * Both paths are resolved to their absolute, normalized forms before comparison
+ * to neutralize path traversal sequences (".."), mixed separators, and
+ * URL-encoded characters that could be used to escape the workspace root.
+ *
+ * @param {string} targetPath - The path to validate (may be relative or contain "..").
+ * @param {string} workspacePath - The workspace root that targetPath must reside within.
+ * @returns {{ valid: boolean, resolvedPath: string }} Whether the path is safe and its resolved absolute form.
+ */
+function validatePathInWorkspace(targetPath, workspacePath) {
+  if (!targetPath || typeof targetPath !== 'string') {
+    return { valid: false, resolvedPath: '' };
+  }
+  if (!workspacePath || typeof workspacePath !== 'string') {
+    return { valid: false, resolvedPath: '' };
+  }
+
+  const resolvedTarget    = path.resolve(targetPath);
+  const resolvedWorkspace = path.resolve(workspacePath);
+
+  // Append the platform separator to prevent prefix-collision attacks where a
+  // directory name is a strict prefix of another (e.g. /workspace vs /workspace-extra).
+  const workspacePrefix = resolvedWorkspace.endsWith(path.sep)
+    ? resolvedWorkspace
+    : resolvedWorkspace + path.sep;
+
+  // NTFS (Windows) paths are case-insensitive; normalise before comparing.
+  const norm = process.platform === 'win32'
+    ? (p) => p.toLowerCase()
+    : (p) => p;
+
+  const valid =
+    norm(resolvedTarget) === norm(resolvedWorkspace) ||
+    norm(resolvedTarget).startsWith(norm(workspacePrefix));
+
+  return { valid, resolvedPath: resolvedTarget };
+}
+
 module.exports = {
   detectFileEncoding,
   buildFileTree,
   searchInDirectory,
   isValidUTF8,
+  validatePathInWorkspace,
   FILE_SIZE_LIMIT
 };
