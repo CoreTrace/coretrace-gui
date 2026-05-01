@@ -11,9 +11,11 @@
 
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
-const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, validatePathInWorkspace } = require('../utils/fileUtils');
+const ignore = require('ignore');
+const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, LARGE_FILE_THRESHOLD, validatePathInWorkspace } = require('../utils/fileUtils');
 const { formatFileError } = require('../utils/errorUtils');
 
 const FILE_TREE_MAX_DEPTH = 3;
@@ -586,6 +588,24 @@ function setupFileHandlers(mainWindow) {
 }
 
 /**
+ * Load .gitignore rules from the workspace root synchronously.
+ * Returns an `ignore` instance; if no .gitignore exists the instance is empty.
+ * @param {string} workspacePath
+ * @returns {import('ignore').Ignore}
+ */
+function loadGitignoreRules(workspacePath) {
+  const ig = ignore();
+  try {
+    const gitignorePath = path.join(workspacePath, '.gitignore');
+    const content = fsSync.readFileSync(gitignorePath, 'utf8');
+    ig.add(content);
+  } catch (_) {
+    // No .gitignore or unreadable — nothing extra ignored
+  }
+  return ig;
+}
+
+/**
  * Start watching workspace for file changes
  * @param {string} workspacePath - Path to watch
  * @param {BrowserWindow} mainWindow - Main window reference
@@ -593,16 +613,28 @@ function setupFileHandlers(mainWindow) {
 function startWatchingWorkspace(workspacePath, mainWindow, watchDepth = FILE_TREE_MAX_DEPTH) {
   // Stop existing watcher if any
   stopWatchingWorkspace();
-  
+
   currentWatchPath = workspacePath;
-  
+
+  // Load .gitignore rules once at watcher start
+  const ig = loadGitignoreRules(workspacePath);
+  const isGitignored = (filePath) => {
+    try {
+      const rel = path.relative(workspacePath, filePath).replace(/\\/g, '/');
+      if (!rel || rel.startsWith('..')) return false;
+      return ig.ignores(rel);
+    } catch (_) {
+      return false;
+    }
+  };
+
   // Create new watcher
   fileWatcher = chokidar.watch(workspacePath, {
     ignoreInitial: true,
     ignored: [
-      /(^|[\/\\])\../, // ignore hidden files
-      /node_modules/,  // ignore node_modules
-      /\.git/,         // ignore git metadata
+      /(^|[\/\\])\../,               // hidden files/dirs
+      /node_modules/,
+      /\.git/,
       /dist/,
       /build/,
       /out/,
@@ -614,17 +646,18 @@ function startWatchingWorkspace(workspacePath, mainWindow, watchDepth = FILE_TRE
       /__pycache__/,
       /\.venv/,
       /venv/,
-      /My Music/,      // ignore Windows system folders
+      /My Music/,
       /My Pictures/,
       /My Videos/,
       /\$RECYCLE\.BIN/,
-      /System Volume Information/
+      /System Volume Information/,
+      isGitignored               // .gitignore rules
     ],
-    depth: watchDepth, // keep consistent with file tree depth
-    ignorePermissionErrors: true // ignore permission errors
+    depth: watchDepth,
+    ignorePermissionErrors: true
   });
-  
-  // Debounce function to avoid too many updates
+
+  // Debounce: coalesce rapid FS events before notifying renderer
   let updateTimeout;
   let lastChangedPath = null;
   const debouncedUpdate = (changedPath) => {
@@ -632,8 +665,6 @@ function startWatchingWorkspace(workspacePath, mainWindow, watchDepth = FILE_TRE
     lastChangedPath = changedPath || lastChangedPath;
     updateTimeout = setTimeout(async () => {
       try {
-        // Avoid rebuilding and sending the entire file tree on every FS event.
-        // The renderer can decide when to refresh and pull a new tree.
         mainWindow.webContents.send('workspace-changed', {
           success: true,
           folderPath: workspacePath,
@@ -642,9 +673,9 @@ function startWatchingWorkspace(workspacePath, mainWindow, watchDepth = FILE_TRE
       } catch (error) {
         console.error('Error updating file tree:', error);
       }
-    }, 750); // 750ms debounce
+    }, 300);
   };
-  
+
   // Listen for file system events
   fileWatcher
     .on('add', debouncedUpdate)
@@ -652,7 +683,7 @@ function startWatchingWorkspace(workspacePath, mainWindow, watchDepth = FILE_TRE
     .on('addDir', debouncedUpdate)
     .on('unlinkDir', debouncedUpdate)
     .on('error', error => console.error('File watcher error:', error));
-  
+
   console.log('Started watching workspace:', workspacePath);
 }
 
