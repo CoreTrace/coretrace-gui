@@ -44,7 +44,9 @@ test('open-folder-dialog handler returns tree and starts watcher', async (t) => 
     buildFileTree: async (folderPath) => [{ name: 'file.txt', path: `${folderPath}/file.txt`, type: 'file' }],
     detectFileEncoding: async () => ({ isUTF8: true, size: 10, buffer: Buffer.from('hello world') }),
     searchInDirectory: async () => [{ file: '/workspace/project/file.txt', content: 'match' }],
-    FILE_SIZE_LIMIT: 5
+    FILE_SIZE_LIMIT: 5,
+    LARGE_FILE_THRESHOLD: 5 * 1024 * 1024,
+    validatePathInWorkspace: (targetPath) => ({ valid: true, resolvedPath: targetPath })
   };
 
   const chokidarStub = {
@@ -110,7 +112,9 @@ test('open-file-dialog returns encoding warning when detectFileEncoding rejects 
     buildFileTree: async () => [],
     detectFileEncoding: async () => ({ isUTF8: false, size: 20, buffer: Buffer.alloc(0) }),
     searchInDirectory: async () => [],
-    FILE_SIZE_LIMIT: 5
+    FILE_SIZE_LIMIT: 5,
+    LARGE_FILE_THRESHOLD: 5 * 1024 * 1024,
+    validatePathInWorkspace: (targetPath) => ({ valid: true, resolvedPath: targetPath })
   };
 
   const modulePath = path.join(__dirname, '../src/main/ipc/fileHandlers.js');

@@ -24,7 +24,11 @@ test('updateFileTypeStatus writes to DOM element when present', () => {
 });
 
 test('getFileIcon returns emoji and formatFileSize formats numbers', () => {
-  assert.strictEqual(getFileIcon('file.js'), '🟨');
+  // Known extensions return an <img> tag with emoji onerror fallback
+  const jsIcon = getFileIcon('file.js');
+  assert.ok(jsIcon.includes('javascript-original.svg'), 'js icon should reference SVG');
+  assert.ok(jsIcon.includes("this.outerHTML='🟨'"), 'js icon should have emoji fallback');
+  // Unknown extensions return the emoji directly
   assert.strictEqual(getFileIcon('unknown.xyz'), '📄');
   assert.strictEqual(formatFileSize(0), '0 Bytes');
   assert.strictEqual(formatFileSize(1024), '1 KB');

@@ -233,19 +233,18 @@ function setupFileHandlers(mainWindow) {
     if (!result.canceled && result.filePaths.length > 0) {
       const filePath = result.filePaths[0];
       try {
-        // Pre-check size — avoid loading huge files without user confirmation
-        const stat = await fs.stat(filePath);
-        if (stat.size > LARGE_FILE_THRESHOLD) {
+        const fileInfo = await detectFileEncoding(filePath);
+
+        // Large-file gate — use size already obtained by detectFileEncoding
+        if (fileInfo.size > LARGE_FILE_THRESHOLD) {
           return {
             success: true,
             warning: 'large-file',
             filePath,
             fileName: path.basename(filePath),
-            totalSize: stat.size
+            totalSize: fileInfo.size
           };
         }
-
-        const fileInfo = await detectFileEncoding(filePath);
 
         if (!fileInfo.isUTF8) {
           // File is not UTF-8, return warning info
@@ -452,20 +451,19 @@ function setupFileHandlers(mainWindow) {
     const violation = requireInWorkspace(filePath);
     if (violation) return violation;
     try {
-      // Pre-check size — avoid loading huge files without user confirmation
-      const stat = await fs.stat(filePath);
-      if (stat.size > LARGE_FILE_THRESHOLD) {
+      const fileInfo = await detectFileEncoding(filePath);
+
+      // Large-file gate — use size already obtained by detectFileEncoding
+      if (fileInfo.size > LARGE_FILE_THRESHOLD) {
         return {
           success: true,
           warning: 'large-file',
           filePath,
           fileName: path.basename(filePath),
-          totalSize: stat.size
+          totalSize: fileInfo.size
         };
       }
 
-      const fileInfo = await detectFileEncoding(filePath);
-      
       if (!fileInfo.isUTF8) {
         // File is not UTF-8, return warning info
         return {
