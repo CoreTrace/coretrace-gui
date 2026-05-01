@@ -37,17 +37,17 @@
   "author": "CTrace GUI Team",
   "license": "Apache-2.0",
   "dependencies": {
-    "chokidar": "^4.0.3",
+    "chokidar": "^5.0.0",
     "electron-updater": "^6.8.3",
-    "monaco-editor": "^0.55.1",
-    "node-llama-cpp": "^3.14.2",
+    "monaco-editor": "^0.53.0",
+    "node-llama-cpp": "^3.18.1",
     "node-pty": "^1.1.0",
     "tar": "^7.5.12",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
-    "electron": "^38.0.0",
-    "electron-builder": "^26.0.12",
+    "electron": "^41.4.0",
+    "electron-builder": "^26.8.1",
     "electron-reload": "^2.0.0-alpha.1",
     "jsdoc": "^4.0.4"
   },
