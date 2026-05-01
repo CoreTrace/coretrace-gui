@@ -388,6 +388,8 @@ class TabManager {
     this.welcomeScreen.style.display = 'flex';
     this.editorArea.style.display = 'none';
     this.tabsContainer.style.display = 'none';
+    const banner = document.getElementById('partial-file-banner');
+    if (banner) banner.classList.remove('visible');
   }
 
   /**
@@ -447,7 +449,7 @@ class TabManager {
       const { fileInfo } = tabData;
       let statusText = 'UTF-8';
       let statusStyle = '';
-      
+
       if (fileInfo.encodingWarning) {
         statusText = '⚠️ Non-UTF8';
         statusStyle = 'color: #f85149; cursor: pointer;';
@@ -465,9 +467,34 @@ class TabManager {
         fileStatusElement.onclick = null;
         fileStatusElement.title = '';
       }
-      
+
       fileStatusElement.textContent = statusText;
       fileStatusElement.style.cssText = statusStyle;
+    }
+
+    // Show or hide the partial-file banner
+    this._updatePartialBanner(tabData);
+  }
+
+  _updatePartialBanner(tabData) {
+    const banner = document.getElementById('partial-file-banner');
+    const msg = document.getElementById('partial-file-msg');
+    const btn = document.getElementById('partial-load-more-btn');
+    if (!banner) return;
+
+    const fileInfo = tabData && tabData.fileInfo;
+    if (fileInfo && fileInfo.isPartial) {
+      const loadedMB = (fileInfo.loadedSize / (1024 * 1024)).toFixed(1);
+      const totalMB = (fileInfo.totalSize / (1024 * 1024)).toFixed(1);
+      if (msg) msg.textContent = `Showing first ${loadedMB} MB of ${totalMB} MB`;
+      if (btn) {
+        btn.disabled = false;
+        btn.onclick = () => this.onLoadNextChunk(tabData.filePath, fileInfo.loadedSize);
+      }
+      banner.classList.add('visible');
+    } else {
+      banner.classList.remove('visible');
+      if (btn) btn.onclick = null;
     }
   }
 
@@ -478,6 +505,16 @@ class TabManager {
   onLoadFullFile(filePath) {
     // This will be set by the main UI controller
     console.log('Load full file requested for:', filePath);
+  }
+
+  /**
+   * Callback for loading the next chunk (to be implemented by parent)
+   * @param {string} filePath - File path
+   * @param {number} offset - Byte offset to read from
+   */
+  onLoadNextChunk(filePath, offset) {
+    // This will be set by the main UI controller
+    console.log('Load next chunk requested:', filePath, 'offset:', offset);
   }
 
   /**

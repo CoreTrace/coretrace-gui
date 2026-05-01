@@ -50,6 +50,8 @@ const INVOKE_CHANNELS = [
   'save-file',
   'save-file-as',
   'read-file',
+  'read-large-file',
+  'read-file-chunk',
   'force-open-file',
   'force-load-full-file',
   'get-directory-contents',
