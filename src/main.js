@@ -8,7 +8,7 @@
  * @version 1.0.0
  */
 
-const { app, BrowserWindow, nativeImage, dialog, shell } = require('electron');
+const { app, BrowserWindow, nativeImage, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
@@ -108,6 +108,9 @@ function createWindow () {
 
   win.webContents.once('did-finish-load', () => {
     logStartupMilestone('Renderer did-finish-load');
+    // Give the renderer keyboard focus immediately so shortcuts work
+    // without requiring the user to click inside the editor first.
+    win.webContents.focus();
   });
 
   logStartupMilestone('Calling loadFile(src/index.html)');
@@ -701,6 +704,10 @@ app.on('before-quit', async (event) => {
 
 app.whenReady().then(async () => {
   logStartupMilestone('app.whenReady resolved');
+  // Remove the default application menu so that Electron's built-in
+  // Ctrl+W "Close Window" accelerator does not fire.  The renderer handles
+  // Ctrl+W itself (closes the active editor tab).
+  Menu.setApplicationMenu(null);
   // Create window first
   mainWindow = createWindow();
   

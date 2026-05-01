@@ -349,16 +349,25 @@ class SearchManager {
 
     let html = '<div class="search-results-list">';
 
-    Object.keys(groupedResults).forEach((file) => {
+    Object.keys(groupedResults).forEach((file, fileIndex) => {
       const fileResults = groupedResults[file];
       const fileName = file.split(/[/\\]/).pop();
       const relativePath = file.replace(this.currentWorkspacePath, '').replace(/^[/\\]/, '');
       const escapedPath = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const matchesId = `sr-matches-${fileIndex}`;
+      // Collapse groups with more than one match; single matches stay visible
+      const collapsed = fileResults.length > 1;
 
       html += '<div class="search-result-item">';
+      html += '<div class="search-result-header">';
+      html += `<button class="search-result-toggle" type="button" aria-expanded="${!collapsed}" aria-controls="${matchesId}" onclick="window.searchManager.toggleSearchGroup(this, '${matchesId}')">`;
+      html += `<span class="search-result-toggle-icon">${collapsed ? '▶' : '▼'}</span>`;
+      html += '</button>';
       html += `<button class="search-result-file" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${fileResults[0].line})">${this.escapeHtml(fileName)}</button>`;
-      html += `<div class="search-result-line">${this.escapeHtml(relativePath)} • ${fileResults.length} result${fileResults.length > 1 ? 's' : ''}</div>`;
-      html += '<div class="search-result-matches">';
+      html += `<span class="search-result-count">${fileResults.length}</span>`;
+      html += '</div>';
+      html += `<div class="search-result-line">${this.escapeHtml(relativePath)}</div>`;
+      html += `<div class="search-result-matches" id="${matchesId}"${collapsed ? ' style="display:none"' : ''}>`;
 
       fileResults.forEach((result) => {
         const highlightedContent = this.escapeHtml(result.content).replace(
@@ -378,6 +387,21 @@ class SearchManager {
 
     html += '</div>';
     searchResults.innerHTML = html;
+  }
+
+  /**
+   * Toggle collapsed/expanded state of a file's match list.
+   * @param {HTMLElement} btn - The toggle button element
+   * @param {string} matchesId - The id of the matches container to toggle
+   */
+  toggleSearchGroup(btn, matchesId) {
+    const matches = document.getElementById(matchesId);
+    if (!matches) return;
+    const isCollapsed = matches.style.display === 'none';
+    matches.style.display = isCollapsed ? '' : 'none';
+    btn.setAttribute('aria-expanded', isCollapsed ? 'true' : 'false');
+    const icon = btn.querySelector('.search-result-toggle-icon');
+    if (icon) icon.textContent = isCollapsed ? '▼' : '▶';
   }
 
   /**
