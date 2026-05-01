@@ -265,6 +265,10 @@ class UIController {
       this.fileOpsManager.loadFullFile(filePath);
     };
 
+    this.tabManager.onLoadNextChunk = (filePath, offset) => {
+      this.fileOpsManager.loadNextChunk(filePath, offset);
+    };
+
     // Auto-save safety net: flush pending edits when switching/closing tabs.
     // (Auto-save debounce can otherwise be skipped if the user switches/close quickly.)
     this.tabManager.onBeforeTabSwitch = async (fromTabId) => {
@@ -577,8 +581,8 @@ class UIController {
     window.addEventListener('keydown', (e) => {
       const searchWidget = document.getElementById('search-widget');
       const gotoDialog = document.getElementById('goto-dialog');
-      const isSearchVisible = searchWidget.classList.contains('visible');
-      const isGotoVisible = gotoDialog.classList.contains('visible');
+      const isSearchVisible = searchWidget?.classList.contains('visible') ?? false;
+      const isGotoVisible = gotoDialog?.classList.contains('visible') ?? false;
 
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
         e.stopPropagation();
