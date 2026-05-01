@@ -265,6 +265,10 @@ class UIController {
       this.fileOpsManager.loadFullFile(filePath);
     };
 
+    this.tabManager.onLoadNextChunk = (filePath, offset) => {
+      this.fileOpsManager.loadNextChunk(filePath, offset);
+    };
+
     // Auto-save safety net: flush pending edits when switching/closing tabs.
     // (Auto-save debounce can otherwise be skipped if the user switches/close quickly.)
     this.tabManager.onBeforeTabSwitch = async (fromTabId) => {

@@ -13,7 +13,7 @@ const { ipcMain, dialog } = require('electron');
 const fs = require('fs').promises;
 const path = require('path');
 const chokidar = require('chokidar');
-const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, validatePathInWorkspace } = require('../utils/fileUtils');
+const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, LARGE_FILE_THRESHOLD, validatePathInWorkspace } = require('../utils/fileUtils');
 const { formatFileError } = require('../utils/errorUtils');
 
 const FILE_TREE_MAX_DEPTH = 3;
@@ -231,8 +231,20 @@ function setupFileHandlers(mainWindow) {
     if (!result.canceled && result.filePaths.length > 0) {
       const filePath = result.filePaths[0];
       try {
+        // Pre-check size — avoid loading huge files without user confirmation
+        const stat = await fs.stat(filePath);
+        if (stat.size > LARGE_FILE_THRESHOLD) {
+          return {
+            success: true,
+            warning: 'large-file',
+            filePath,
+            fileName: path.basename(filePath),
+            totalSize: stat.size
+          };
+        }
+
         const fileInfo = await detectFileEncoding(filePath);
-        
+
         if (!fileInfo.isUTF8) {
           // File is not UTF-8, return warning info
           return {
@@ -243,10 +255,10 @@ function setupFileHandlers(mainWindow) {
             message: 'This file appears to contain non-UTF8 characters. Opening it may cause display issues or data corruption.'
           };
         }
-        
+
         let content;
         let isPartial = false;
-        
+
         if (fileInfo.size > FILE_SIZE_LIMIT) {
           // File is large, load only first part
           const partialBuffer = fileInfo.buffer.slice(0, FILE_SIZE_LIMIT);
@@ -256,7 +268,7 @@ function setupFileHandlers(mainWindow) {
           // File is small enough, load entirely
           content = fileInfo.buffer.toString('utf8');
         }
-        
+
         return {
           success: true,
           filePath,
@@ -438,6 +450,18 @@ function setupFileHandlers(mainWindow) {
     const violation = requireInWorkspace(filePath);
     if (violation) return violation;
     try {
+      // Pre-check size — avoid loading huge files without user confirmation
+      const stat = await fs.stat(filePath);
+      if (stat.size > LARGE_FILE_THRESHOLD) {
+        return {
+          success: true,
+          warning: 'large-file',
+          filePath,
+          fileName: path.basename(filePath),
+          totalSize: stat.size
+        };
+      }
+
       const fileInfo = await detectFileEncoding(filePath);
       
       if (!fileInfo.isUTF8) {
@@ -503,6 +527,74 @@ function setupFileHandlers(mainWindow) {
       };
     } catch (error) {
       return { success: false, error: formatFileError(error, filePath, 'load') };
+    }
+  });
+
+  // Read large file (user confirmed — skips the size pre-check)
+  ipcMain.handle('read-large-file', async (event, filePath) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
+    try {
+      const fileInfo = await detectFileEncoding(filePath);
+
+      if (!fileInfo.isUTF8) {
+        return {
+          success: true,
+          warning: 'encoding',
+          filePath,
+          fileName: path.basename(filePath),
+          message: 'This file appears to contain non-UTF8 characters. Opening it may cause display issues or data corruption.'
+        };
+      }
+
+      const isPartial = fileInfo.size > FILE_SIZE_LIMIT;
+      const content = fileInfo.buffer.toString('utf8');
+
+      return {
+        success: true,
+        content,
+        fileName: path.basename(filePath),
+        isPartial,
+        totalSize: fileInfo.size,
+        loadedSize: fileInfo.buffer.length
+      };
+    } catch (error) {
+      return { success: false, error: formatFileError(error, filePath, 'read') };
+    }
+  });
+
+  // Read the next chunk of a file starting at a byte offset
+  ipcMain.handle('read-file-chunk', async (event, filePath, offset) => {
+    const violation = requireInWorkspace(filePath);
+    if (violation) return violation;
+    try {
+      const stat = await fs.stat(filePath);
+      const totalSize = stat.size;
+
+      if (offset >= totalSize) {
+        return { success: true, content: '', loadedSize: 0, newOffset: offset, isMore: false, totalSize };
+      }
+
+      const readSize = Math.min(FILE_SIZE_LIMIT, totalSize - offset);
+      const fd = await fs.open(filePath, 'r');
+      try {
+        const buffer = Buffer.allocUnsafe(readSize);
+        const { bytesRead } = await fd.read(buffer, 0, readSize, offset);
+        const content = buffer.slice(0, bytesRead).toString('utf8');
+        const newOffset = offset + bytesRead;
+        return {
+          success: true,
+          content,
+          loadedSize: bytesRead,
+          newOffset,
+          isMore: newOffset < totalSize,
+          totalSize
+        };
+      } finally {
+        await fd.close();
+      }
+    } catch (error) {
+      return { success: false, error: formatFileError(error, filePath, 'read chunk') };
     }
   });
 

@@ -142,11 +142,43 @@ class FileOperationsManager {
       
       if (result.success) {
         console.log('File opened successfully, checking for warnings...');
-        if (result.warning === 'encoding') {
+        if (result.warning === 'large-file') {
+          const sizeStr = this.formatFileSize(result.totalSize);
+          const userChoice = await this.notificationManager.showLargeFileWarningDialog(result.fileName, sizeStr);
+          if (userChoice === 'cancel') return;
+          const largeResult = await window.api.invoke('read-large-file', result.filePath);
+          if (largeResult.success && largeResult.warning !== 'encoding') {
+            this.openFileInTab(result.filePath, largeResult.content, largeResult.fileName, {
+              isPartial: largeResult.isPartial,
+              totalSize: largeResult.totalSize,
+              loadedSize: largeResult.loadedSize
+            });
+            this.notificationManager.showInfo(`Large file "${largeResult.fileName}" partially loaded (${this.formatFileSize(largeResult.loadedSize)} of ${sizeStr})`);
+          } else if (largeResult.warning === 'encoding') {
+            const encChoice = await this.notificationManager.showEncodingWarningDialog();
+            if (encChoice === 'yes') {
+              const forceResult = await window.api.invoke('force-open-file', result.filePath);
+              if (forceResult.success) {
+                this.openFileInTab(result.filePath, forceResult.content, forceResult.fileName, {
+                  isPartial: forceResult.isPartial,
+                  totalSize: forceResult.totalSize,
+                  loadedSize: forceResult.loadedSize,
+                  encodingWarning: forceResult.encodingWarning
+                });
+                this.notificationManager.showWarning(`File "${forceResult.fileName}" opened with encoding warnings`);
+              } else {
+                this.notificationManager.showError('Failed to open file: ' + forceResult.error);
+              }
+            }
+          } else {
+            this.notificationManager.showError('Failed to open file: ' + largeResult.error);
+          }
+          return result;
+        } else if (result.warning === 'encoding') {
           console.log('Encoding warning detected, showing dialog...');
           const userChoice = await this.notificationManager.showEncodingWarningDialog();
           console.log('User choice:', userChoice);
-          
+
           if (userChoice === 'no') {
             console.log('User chose not to open file');
             return;
@@ -154,7 +186,7 @@ class FileOperationsManager {
             console.log('User chose to open file anyway');
             const forceResult = await window.api.invoke('force-open-file', result.filePath);
             console.log('Force open result:', forceResult);
-            
+
             if (forceResult.success) {
               this.openFileInTab(forceResult.filePath, forceResult.content, forceResult.fileName, {
                 isPartial: forceResult.isPartial,
@@ -174,14 +206,14 @@ class FileOperationsManager {
             totalSize: result.totalSize,
             loadedSize: result.loadedSize
           });
-          
+
           if (result.isPartial) {
             this.notificationManager.showInfo(`Large file "${result.fileName}" partially loaded (${this.formatFileSize(result.loadedSize)} of ${this.formatFileSize(result.totalSize)})`);
           } else {
             this.notificationManager.showSuccess(`File "${result.fileName}" opened successfully`);
           }
         }
-        
+
         return result;
       } else if (!result.canceled) {
         this.notificationManager.showError('Failed to open file: ' + (result.error || 'Unknown error'));
@@ -342,11 +374,44 @@ class FileOperationsManager {
       console.log('File tree read result:', result);
       
       if (result.success) {
-        if (result.warning === 'encoding') {
+        if (result.warning === 'large-file') {
+          const sizeStr = this.formatFileSize(result.totalSize);
+          const userChoice = await this.notificationManager.showLargeFileWarningDialog(result.fileName, sizeStr);
+          if (userChoice === 'cancel') return;
+          const largeResult = await window.api.invoke('read-large-file', filePath);
+          if (largeResult.success && largeResult.warning !== 'encoding') {
+            const tabId = this.openFileInTab(filePath, largeResult.content, largeResult.fileName, {
+              isPartial: largeResult.isPartial,
+              totalSize: largeResult.totalSize,
+              loadedSize: largeResult.loadedSize
+            });
+            this.notificationManager.showInfo(`Large file "${largeResult.fileName}" partially loaded (${this.formatFileSize(largeResult.loadedSize)} of ${sizeStr})`);
+            return tabId;
+          } else if (largeResult.warning === 'encoding') {
+            const encChoice = await this.notificationManager.showEncodingWarningDialog();
+            if (encChoice === 'yes') {
+              const forceResult = await window.api.invoke('force-open-file', filePath);
+              if (forceResult.success) {
+                const tabId = this.openFileInTab(filePath, forceResult.content, forceResult.fileName, {
+                  isPartial: forceResult.isPartial,
+                  totalSize: forceResult.totalSize,
+                  loadedSize: forceResult.loadedSize,
+                  encodingWarning: forceResult.encodingWarning
+                });
+                this.notificationManager.showWarning(`File "${forceResult.fileName}" opened with encoding warnings`);
+                return tabId;
+              } else {
+                this.notificationManager.showError('Failed to open file: ' + forceResult.error);
+              }
+            }
+          } else {
+            this.notificationManager.showError('Failed to open file: ' + largeResult.error);
+          }
+        } else if (result.warning === 'encoding') {
           console.log('File tree: Encoding warning detected, showing dialog...');
           const userChoice = await this.notificationManager.showEncodingWarningDialog();
           console.log('File tree: User choice:', userChoice);
-          
+
           if (userChoice === 'no') {
             console.log('File tree: User chose not to open file');
             return;
@@ -354,7 +419,7 @@ class FileOperationsManager {
             console.log('File tree: User chose to open file anyway');
             const forceResult = await window.api.invoke('force-open-file', filePath);
             console.log('File tree: Force open result:', forceResult);
-            
+
             if (forceResult.success) {
               const tabId = this.openFileInTab(filePath, forceResult.content, forceResult.fileName, {
                 isPartial: forceResult.isPartial,
@@ -362,7 +427,7 @@ class FileOperationsManager {
                 loadedSize: forceResult.loadedSize,
                 encodingWarning: forceResult.encodingWarning
               });
-              
+
               this.notificationManager.showWarning(`File "${forceResult.fileName}" opened with encoding warnings`);
               return tabId;
             } else {
@@ -378,7 +443,7 @@ class FileOperationsManager {
             loadedSize: result.loadedSize,
             encodingWarning: result.encodingWarning
           });
-          
+
           return tabId;
         }
       } else {
@@ -386,6 +451,56 @@ class FileOperationsManager {
       }
     } catch (error) {
       this.notificationManager.showError('Error opening file: ' + error.message);
+    }
+  }
+
+  /**
+   * Load the next 1 MB chunk of a partially loaded file
+   * @param {string} filePath - File path
+   * @param {number} offset - Byte offset to read from
+   */
+  async loadNextChunk(filePath, offset) {
+    if (!filePath || !this.tabManager.activeTabId) return;
+
+    const btn = document.getElementById('partial-load-more-btn');
+    if (btn) btn.disabled = true;
+
+    try {
+      const result = await window.api.invoke('read-file-chunk', filePath, offset);
+
+      if (result.success) {
+        const currentTab = this.tabManager.getActiveTab();
+        if (currentTab) {
+          const currentContent = this.tabManager.editorManager.getContent();
+          const newContent = currentContent + result.content;
+          await this.tabManager.editorManager.setContent(newContent);
+
+          currentTab.content = newContent;
+          currentTab.fileInfo = {
+            ...currentTab.fileInfo,
+            loadedSize: result.newOffset,
+            isPartial: result.isMore
+          };
+
+          // Update banner and status bar
+          this.tabManager._updatePartialBanner(currentTab);
+          this.tabManager.updateFileStatus(currentTab);
+
+          const loadedMB = (result.newOffset / (1024 * 1024)).toFixed(1);
+          const totalMB = (result.totalSize / (1024 * 1024)).toFixed(1);
+          if (result.isMore) {
+            this.notificationManager.showInfo(`Loaded ${loadedMB} MB of ${totalMB} MB`);
+          } else {
+            this.notificationManager.showSuccess(`Full file loaded (${loadedMB} MB)`);
+          }
+        }
+      } else {
+        this.notificationManager.showError('Failed to load chunk: ' + result.error);
+        if (btn) btn.disabled = false;
+      }
+    } catch (error) {
+      this.notificationManager.showError('Error loading chunk: ' + error.message);
+      if (btn) btn.disabled = false;
     }
   }
 
