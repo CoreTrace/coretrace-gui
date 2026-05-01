@@ -398,13 +398,16 @@ class TabManager {
     this.editorArea.style.display = 'flex';
     this.tabsContainer.style.display = 'flex';
     
-    // Trigger Monaco layout update after showing editor area
-    setTimeout(() => {
+    // Trigger Monaco layout update after showing editor area.
+    // Multiple retries cover the case where Monaco hasn't initialized yet.
+    const triggerLayout = () => {
       if (this.editorManager && this.editorManager.editor) {
         this.editorManager.editor.layout();
-        console.log('TabManager: Triggered Monaco layout update after showing editor');
       }
-    }, 50);
+    };
+    setTimeout(triggerLayout, 50);
+    setTimeout(triggerLayout, 200);
+    setTimeout(triggerLayout, 500);
   }
 
   /**
