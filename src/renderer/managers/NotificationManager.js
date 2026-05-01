@@ -230,6 +230,70 @@ class NotificationManager {
   }
 
   /**
+   * Show large file warning dialog
+   * @param {string} fileName - File name
+   * @param {string} sizeStr - Human-readable file size
+   * @returns {Promise<'open'|'cancel'>}
+   */
+  showLargeFileWarningDialog(fileName, sizeStr) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 10000;
+      `;
+
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: #1c2128;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 24px;
+        max-width: 500px;
+        color: #f0f6fc;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      `;
+
+      dialog.innerHTML = `
+        <h3 style="margin: 0 0 16px 0; color: #d29922;">⚠️ Large File</h3>
+        <p style="margin: 0 0 8px 0; line-height: 1.5;"><strong>${fileName}</strong> is <strong>${sizeStr}</strong>. Only the first 1 MB will be loaded to prevent performance issues.</p>
+        <p style="margin: 0 0 20px 0; line-height: 1.5; color: rgba(240,246,252,0.7); font-size: 13px;">Opening very large files may slow down the editor.</p>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button id="large-cancel-btn" style="
+            background: #21262d; border: 1px solid #30363d;
+            color: #f0f6fc; padding: 8px 16px; border-radius: 6px;
+            cursor: pointer; font-size: 14px;
+          ">Cancel</button>
+          <button id="large-open-btn" style="
+            background: #d29922; border: 1px solid #d29922;
+            color: #ffffff; padding: 8px 16px; border-radius: 6px;
+            cursor: pointer; font-size: 14px;
+          ">Open Anyway</button>
+        </div>
+      `;
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      const cleanup = () => {
+        if (overlay.parentNode) document.body.removeChild(overlay);
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') { cleanup(); resolve('cancel'); }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+
+      dialog.querySelector('#large-cancel-btn').addEventListener('click', () => { cleanup(); resolve('cancel'); });
+      dialog.querySelector('#large-open-btn').addEventListener('click', () => { cleanup(); resolve('open'); });
+    });
+  }
+
+  /**
    * Show confirmation dialog
    * @param {string} message - Message to display
    * @param {string} title - Dialog title
