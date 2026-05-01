@@ -265,6 +265,10 @@ class UIController {
       this.fileOpsManager.loadFullFile(filePath);
     };
 
+    this.tabManager.onLoadNextChunk = (filePath, offset) => {
+      this.fileOpsManager.loadNextChunk(filePath, offset);
+    };
+
     // Auto-save safety net: flush pending edits when switching/closing tabs.
     // (Auto-save debounce can otherwise be skipped if the user switches/close quickly.)
     this.tabManager.onBeforeTabSwitch = async (fromTabId) => {
@@ -987,8 +991,11 @@ class UIController {
     return this.assistantPanel.getAssistantConfig();
   }
 
-  
-  saveAssistantConfig(cfg) {
+  async loadAssistantConfig() {
+    return this.assistantPanel.loadAssistantConfig();
+  }
+
+  async saveAssistantConfig(cfg) {
     return this.assistantPanel.saveAssistantConfig(cfg);
   }
 
@@ -996,7 +1003,7 @@ class UIController {
    * Ensure assistant is configured; if not, show guided setup modal
    */
   async ensureAssistantConfigured() {
-    const cfg = this.getAssistantConfig();
+    const cfg = await this.loadAssistantConfig();
     if (cfg && cfg.provider) return cfg;
     // Show setup guide modal and wait for user to complete or cancel
     return new Promise((resolve) => {

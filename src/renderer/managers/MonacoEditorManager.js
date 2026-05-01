@@ -369,29 +369,32 @@ class MonacoEditorManager {
         resolve();
         return;
       }
-      
-      // Listen for the monaco-loaded event
+
+      let timeoutId;
+
+      const cleanup = () => {
+        clearInterval(checkInterval);
+        clearTimeout(timeoutId);
+        window.removeEventListener('monaco-loaded', onMonacoLoaded);
+      };
+
       const onMonacoLoaded = () => {
         console.log('Monaco loaded via event');
-        window.removeEventListener('monaco-loaded', onMonacoLoaded);
+        cleanup();
         resolve();
       };
       window.addEventListener('monaco-loaded', onMonacoLoaded);
-      
-      // Also poll as a fallback
+
       const checkInterval = setInterval(() => {
         if (window.monaco) {
-          clearInterval(checkInterval);
-          window.removeEventListener('monaco-loaded', onMonacoLoaded);
           console.log('Monaco loaded via polling');
+          cleanup();
           resolve();
         }
       }, 100);
-      
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        window.removeEventListener('monaco-loaded', onMonacoLoaded);
+
+      timeoutId = setTimeout(() => {
+        cleanup();
         console.error('Monaco Editor failed to load within timeout');
         resolve();
       }, 10000);

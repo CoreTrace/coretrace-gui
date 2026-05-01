@@ -5,7 +5,8 @@
   "main": "src/main.js",
   "scripts": {
     "build:renderer": "node scripts/build-renderer-bundle.js",
-    "prestart": "npm run build:renderer",
+    "build:renderer:dev": "node scripts/build-renderer-bundle.js --dev",
+    "prestart": "npm run build:renderer:dev",
     "predist": "npm run build:renderer",
     "predist:publish": "npm run build:renderer",
     "predist:win": "npm run build:renderer",
@@ -41,6 +42,7 @@
     "electron-updater": "^6.8.3",
     "ignore": "^7.0.5",
     "monaco-editor": "^0.53.0",
+    "monaco-editor": "^0.52.2",
     "node-llama-cpp": "^3.18.1",
     "node-pty": "^1.1.0",
     "tar": "^7.5.12",
@@ -50,6 +52,7 @@
     "electron": "^41.4.0",
     "electron-builder": "^26.8.1",
     "electron-reload": "^2.0.0-alpha.1",
+    "esbuild": "^0.28.0",
     "jsdoc": "^4.0.4"
   },
   "build": {

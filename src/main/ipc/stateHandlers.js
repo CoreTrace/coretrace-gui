@@ -64,11 +64,11 @@ function setupStateHandlers() {
       const stateJson = JSON.stringify(state, null, 2);
       await fs.writeFile(statePath, stateJson, 'utf8');
       
-      console.log('[StateHandlers] State saved successfully:', {
-        path: statePath,
-        size: stateJson.length,
-        tabCount: state.tabs?.length || 0
-      });
+      // console.log('[StateHandlers] State saved successfully:', {
+      //   path: statePath,
+      //   size: stateJson.length,
+      //   tabCount: state.tabs?.length || 0
+      // });
       
       return { success: true };
     } catch (error) {

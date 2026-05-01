@@ -57,6 +57,7 @@ const { setupStateHandlers } = require('./main/ipc/stateHandlers');
 const { setupUpdaterHandlers, setupAutoUpdater } = require('./main/ipc/updaterHandlers');
 const { setupTerminalHandlers, cleanupTerminals } = require('./main/ipc/terminalHandlers');
 const { setupBackendSettingsHandlers } = require('./main/ipc/backendSettingsHandlers');
+const { setupSecureStorageHandlers } = require('./main/ipc/secureStorageHandlers');
 
 /**
  * Creates and configures the main application window.
@@ -111,6 +112,20 @@ function createWindow () {
     // Give the renderer keyboard focus immediately so shortcuts work
     // without requiring the user to click inside the editor first.
     win.webContents.focus();
+  });
+
+  // Re-register DevTools shortcuts that were removed by Menu.setApplicationMenu(null).
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return;
+    const isF12 = input.key === 'F12';
+    const isCtrlShiftI = (input.control || input.meta) && input.shift && input.key === 'I';
+    if (isF12 || isCtrlShiftI) {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools();
+      } else {
+        win.webContents.openDevTools();
+      }
+    }
   });
 
   logStartupMilestone('Calling loadFile(src/index.html)');
@@ -720,6 +735,7 @@ app.whenReady().then(async () => {
   setupUpdaterHandlers(mainWindow);
   setupTerminalHandlers(mainWindow);
   setupBackendSettingsHandlers(mainWindow);
+  setupSecureStorageHandlers();
   setupWindowControls(mainWindow);
   mainWindow.once('ready-to-show', () => {
     schedulePostStartupTasks(mainWindow);
