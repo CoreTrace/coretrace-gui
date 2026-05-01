@@ -636,28 +636,39 @@ class FileOperationsManager {
   /**
    * Get file icon based on extension
    * @param {string} filename - Filename
-   * @returns {string} - File icon emoji
+   * @returns {string} - File icon markup or emoji
    */
   getFileIcon(filename) {
+    if (typeof window !== 'undefined' && typeof window.getFileIcon === 'function') {
+      return window.getFileIcon(filename);
+    }
+
     const ext = filename.split('.').pop().toLowerCase();
-    const iconMap = {
-      'js': '🟨',
-      'ts': '🔷',
-      'html': '🟧',
-      'css': '🎨',
-      'json': '📋',
-      'md': '📝',
-      'py': '🐍',
-      'cpp': '⚙️',
-      'c': '⚙️',
-      'h': '📄',
-      'java': '☕',
-      'php': '🐘',
-      'rb': '💎',
-      'go': '🐹',
-      'rs': '🦀'
+    const fallbackIconMap = {
+      js: '🟨',
+      ts: '🔷',
+      html: '🟧',
+      css: '🎨',
+      json: '📋',
+      md: '📝',
+      py: '🐍',
+      cpp: '⚙️',
+      c: '⚙️',
+      cc: '⚙️',
+      cxx: '⚙️',
+      h: '📄',
+      hpp: '📄',
+      hh: '📄',
+      hxx: '📄',
+      java: '☕',
+      php: '🐘',
+      rb: '💎',
+      go: '🐹',
+      rs: '🦀',
+      sh: '📜'
     };
-    return iconMap[ext] || '📄';
+
+    return fallbackIconMap[ext] || '📄';
   }
 
   /**

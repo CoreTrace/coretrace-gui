@@ -44,23 +44,53 @@ function updateFileTypeStatus(filename) {
 function getFileIcon(filename) {
   const ext = filename.split('.').pop().toLowerCase();
   const iconMap = {
-    'js': '🟨',
-    'ts': '🔷',
-    'html': '🟧',
-    'css': '🎨',
-    'json': '📋',
-    'md': '📝',
-    'py': '🐍',
-    'cpp': '⚙️',
-    'c': '⚙️',
-    'h': '📄',
-    'java': '☕',
-    'php': '🐘',
-    'rb': '💎',
-    'go': '🐹',
-    'rs': '🦀'
+    js: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg',
+    ts: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg',
+    html: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg',
+    css: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg',
+    py: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg',
+    cpp: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+    c: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
+    cc: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+    cxx: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
+    h: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
+    java: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg',
+    php: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-original.svg',
+    go: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original.svg',
+    rs: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-plain.svg',
+    md: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/markdown/markdown-original.svg',
+    json: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/json/json-original.svg',
+    sh: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg'
   };
-  return iconMap[ext] || '📄';
+  const fallbackIconMap = {
+    js: '🟨',
+    ts: '🔷',
+    html: '🟧',
+    css: '🎨',
+    json: '📋',
+    md: '📝',
+    py: '🐍',
+    cpp: '⚙️',
+    c: '⚙️',
+    h: '📄',
+    java: '☕',
+    php: '🐘',
+    rb: '💎',
+    go: '🐹',
+    rs: '🦀',
+    cc: '⚙️',
+    cxx: '⚙️',
+    hpp: '📄',
+    hh: '📄',
+    hxx: '📄'
+  };
+
+  if (iconMap[ext]) {
+    const safeExt = ext.replace(/[^a-z0-9]/gi, '');
+    return `<img src="${iconMap[ext]}" alt="${safeExt} icon" class="file-icon-svg" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='${fallbackIconMap[ext] || '📄'}'">`;
+  }
+
+  return fallbackIconMap[ext] || '📄';
 }
 
 /**
@@ -403,58 +433,6 @@ if (typeof window !== 'undefined') {
     tokensToHtml
   };
 }
-})();
-
-// ----- src/renderer/utils/debounce.js -----
-;(function() {
-/**
- * Creates a debounced wrapper around a function.
- *
- * Returns an object with three methods:
- *   .call(...args)  — schedule fn to run after `delay` ms (resets the timer on each call)
- *   .cancel()       — cancel any pending invocation without calling fn
- *   .flush(...args) — cancel any pending invocation and call fn immediately
- *
- * Uses only Node.js / browser built-ins (setTimeout / clearTimeout).
- * Safe to call .cancel() or .flush() even when no timer is pending.
- *
- * @param {Function} fn    - The function to debounce.
- * @param {number}   delay - Debounce delay in milliseconds.
- * @returns {{ call: Function, cancel: Function, flush: Function }}
- */
-function debounce(fn, delay) {
-  let timer = null;
-
-  return {
-    call(...args) {
-      if (timer !== null) {
-        clearTimeout(timer);
-      }
-      timer = setTimeout(() => {
-        timer = null;
-        fn(...args);
-      }, delay);
-    },
-
-    cancel() {
-      if (timer !== null) {
-        clearTimeout(timer);
-        timer = null;
-      }
-    },
-
-    flush(...args) {
-      if (timer !== null) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      fn(...args);
-    }
-  };
-}
-
-if (typeof window !== 'undefined') window.debounce = debounce;
-if (typeof module !== 'undefined' && module.exports) module.exports = debounce;
 })();
 
 // ----- src/renderer/managers/NotificationManager.js -----
@@ -3039,28 +3017,39 @@ class FileOperationsManager {
   /**
    * Get file icon based on extension
    * @param {string} filename - Filename
-   * @returns {string} - File icon emoji
+   * @returns {string} - File icon markup or emoji
    */
   getFileIcon(filename) {
+    if (typeof window !== 'undefined' && typeof window.getFileIcon === 'function') {
+      return window.getFileIcon(filename);
+    }
+
     const ext = filename.split('.').pop().toLowerCase();
-    const iconMap = {
-      'js': '🟨',
-      'ts': '🔷',
-      'html': '🟧',
-      'css': '🎨',
-      'json': '📋',
-      'md': '📝',
-      'py': '🐍',
-      'cpp': '⚙️',
-      'c': '⚙️',
-      'h': '📄',
-      'java': '☕',
-      'php': '🐘',
-      'rb': '💎',
-      'go': '🐹',
-      'rs': '🦀'
+    const fallbackIconMap = {
+      js: '🟨',
+      ts: '🔷',
+      html: '🟧',
+      css: '🎨',
+      json: '📋',
+      md: '📝',
+      py: '🐍',
+      cpp: '⚙️',
+      c: '⚙️',
+      cc: '⚙️',
+      cxx: '⚙️',
+      h: '📄',
+      hpp: '📄',
+      hh: '📄',
+      hxx: '📄',
+      java: '☕',
+      php: '🐘',
+      rb: '💎',
+      go: '🐹',
+      rs: '🦀',
+      sh: '📜'
     };
-    return iconMap[ext] || '📄';
+
+    return fallbackIconMap[ext] || '📄';
   }
 
   /**
@@ -7731,22 +7720,6 @@ class UIController {
    * Setup event listeners for UI components
    */
   setupEventListeners() {
-    // Close dialogs when clicking outside
-    document.addEventListener('click', (e) => {
-      const searchWidget = document.getElementById('search-widget');
-      const gotoDialog = document.getElementById('goto-dialog');
-      
-      if (searchWidget.classList.contains('visible') && 
-          !searchWidget.contains(e.target)) {
-        this.searchManager.closeSearchWidget();
-      }
-      
-      if (gotoDialog.classList.contains('visible') && 
-          !gotoDialog.contains(e.target)) {
-        this.searchManager.closeGoToLineDialog();
-      }
-    });
-
     // Close menus when clicking outside
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.menu-item')) {
@@ -7977,14 +7950,16 @@ class UIController {
       
       if (e.ctrlKey && e.key === 'f') {
         e.preventDefault();
-        this.searchManager.showFindDialog();
+        const editor = this.editorManager.getMonacoInstance();
+        if (editor) editor.getAction('actions.find').run();
       }
-      
+
       if (e.ctrlKey && e.key === 'g') {
         e.preventDefault();
-        this.searchManager.showGoToLineDialog();
+        const editor = this.editorManager.getMonacoInstance();
+        if (editor) editor.getAction('editor.action.gotoLine').run();
       }
-      
+
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
         this.tabManager.switchToNextTab();
@@ -8117,14 +8092,15 @@ class UIController {
     };
     window.toggleWordWrap = () => this.editorManager.toggleWordWrap();
 
-    // Search operations
-    window.showFindDialog = () => this.searchManager.showFindDialog();
-    window.closeSearchWidget = () => this.searchManager.closeSearchWidget();
-    window.searchNext = () => this.searchManager.searchNext();
-    window.searchPrev = () => this.searchManager.searchPrev();
-    window.showGoToLineDialog = () => this.searchManager.showGoToLineDialog();
-    window.closeGoToLineDialog = () => this.searchManager.closeGoToLineDialog();
-    window.performGoToLine = () => this.searchManager.performGoToLine();
+    // Open Monaco's built-in find/go-to-line widgets
+    window.openMonacoFind = () => {
+      const editor = this.editorManager.getMonacoInstance();
+      if (editor) editor.getAction('actions.find').run();
+    };
+    window.openMonacoGoToLine = () => {
+      const editor = this.editorManager.getMonacoInstance();
+      if (editor) editor.getAction('editor.action.gotoLine').run();
+    };
 
     // UI navigation
     window.toggleSidebar = () => this.toggleSidebar();
