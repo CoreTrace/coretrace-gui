@@ -577,8 +577,8 @@ class UIController {
     window.addEventListener('keydown', (e) => {
       const searchWidget = document.getElementById('search-widget');
       const gotoDialog = document.getElementById('goto-dialog');
-      const isSearchVisible = searchWidget.classList.contains('visible');
-      const isGotoVisible = gotoDialog.classList.contains('visible');
+      const isSearchVisible = searchWidget?.classList.contains('visible') ?? false;
+      const isGotoVisible = gotoDialog?.classList.contains('visible') ?? false;
 
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
         e.stopPropagation();
