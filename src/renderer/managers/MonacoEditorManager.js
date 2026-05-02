@@ -299,9 +299,7 @@ class MonacoEditorManager {
         highlightActiveIndentation: false
       },
       lineNumbers: 'on',
-      folding: true,
-      foldingStrategy: 'indentation',
-      showFoldingControls: 'mouseover',
+      folding: false,
       wordWrap: 'off',
       wrappingIndent: 'indent',
       tabSize: 4,
@@ -334,7 +332,12 @@ class MonacoEditorManager {
         shareSuggestSelections: false,
         showIcons: true,
         maxVisibleSuggestions: 12,
-        filteredTypes: { 'keyword': false, 'snippet': true }
+        filteredTypes: { 'keyword': false, 'snippet': true },
+        preview: false,
+        showDetails: false
+      },
+      inlineSuggest: {
+        enabled: false
       },
       fixedOverflowWidgets: true
     });
@@ -515,7 +518,8 @@ class MonacoEditorManager {
       model.setValue(content || '');
       console.log('MonacoEditorManager.setContent: Content set successfully');
       this.updateStatusBar();
-      
+      this.editor.trigger('', 'editor.unfoldAll');
+
       // Force layout update in case container was hidden when editor was created
       setTimeout(() => {
         if (this.editor) {
