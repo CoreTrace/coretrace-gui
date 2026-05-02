@@ -11,6 +11,7 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
 .editor-main {
@@ -91,6 +92,22 @@
 .monaco-editor .view-overlays .current-line-exact {
   border: 1px solid rgba(214, 222, 237, 0.08) !important;
   border-radius: 6px;
+}
+
+/* Kill all fold controls, fold decorations and the fold-preview hover widget */
+.monaco-editor .fold,
+.monaco-editor .folding,
+.monaco-editor .fold-widget,
+.monaco-editor .collapsible-fold-widget,
+.monaco-editor .folded-background,
+.monaco-editor .inline-folded,
+.monaco-editor .folding-decoration,
+.monaco-editor .codicon-tree-item-expanded,
+.monaco-editor .codicon-tree-item-collapsed,
+.monaco-editor .cldr.folded,
+.monaco-editor .cldr.collapsible {
+  display: none !important;
+  pointer-events: none !important;
 }
 
 .monaco-editor .suggest-widget {
