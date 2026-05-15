@@ -109,6 +109,46 @@
   transform: none;
 }
 
+.ctrace-btn-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.ctrace-btn-row .ctrace-run-btn {
+  flex: 1;
+  width: auto;
+}
+
+.ctrace-clear-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--text-muted);
+  padding: 13px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: transform 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.ctrace-clear-btn:hover {
+  background: rgba(255, 107, 107, 0.10);
+  border-color: rgba(255, 107, 107, 0.22);
+  color: #ffb0b0;
+  transform: translateY(-1px);
+}
+
+.ctrace-clear-btn:active {
+  transform: translateY(0);
+}
+
 #ctrace-results-area {
   flex: 1;
   min-height: 0;
