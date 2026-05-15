@@ -13,7 +13,6 @@
   -webkit-app-region: no-drag;
   position: relative;
   z-index: 500;
-  overflow: hidden;
 }
 
 .menu-item {
