@@ -3,6 +3,8 @@
   padding: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  min-width: 0;
 }
 
 .section-header {
@@ -325,7 +327,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .count-badge {
@@ -338,6 +342,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .count-badge-clear {
@@ -349,6 +354,14 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.severity-filter {
+  flex-shrink: 0;
 }
 
 .severity-filter select {
