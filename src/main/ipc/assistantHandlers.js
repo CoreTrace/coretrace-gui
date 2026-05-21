@@ -19,6 +19,9 @@ let loadedModelPath = null;
 let loadedGpuLayers = null;
 let loadedSystemPrompt = null;
 
+// Abort controller for in-flight requests
+let currentAbortController = null;
+
 /**
  * Setup IPC handlers for assistant chat
  * @param {BrowserWindow} mainWindow - Main window reference
@@ -29,28 +32,54 @@ function setupAssistantHandlers(mainWindow) {
    * Input: { provider, message, config }
    * config contains: provider-specific configuration
    */
-  ipcMain.handle('assistant-chat', async (event, { provider, message, config }) => {
+  ipcMain.handle('assistant-chat', async (event, { provider, message, history, config }) => {
+    // Abort any existing in-flight request
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+    const { signal } = currentAbortController;
+
+    // Wrap the real request in a race against an abort promise
+    const abortPromise = new Promise((resolve) => {
+      signal.addEventListener('abort', () => {
+        resolve({ success: false, aborted: true, error: 'Request cancelled' });
+      });
+    });
+
+    let requestPromise;
     try {
       if (provider === 'ollama') {
-        return await handleOllamaChat(message, config);
+        requestPromise = handleOllamaChat(message, history || [], config);
       } else if (provider === 'external') {
-        // Use modular provider system for external APIs
-        return await handleModularProvider(message, config);
+        requestPromise = handleModularProvider(message, history || [], config);
       } else if (provider === 'local') {
-        return await handleLocalChat(message, config);
+        requestPromise = handleLocalChat(message, history || [], config, signal);
       } else {
-        return {
-          success: false,
-          error: 'Unknown provider or assistant not configured'
-        };
+        return { success: false, error: 'Unknown provider or assistant not configured' };
       }
     } catch (error) {
-      console.error('Error in assistant-chat handler:', error);
-      return {
-        success: false,
-        error: error.message || 'Unknown error'
-      };
+      console.error('Error starting assistant-chat handler:', error);
+      return { success: false, error: error.message || 'Unknown error' };
     }
+
+    try {
+      return await Promise.race([requestPromise, abortPromise]);
+    } catch (error) {
+      console.error('Error in assistant-chat handler:', error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  });
+
+  /**
+   * Abort the current in-flight assistant request
+   */
+  ipcMain.handle('assistant-abort', async () => {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+    return { success: true };
   });
 
   /**
@@ -173,7 +202,7 @@ function setupAssistantHandlers(mainWindow) {
  * @param {Object} config - Config with ollamaHost
  * @returns {Promise<Object>}
  */
-async function handleOllamaChat(message, config) {
+async function handleOllamaChat(message, history, config) {
   const host = config.ollamaHost || 'http://localhost:11434';
   const url = new URL('/api/chat', host);
   
@@ -183,7 +212,12 @@ async function handleOllamaChat(message, config) {
   if (config.systemPrompt) {
     messages.push({ role: 'system', content: config.systemPrompt });
   }
-  
+
+  // Inject conversation history
+  if (history && history.length > 0) {
+    messages.push(...history);
+  }
+
   messages.push({ role: 'user', content: message });
   
   const body = JSON.stringify({
@@ -243,7 +277,7 @@ async function handleOllamaChat(message, config) {
  * @param {Object} config - Config with providerId and provider-specific settings
  * @returns {Promise<Object>}
  */
-async function handleModularProvider(message, config) {
+async function handleModularProvider(message, history, config) {
   const providerId = config.providerId || 'openai';
   
   try {
@@ -259,11 +293,12 @@ async function handleModularProvider(message, config) {
       };
     }
     
-    // Send chat message
+    // Send chat message with conversation history
     return await provider.chat(message, {
       systemPrompt: config.systemPrompt,
       temperature: config.temperature,
-      maxTokens: config.maxTokens
+      maxTokens: config.maxTokens,
+      history: history || []
     });
   } catch (error) {
     console.error('Error with modular provider:', error);
@@ -280,7 +315,7 @@ async function handleModularProvider(message, config) {
  * @param {Object} config - Config with localModelPath and gpuLayers
  * @returns {Promise<Object>}
  */
-async function handleLocalChat(message, config) {
+async function handleLocalChat(message, history, config, abortSignal) {
   const modelPath = config.localModelPath;
 
   if (!modelPath) {
@@ -391,10 +426,11 @@ async function handleLocalChat(message, config) {
 
     // Generate response
     console.log('Generating response for:', message);
-    
-    const response = await localLLM.session.prompt(message, {
-      maxTokens: config.maxTokens || 2048
-    });
+
+    const promptOptions = { maxTokens: config.maxTokens || 2048 };
+    if (abortSignal) promptOptions.signal = abortSignal;
+
+    const response = await localLLM.session.prompt(message, promptOptions);
     
     return {
       success: true,

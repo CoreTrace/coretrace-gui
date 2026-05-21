@@ -143,40 +143,7 @@ function createWindow () {
   return win;
 }
 
-/**
- * Creates the Visualyzer window as a separate, movable window
- * @returns {BrowserWindow} The created visualyzer window instance
- */
-function createVisualizerWindow() {
-  const iconPath = path.join(__dirname, '../assets/ctrace.png');
-  const iconApp = nativeImage.createFromPath(iconPath);
 
-  const vizWin = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    minWidth: 600,
-    minHeight: 500,
-    icon: iconApp,
-    title: 'CTrace Visualyzer',
-    backgroundColor: '#0d1117',
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-      preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false
-    }
-  });
-
-  vizWin.loadFile('src/visualyzer.html');
-  vizWin.setMenuBarVisibility(false);
-  
-  // Open DevTools in development (optional)
-  // vizWin.webContents.openDevTools();
-  
-  return vizWin;
-}
 
 /**
  * Detects if WSL (Windows Subsystem for Linux) is available on Windows.
@@ -569,11 +536,6 @@ function setupWindowControls(window) {
     window.close();
   });
 
-  // Open Visualyzer window
-  ipcMain.on('open-visualyzer', () => {
-    createVisualizerWindow();
-  });
-
   // WSL status check handler
   ipcMain.on('check-wsl-status', async (event) => {
     if (os.platform() === 'win32') {
@@ -703,8 +665,8 @@ app.on('before-quit', async (event) => {
       console.log('[Main] Requesting state save before quit...');
       mainWindow.webContents.send('app-before-quit');
       
-      // Give renderer time to save state (max 5 seconds)
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Give renderer time to save state (max 3 seconds)
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
     
     // Shutdown ctrace server
