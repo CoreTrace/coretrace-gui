@@ -263,6 +263,22 @@ class StateManager {
       // Restore tabs
       if (state.tabs && state.tabs.length > 0) {
         console.log('[StateManager] Restoring', state.tabs.length, 'tabs...');
+
+        // For unmodified tabs that have a file path, refresh content from disk
+        // so that stale cached content never causes a blank editor after restart.
+        await Promise.all(state.tabs.map(async (tabData) => {
+          if (!tabData.modified && tabData.filePath) {
+            try {
+              const res = await window.api.invoke('read-file', tabData.filePath);
+              if (res && res.success && typeof res.content === 'string') {
+                tabData.content = res.content;
+                console.log('[StateManager] Refreshed content from disk for:', tabData.fileName);
+              }
+            } catch (_) {
+              // File may no longer exist — keep cached content as fallback
+            }
+          }
+        }));
         
         // Counter to continue from where we left off
         let maxTabId = 0;

@@ -73,6 +73,9 @@ class OpenAIProvider extends BaseProvider {
     // Add system prompt
     const systemPrompt = options.systemPrompt || 'You are a helpful coding assistant.';
     messages.push({ role: 'system', content: systemPrompt });
+    if (options.history && options.history.length > 0) {
+      messages.push(...options.history);
+    }
     messages.push({ role: 'user', content: message });
 
     const body = JSON.stringify({
