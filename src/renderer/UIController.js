@@ -877,9 +877,6 @@ class UIController {
     };
     window.terminalToggleShellDropdown = () => this.terminalManager.toggleShellDropdown();
 
-    // Visualyzer operations
-    window.toggleVisualyzerPanel = () => this.toggleVisualyzerPanel();
-
     // CTrace helpers
     window.runCTrace = () => this.ctraceRunner.run();
 
@@ -951,15 +948,6 @@ class UIController {
   }
 
   
-  toggleVisualyzerPanel() {
-    return this.assistantPanel.toggleVisualyzerPanel();
-  }
-
-
-  closeVisualyzer() {
-    return this.assistantPanel.closeVisualyzer();
-  }
-
   toggleToolsPanel() {
     const toolsPanel = document.getElementById('toolsPanel');
     if (toolsPanel) {
@@ -1126,7 +1114,13 @@ class UIController {
     // Listen for app-before-quit event from main process
     window.api.on('app-before-quit', async () => {
       console.log('[StateManagement] Received app-before-quit, saving state...');
-      await this.stateManager.saveStateDebounced(true); // Immediate save
+      // Retry once in case a concurrent visibility-change save is in progress
+      const saved = await this.stateManager.saveState();
+      if (!saved) {
+        // Wait for any in-progress save to finish, then do a final save
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await this.stateManager.saveState();
+      }
     });
 
     // Save state on visibility change (browser/app minimized or closed)

@@ -102,6 +102,89 @@ function setupSecureStorageHandlers() {
       return { success: false, error: error.message };
     }
   });
+
+  // ── Conversation history persistence ──────────────────────────────────────
+
+  function getConversationsDir() {
+    return path.join(app.getPath('userData'), 'assistant-conversations');
+  }
+
+  /**
+   * Save (create or overwrite) a conversation.
+   * Data: { id, title, history, createdAt }
+   */
+  ipcMain.handle('assistant-conversations-save', async (_event, data) => {
+    try {
+      const dir = getConversationsDir();
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `${data.id}.json`);
+      await fs.writeFile(filePath, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }, null, 2), 'utf8');
+      return { success: true };
+    } catch (error) {
+      console.error('[SecureStorage] Error saving conversation:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
+   * List all saved conversations, sorted newest first.
+   * Returns: { success, conversations: [{ id, title, createdAt, updatedAt }] }
+   */
+  ipcMain.handle('assistant-conversations-list', async () => {
+    try {
+      const dir = getConversationsDir();
+      let files;
+      try {
+        files = await fs.readdir(dir);
+      } catch (e) {
+        if (e.code === 'ENOENT') return { success: true, conversations: [] };
+        throw e;
+      }
+      const conversations = [];
+      for (const f of files) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const raw = await fs.readFile(path.join(dir, f), 'utf8');
+          const { id, title, createdAt, updatedAt } = JSON.parse(raw);
+          conversations.push({ id, title, createdAt, updatedAt });
+        } catch (_) { /* skip corrupt files */ }
+      }
+      conversations.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+      return { success: true, conversations };
+    } catch (error) {
+      console.error('[SecureStorage] Error listing conversations:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
+   * Load a single saved conversation by id.
+   * Returns: { success, conversation: { id, title, history, createdAt, updatedAt } }
+   */
+  ipcMain.handle('assistant-conversations-load', async (_event, id) => {
+    try {
+      const filePath = path.join(getConversationsDir(), `${id}.json`);
+      const raw = await fs.readFile(filePath, 'utf8');
+      return { success: true, conversation: JSON.parse(raw) };
+    } catch (error) {
+      console.error('[SecureStorage] Error loading conversation:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
+   * Delete a saved conversation by id.
+   */
+  ipcMain.handle('assistant-conversations-delete', async (_event, id) => {
+    try {
+      await fs.unlink(path.join(getConversationsDir(), `${id}.json`));
+      return { success: true };
+    } catch (error) {
+      if (error.code === 'ENOENT') return { success: true };
+      console.error('[SecureStorage] Error deleting conversation:', error);
+      return { success: false, error: error.message };
+    }
+  });
 }
 
 module.exports = { setupSecureStorageHandlers };
