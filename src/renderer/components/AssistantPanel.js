@@ -1,6 +1,14 @@
 class AssistantPanel {
   constructor(ui) {
     this.ui = ui;
+    // Conversation history sent to the LLM: [{role, content}]
+    this._conversationHistory = [];
+    // Input history for ArrowUp/Down navigation (like a terminal)
+    this._inputHistory = [];
+    this._inputHistoryCursor = -1;
+    this._inputDraft = '';
+    // ID of the conversation currently loaded / being built
+    this._currentConvId = null;
   }
 
 /**
@@ -137,6 +145,10 @@ class AssistantPanel {
         <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:space-between">
           <div style="font-size:13px; color:#c9d1d9">Assistant — ${displayName}</div>
           <div style="display:flex; gap:8px; align-items:center">
+            <button id="assistant-new-chat" style="padding:6px 8px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer; font-size:14px; line-height:1;" title="New conversation" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">+</button>
+            <button id="assistant-history" style="padding:5px 7px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer; display:flex; align-items:center;" title="Past conversations" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/></svg>
+            </button>
             <button id="assistant-settings" style="padding:6px 8px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer; font-size:12px">Settings</button>
           </div>
         </div>
@@ -148,11 +160,20 @@ class AssistantPanel {
             <span id="context-text"></span>
             <button id="context-clear" style="margin-left:8px; padding:2px 6px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:3px; cursor:pointer; font-size:10px;">✕</button>
           </div>
+          <div style="display:flex; gap:6px; margin-bottom:6px;">
+            <button id="ctx-file" style="padding:3px 8px; background:transparent; border:1px solid #30363d; color:#555; border-radius:4px; cursor:pointer; font-size:11px; transition:color 0.15s, border-color 0.15s;" title="Use current file as context" onmouseover="this.style.color='#8b949e';this.style.borderColor='#555'" onmouseout="this.style.color='#555';this.style.borderColor='#30363d'">📄 Current file</button>
+            <button id="ctx-analysis" style="padding:3px 8px; background:transparent; border:1px solid #30363d; color:#555; border-radius:4px; cursor:pointer; font-size:11px; transition:color 0.15s, border-color 0.15s;" title="Use analysis results as context" onmouseover="this.style.color='#8b949e';this.style.borderColor='#555'" onmouseout="this.style.color='#555';this.style.borderColor='#30363d'">⚙️ Analysis</button>
+          </div>
           <div style="display:flex; gap:8px; align-items:flex-end">
             <textarea id="assistant-input" placeholder="Ask the assistant..." style="flex:1; min-height:44px; max-height:120px; resize:none; padding:8px; border-radius:6px; border:1px solid #2b3036; background:#0d1117; color:#fff"></textarea>
-            <button id="assistant-send" style="padding:10px; background:transparent; color:#8b949e; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" title="Send message (Enter)" onmouseover="this.ui.style.color='#c9d1d9'" onmouseout="this.ui.style.color='#8b949e'">
+            <button id="assistant-send" style="padding:10px; background:transparent; color:#8b949e; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" title="Send message (Enter)" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="currentColor"/>
+              </svg>
+            </button>
+            <button id="assistant-stop" style="display:none; padding:10px; background:transparent; color:#e85555; border:none; cursor:pointer; align-items:center; justify-content:center; transition:color 0.2s;" title="Stop generation">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor"/>
               </svg>
             </button>
           </div>
@@ -185,6 +206,7 @@ class AssistantPanel {
         bubble.style.background = '#111319';
         bubble.style.color = '#e6edf3';
         bubble.style.marginRight = 'auto';
+        bubble.style.animation = 'assistantFadeIn 0.2s ease-in';
         wrap.appendChild(bubble);
         container.appendChild(wrap);
         
@@ -193,9 +215,10 @@ class AssistantPanel {
           return bubble;
         }
         
-        // Render markdown for assistant messages
+        // Render markdown for assistant messages and return bubble
         bubble.innerHTML = renderMarkdown(text);
         container.scrollTop = container.scrollHeight;
+        return bubble;
       }
     };
 
@@ -355,13 +378,32 @@ class AssistantPanel {
     const sendBtn = document.getElementById('assistant-send');
     const inputEl = document.getElementById('assistant-input');
     const settingsBtn = document.getElementById('assistant-settings');
+    const newChatBtn = document.getElementById('assistant-new-chat');
     const contextIndicator = document.getElementById('context-indicator');
     const contextText = document.getElementById('context-text');
     const contextClearBtn = document.getElementById('context-clear');
 
+    const historyBtn = document.getElementById('assistant-history');
+
+    // New conversation button — auto-saves current chat then resets
+    newChatBtn.onclick = async () => {
+      await this._saveCurrentConversation();
+      const messagesEl = document.getElementById('assistant-messages');
+      if (messagesEl) messagesEl.innerHTML = '';
+      this._conversationHistory = [];
+      this._currentConvId = null;
+      this._inputHistory = [];
+      this._inputHistoryCursor = -1;
+      this._inputDraft = '';
+    };
+
+    // History button — show past conversations panel
+    historyBtn.onclick = () => this._showHistoryPanel();
+
     // Capture selection before it's lost when user clicks on input
     let capturedSelection = '';
     let capturedLineInfo = '';
+    let capturedContextType = 'selection'; // 'selection' | 'file' | 'analysis'
     
     inputEl.addEventListener('focus', () => {
       try {
@@ -411,10 +453,31 @@ class AssistantPanel {
     });
 
     // Handle Enter key to send message (Shift+Enter for new line)
+    // Arrow keys navigate input history like a terminal
     inputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendBtn.click();
+      } else if (e.key === 'ArrowUp') {
+        if (!this._inputHistory || this._inputHistory.length === 0) return;
+        if (this._inputHistoryCursor === -1) {
+          this._inputDraft = inputEl.value;
+          this._inputHistoryCursor = this._inputHistory.length - 1;
+        } else if (this._inputHistoryCursor > 0) {
+          this._inputHistoryCursor--;
+        }
+        inputEl.value = this._inputHistory[this._inputHistoryCursor];
+        e.preventDefault();
+      } else if (e.key === 'ArrowDown') {
+        if (!this._inputHistory || this._inputHistoryCursor === -1) return;
+        if (this._inputHistoryCursor < this._inputHistory.length - 1) {
+          this._inputHistoryCursor++;
+          inputEl.value = this._inputHistory[this._inputHistoryCursor];
+        } else {
+          this._inputHistoryCursor = -1;
+          inputEl.value = this._inputDraft || '';
+        }
+        e.preventDefault();
       }
     });
 
@@ -425,7 +488,9 @@ class AssistantPanel {
         if (!inputEl.value.trim()) {
           capturedSelection = '';
           capturedLineInfo = '';
+          capturedContextType = 'selection';
           contextIndicator.style.display = 'none';
+          document.getElementById('ctx-file').textContent = '📄 Current file';
         }
       }, 200);
     });
@@ -434,27 +499,147 @@ class AssistantPanel {
     contextClearBtn.onclick = () => {
       capturedSelection = '';
       capturedLineInfo = '';
+      capturedContextType = 'selection';
       contextIndicator.style.display = 'none';
+      document.getElementById('ctx-file').textContent = '📄 Current file';
+    };
+
+    // Context shortcut — current file (or current selection if text is highlighted)
+    document.getElementById('ctx-file').onclick = () => {
+      try {
+        const monaco = this.ui.editorManager.getMonacoInstance ? this.ui.editorManager.getMonacoInstance() : null;
+        const activeTab = this.ui.tabManager.getActiveTab();
+        const fileName = activeTab && activeTab.fileName ? activeTab.fileName : 'file';
+        const ctxFileBtn = document.getElementById('ctx-file');
+        let content = '';
+        if (monaco) {
+          const model = monaco.getModel();
+          const sel = monaco.getSelection();
+          if (!model) return;
+          if (sel && !sel.isEmpty()) {
+            // User has highlighted a range — capture only that
+            content = model.getValueInRange(sel);
+            const s = sel.startLineNumber;
+            const e = sel.endLineNumber;
+            capturedContextType = 'selection';
+            capturedLineInfo = s === e ? `${fileName}:${s}` : `${fileName}:${s}-${e}`;
+          } else {
+            // No selection — capture entire file
+            content = model.getValue();
+            const totalLines = model.getLineCount();
+            capturedContextType = 'file';
+            capturedLineInfo = `${fileName}:1-${totalLines}`;
+          }
+        } else {
+          const editor = this.ui.editorManager.editor;
+          if (!editor) return;
+          const start = editor.selectionStart;
+          const end = editor.selectionEnd;
+          if (start !== end) {
+            content = editor.value.substring(start, end);
+            const before = editor.value.substring(0, start);
+            const beforeEnd = editor.value.substring(0, end);
+            const sLine = (before.match(/\n/g) || []).length + 1;
+            const eLine = (beforeEnd.match(/\n/g) || []).length + 1;
+            capturedContextType = 'selection';
+            capturedLineInfo = sLine === eLine ? `${fileName}:${sLine}` : `${fileName}:${sLine}-${eLine}`;
+          } else {
+            content = editor.value;
+            const totalLines = (content.match(/\n/g) || []).length + 1;
+            capturedContextType = 'file';
+            capturedLineInfo = `${fileName}:1-${totalLines}`;
+          }
+        }
+        if (!content.trim()) return;
+        capturedSelection = content;
+        ctxFileBtn.textContent = `📄 ${capturedLineInfo}`;
+        contextText.textContent = capturedLineInfo;
+        contextIndicator.style.display = 'block';
+        inputEl.focus();
+      } catch (e) {
+        console.warn('Error capturing file context:', e);
+      }
+    };
+
+    // Context shortcut — analysis results
+    document.getElementById('ctx-analysis').onclick = () => {
+      try {
+        const dm = this.ui.diagnosticsManager;
+        const diags = dm && dm.currentDiagnostics;
+        const ctxBtn = document.getElementById('ctx-analysis');
+        if (!diags || diags.length === 0) {
+          const orig = ctxBtn.textContent;
+          ctxBtn.textContent = 'No results';
+          setTimeout(() => { ctxBtn.textContent = orig; }, 1500);
+          return;
+        }
+        const lines = [`${diags.length} issue(s) found:`];
+        for (const d of diags) {
+          const loc = d.location || {};
+          const file = loc.file ? loc.file.split('/').pop().split('\\').pop() : '?';
+          const msg = (d.details && d.details.message) ? d.details.message : '';
+          lines.push(`[${d.severity}] ${file}:${loc.startLine} (${d.ruleId}) — ${msg}`);
+        }
+        capturedSelection = lines.join('\n');
+        capturedContextType = 'analysis';
+        capturedLineInfo = `Analysis: ${diags.length} issue(s)`;
+        contextText.textContent = capturedLineInfo;
+        contextIndicator.style.display = 'block';
+        inputEl.focus();
+      } catch (e) {
+        console.warn('Error capturing analysis context:', e);
+      }
+    };
+
+    const stopBtn = document.getElementById('assistant-stop');
+
+    const setRequestingState = (requesting) => {
+      if (requesting) {
+        sendBtn.style.display = 'none';
+        stopBtn.style.display = 'flex';
+      } else {
+        sendBtn.style.display = 'flex';
+        stopBtn.style.display = 'none';
+      }
+    };
+
+    stopBtn.onclick = async () => {
+      try { await window.api.invoke('assistant-abort'); } catch (_) {}
+      setRequestingState(false);
     };
 
     sendBtn.onclick = async () => {
+      if (sendBtn.style.display === 'none') return; // already requesting
       const text = (inputEl.value || '').trim();
       if (!text) return;
-      
+
+      // Save to input history for ArrowUp navigation
+      this._inputHistory.push(text);
+      this._inputHistoryCursor = -1;
+      this._inputDraft = '';
+
       // Use captured selection as context
       let context = '';
       if (capturedSelection) {
-        context = `\n\n[Context - Selected Code]:\n\`\`\`\n${capturedSelection}\n\`\`\`\n\n`;
+        if (capturedContextType === 'analysis') {
+          context = `\n\n[Context - Analysis Results]:\n${capturedSelection}\n\n`;
+        } else {
+          // For both 'file' (full file) and 'selection' (highlighted range), use the line info label
+          const label = capturedLineInfo || (capturedContextType === 'file' ? 'File' : 'Selected Code');
+          context = `\n\n[Context - ${label}]:\n\`\`\`\n${capturedSelection}\n\`\`\`\n\n`;
+        }
       }
-      
-      // Clear captured selection and hide indicator after using it
+
+      // Clear captured context and hide indicator after using it
       capturedSelection = '';
       capturedLineInfo = '';
+      capturedContextType = 'selection';
       contextIndicator.style.display = 'none';
-      
-      // Combine user message with context
+      document.getElementById('ctx-file').textContent = '📄 Current file';
+
+      // Combine user message with context (context goes to LLM, only text shown in UI)
       const fullMessage = context ? context + text : text;
-      
+
       // Display only user's text in UI
       addMessage('user', text);
       inputEl.value = '';
@@ -462,53 +647,55 @@ class AssistantPanel {
       // Get current assistant config
       const cfg = this.ui.getAssistantConfig();
       if (!cfg || cfg.provider === 'none' || cfg.skipped) {
-        const bubble = addMessage('assistant', '', { typing: true });
-        if (bubble) {
-          await typeMessage(bubble, 'Assistant not configured. Please click the settings icon ⚙️ to set up your provider.', 15);
-        }
+        addMessage('assistant', 'Assistant not configured. Please click Settings ⚙️ to set up your provider.');
         return;
       }
+
+      setRequestingState(true);
 
       // Show animated thinking indicator
       const thinkingData = addThinkingMessage();
 
       try {
-        // All providers go through IPC (main process)
+        // All providers go through IPC (main process); send conversation history
         const result = await window.api.invoke('assistant-chat', {
           provider: cfg.provider,
           message: fullMessage,
+          history: this._conversationHistory,
           config: cfg
         });
 
         // Remove the thinking message
         removeThinkingMessage(thinkingData);
 
+        if (result && result.aborted) {
+          // User cancelled — no message, no history update
+          return;
+        }
+
         if (result && result.success) {
-          const bubble = addMessage('assistant', '', { typing: true });
+          // Update in-memory conversation history for next request
+          this._conversationHistory.push({ role: 'user', content: fullMessage });
+          this._conversationHistory.push({ role: 'assistant', content: result.reply });
+
+          // Render the full response immediately so code-block buttons are interactive at once
+          const bubble = addMessage('assistant', result.reply);
           if (bubble) {
-            await typeMessage(bubble, result.reply, 20);
-            
-            // Attach event listeners to code action buttons after rendering
-            setTimeout(() => {
-              attachCodeActionListeners();
-            }, 100);
+            attachCodeActionListeners();
           }
+
+          // Auto-save conversation after each exchange
+          this._saveCurrentConversation();
         } else {
           const errorMsg = result && result.error ? result.error : 'Unknown error occurred';
-          const bubble = addMessage('assistant', '', { typing: true });
-          if (bubble) {
-            await typeMessage(bubble, `❌ Error: ${errorMsg}`, 15);
-          }
+          addMessage('assistant', `❌ Error: ${errorMsg}`);
         }
       } catch (err) {
-        // Remove thinking message
         removeThinkingMessage(thinkingData);
-        
         console.error('Assistant chat error:', err);
-        const bubble = addMessage('assistant', '', { typing: true });
-        if (bubble) {
-          await typeMessage(bubble, `❌ Error: ${err.message || 'Failed to communicate with assistant'}`, 15);
-        }
+        addMessage('assistant', `❌ Error: ${err.message || 'Failed to communicate with assistant'}`);
+      } finally {
+        setRequestingState(false);
       }
     };
 
@@ -996,8 +1183,10 @@ class AssistantPanel {
     const btnCancel = dialog.querySelector('#assist-cancel');
     const btnSkip = dialog.querySelector('#assist-skip');
 
+    let escHandlerRef = null;
     const closeModal = (result) => {
       try { document.body.removeChild(modal); } catch (_) {}
+      if (escHandlerRef) { document.removeEventListener('keydown', escHandlerRef); escHandlerRef = null; }
       if (done) done(result);
     };
 
@@ -1077,27 +1266,180 @@ class AssistantPanel {
       }
 
       // Persist and close
+      // Detect system prompt change — clear conversation history so AI gets a fresh context
+      const prevCfg = this.ui.getAssistantConfig() || {};
+      if ((prevCfg.systemPrompt || '') !== (cfg.systemPrompt || '')) {
+        this._conversationHistory = [];
+      }
+
       await this.ui.saveAssistantConfig(cfg);
       // Notify main process in case it needs to warm things up
       try { window.api.send('assistant-config-updated', cfg); } catch (_) {}
       closeModal(cfg);
     };
 
-    // Dismiss modal when clicking outside the dialog
-    modal.onclick = (e) => { if (e.target === modal) closeModal(null); };
+    // Clicking outside the dialog triggers Save (same as clicking the Save button)
+    modal.onclick = (e) => { if (e.target === modal) btnSave.click(); };
+    // Escape key closes without saving
+    const escHandler = (e) => { if (e.key === 'Escape') { closeModal(null); } };
+    escHandlerRef = escHandler;
+    document.addEventListener('keydown', escHandler);
   }
 
-/**
-   * Visualyzer panel management
+  // ── Conversation persistence ────────────────────────────────────────────────
+
+  /**
+   * Persist the current conversation to disk. No-op if the history is empty.
    */
-  toggleVisualyzerPanel() {
-    // Open visualyzer in a separate window
-    window.api.send('open-visualyzer');
+  async _saveCurrentConversation() {
+    if (this._conversationHistory.length === 0) return;
+    if (!this._currentConvId) {
+      this._currentConvId = String(Date.now());
+    }
+    const firstUserMsg = this._conversationHistory.find(m => m.role === 'user');
+    const title = firstUserMsg ? firstUserMsg.content.replace(/\n/g, ' ').slice(0, 72) : 'Conversation';
+    try {
+      await window.api.invoke('assistant-conversations-save', {
+        id: this._currentConvId,
+        title,
+        history: this._conversationHistory,
+        createdAt: new Date().toISOString()
+      });
+    } catch (_) { /* non-critical */ }
   }
 
-  closeVisualyzer() {
-    // This method is no longer needed since visualyzer is in separate window
-    // Kept for backward compatibility
+  /**
+   * Show the history panel inside the messages area.
+   * Replaces the messages area with a list of saved conversations.
+   */
+  async _showHistoryPanel() {
+    const container = document.getElementById('assistant-messages');
+    if (!container) return;
+
+    // Save snapshot of current messages so we can restore them on "Back"
+    const prevHTML = container.innerHTML;
+    const prevHistory = this._conversationHistory.slice();
+    const prevConvId = this._currentConvId;
+
+    const render = async () => {
+      container.innerHTML = '';
+
+      // Header row
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:12px;';
+
+      const backBtn = document.createElement('button');
+      backBtn.title = 'Back to chat';
+      backBtn.style.cssText = 'background:transparent; border:none; color:#8b949e; cursor:pointer; padding:4px 6px; border-radius:4px; display:flex; align-items:center;';
+      backBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg>';
+      backBtn.onmouseover = () => { backBtn.style.color = '#c9d1d9'; };
+      backBtn.onmouseout = () => { backBtn.style.color = '#8b949e'; };
+      backBtn.onclick = () => {
+        container.innerHTML = prevHTML;
+        this._conversationHistory = prevHistory;
+        this._currentConvId = prevConvId;
+      };
+
+      const title = document.createElement('span');
+      title.style.cssText = 'font-size:13px; color:#c9d1d9; font-weight:500;';
+      title.textContent = 'Past conversations';
+
+      header.appendChild(backBtn);
+      header.appendChild(title);
+      container.appendChild(header);
+
+      // Fetch list
+      let conversations = [];
+      try {
+        const res = await window.api.invoke('assistant-conversations-list');
+        if (res && res.success) conversations = res.conversations || [];
+      } catch (_) {}
+
+      if (conversations.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'color:#555; font-size:12px; text-align:center; margin-top:32px;';
+        empty.textContent = 'No saved conversations yet.';
+        container.appendChild(empty);
+        return;
+      }
+
+      for (const conv of conversations) {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; cursor:pointer; border:1px solid #1e2530; margin-bottom:6px; background:#0d1117; transition:background 0.15s;';
+        item.onmouseover = () => { item.style.background = '#161b22'; };
+        item.onmouseout = () => { item.style.background = '#0d1117'; };
+
+        const info = document.createElement('div');
+        info.style.cssText = 'flex:1; min-width:0;';
+
+        const convTitle = document.createElement('div');
+        convTitle.style.cssText = 'font-size:12px; color:#c9d1d9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+        convTitle.textContent = conv.title || 'Untitled';
+
+        const date = document.createElement('div');
+        date.style.cssText = 'font-size:10px; color:#555; margin-top:2px;';
+        const d = new Date(conv.updatedAt || conv.createdAt);
+        date.textContent = isNaN(d) ? '' : d.toLocaleString();
+
+        info.appendChild(convTitle);
+        info.appendChild(date);
+
+        const delBtn = document.createElement('button');
+        delBtn.title = 'Delete';
+        delBtn.style.cssText = 'background:transparent; border:none; color:#555; cursor:pointer; padding:3px 5px; border-radius:4px; flex-shrink:0; display:flex; align-items:center;';
+        delBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528M8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5"/></svg>';
+        delBtn.onmouseover = () => { delBtn.style.color = '#e85555'; };
+        delBtn.onmouseout = () => { delBtn.style.color = '#555'; };
+        delBtn.onclick = async (e) => {
+          e.stopPropagation();
+          try { await window.api.invoke('assistant-conversations-delete', conv.id); } catch (_) {}
+          await render();
+        };
+
+        item.appendChild(info);
+        item.appendChild(delBtn);
+
+        // Click item body to load the conversation
+        item.onclick = async (e) => {
+          if (e.target === delBtn || delBtn.contains(e.target)) return;
+          try {
+            const res = await window.api.invoke('assistant-conversations-load', conv.id);
+            if (res && res.success && res.conversation) {
+              const loaded = res.conversation;
+              this._conversationHistory = loaded.history || [];
+              this._currentConvId = loaded.id;
+              // Rebuild message UI from history
+              container.innerHTML = '';
+              for (const msg of this._conversationHistory) {
+                const wrap = document.createElement('div');
+                wrap.style.marginBottom = '12px';
+                const bubble = document.createElement('div');
+                bubble.style.padding = '10px 12px';
+                bubble.style.borderRadius = '8px';
+                bubble.style.maxWidth = '90%';
+                bubble.style.lineHeight = '1.4';
+                if (msg.role === 'user') {
+                  bubble.style.cssText += 'background:#0b5fff; color:#fff; margin-left:auto; white-space:pre-wrap;';
+                  bubble.textContent = msg.content;
+                } else {
+                  bubble.style.cssText += 'background:#111319; color:#e6edf3; margin-right:auto;';
+                  bubble.innerHTML = (typeof window.renderMarkdown === 'function')
+                    ? window.renderMarkdown(msg.content)
+                    : msg.content.replace(/</g, '&lt;');
+                }
+                wrap.appendChild(bubble);
+                container.appendChild(wrap);
+              }
+              container.scrollTop = container.scrollHeight;
+            }
+          } catch (_) {}
+        };
+
+        container.appendChild(item);
+      }
+    };
+
+    await render();
   }
 
 }

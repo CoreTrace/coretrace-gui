@@ -75,6 +75,7 @@ class AnthropicProvider extends BaseProvider {
       max_tokens: options.maxTokens || 2000,
       system: systemPrompt,
       messages: [
+        ...(options.history || []),
         { role: 'user', content: message }
       ],
       temperature: options.temperature !== undefined ? options.temperature : 0.7
