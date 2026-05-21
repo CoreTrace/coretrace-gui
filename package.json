@@ -1,6 +1,6 @@
 {
   "name": "ctrace-gui",
-  "version": "5.0.1",
+  "version": "5.0.1a",
   "description": "A modern Electron-based GUI for CTrace static analysis tool",
   "main": "src/main.js",
   "scripts": {
