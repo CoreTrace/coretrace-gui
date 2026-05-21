@@ -12,6 +12,7 @@
   font-size: 11px;
   color: var(--text-secondary);
   font-weight: 500;
+  overflow: hidden;
 }
 
 .statusbar-left,
@@ -20,6 +21,13 @@
   align-items: center;
   gap: 14px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.statusbar-left > *,
+.statusbar-right > * {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 #backend_version {
