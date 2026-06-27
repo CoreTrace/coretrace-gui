@@ -40,6 +40,17 @@
   min-width: 190px;
   max-width: 190px;
   position: relative;
+  /* Prevent text selection so dragging the tab starts a drag, not a selection. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Child label/text must not capture the drag as a text selection either. */
+.tab .tab-label,
+.tab .tab-label * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .tab .tab-label {
