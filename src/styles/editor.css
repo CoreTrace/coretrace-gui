@@ -1,3 +1,111 @@
+/* ===== Split editor (two groups side by side) ===== */
+.editor-split-row {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  min-width: 0;
+}
+
+.editor-group {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.editor-group-main {
+  flex: 1 1 0;
+}
+
+.editor-group-extra {
+  flex: 0 0 auto;
+  width: 45%;
+  min-width: 220px;
+}
+
+/* Vertical drag handle between the two editor groups */
+.editor-split-resizer {
+  flex: 0 0 6px;
+  width: 6px;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.06);
+  z-index: 6;
+  transition: background-color 0.15s ease;
+}
+.editor-split-resizer:hover,
+.editor-split-resizer.dragging {
+  background: rgba(88, 166, 255, 0.35);
+}
+
+/* When split is active, flatten the two cards into one continuous panel so it
+   reads as a single editor divided by the resizer (not two separate windows). */
+.editor-split-row.split-active .editor-group-main > .tabs-container,
+.editor-split-row.split-active .editor-group-main > .editor-container {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+.editor-split-row.split-active .editor-group-extra > .tabs-container,
+.editor-split-row.split-active .editor-group-extra > .editor-container {
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 0;
+  border-left: none;
+}
+/* Round only the far-right edge of the whole split panel. */
+.editor-split-row.split-active .editor-group-extra:last-of-type > .tabs-container,
+.editor-split-row.split-active .editor-group-extra:last-of-type > .editor-container {
+  margin-right: 12px;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+/* Secondary editor area (mirrors #editor-area minus the banners) */
+.editor-area-2 {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--editor-bg);
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Drop-region indicator shown while dragging a tab over a group.
+   .show-center = add to this group; .show-right = open a new group to the right. */
+.editor-split-indicator {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  pointer-events: none;
+  display: none;
+  z-index: 50;
+  border-radius: 12px;
+}
+.editor-split-indicator.show-center {
+  display: block;
+  background: rgba(88, 166, 255, 0.14);
+  border: 2px solid rgba(88, 166, 255, 0.5);
+}
+.editor-split-indicator.show-right {
+  display: block;
+  background: linear-gradient(to right, transparent 60%, rgba(88, 166, 255, 0.2) 60%);
+  border-right: 3px solid rgba(88, 166, 255, 0.65);
+}
+
+/* A tab being dragged */
+.tab.tab-dragging {
+  opacity: 0.5;
+}
+
 /* Editor styles */
 .editor-container {
   flex: 1;

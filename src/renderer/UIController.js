@@ -66,7 +66,18 @@ class UIController {
      * @private
      */
     this.tabManager = new TabManager(this.editorManager, this.notificationManager);
-    
+
+    /**
+     * Split pane manager — secondary editor group for side-by-side files
+     * @type {SplitPaneManager}
+     * @private
+     */
+    this.splitPaneManager = new SplitPaneManager({
+      tabManager: this.tabManager,
+      notificationManager: this.notificationManager
+    });
+    if (typeof window !== 'undefined') window.splitPaneManager = this.splitPaneManager;
+
     /**
      * Search manager instance
      * @type {SearchManager}
@@ -810,6 +821,19 @@ class UIController {
     // Activity bar functions
     window.showExplorer = () => this.showExplorer();
     window.showSearch = () => this.showSearch();
+
+    // Toggle the animated background visual effects (glows + window light trail).
+    // Reuses PerformanceManager's lite-effects mode, which the effect CSS keys off.
+    window.toggleVisualEffects = () => {
+      const pm = this.performanceManager;
+      pm.applyLiteEffects(!pm.liteEffectsEnabled);
+      this.syncVisualEffectsLabel();
+    };
+    this.syncVisualEffectsLabel = () => {
+      const el = document.getElementById('visual-effects-state');
+      if (el) el.textContent = this.performanceManager.liteEffectsEnabled ? 'Off' : 'On';
+    };
+    this.syncVisualEffectsLabel();
 
     // File operations
     window.createNewFile = () => this.tabManager.createNewFile();
