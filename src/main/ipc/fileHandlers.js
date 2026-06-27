@@ -13,6 +13,9 @@ const { ipcMain, dialog } = require('electron');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileP = promisify(execFile);
 const chokidar = require('chokidar');
 const ignore = require('ignore');
 const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, LARGE_FILE_THRESHOLD, validatePathInWorkspace } = require('../utils/fileUtils');
@@ -51,6 +54,21 @@ function requireInWorkspace(targetPath) {
   if (!valid) {
     return { success: false, error: 'Access denied: path is outside the current workspace' };
   }
+  return null;
+}
+
+/**
+ * Reduce a git porcelain XY status pair to a single decoration code.
+ * @returns {'U'|'M'|'A'|'D'|'R'|'C'|null}
+ */
+function gitStatusCode(x, y) {
+  if (x === '?' || y === '?') return 'U';            // untracked
+  if (x === 'U' || y === 'U' || (x === 'A' && y === 'A') || (x === 'D' && y === 'D')) return 'C'; // conflict
+  if (x === 'R' || y === 'R') return 'R';            // renamed
+  if (x === 'A' || y === 'A') return 'A';            // added
+  if (x === 'D' || y === 'D') return 'D';            // deleted
+  if (x === 'M' || y === 'M') return 'M';            // modified
+  if (x !== ' ' || y !== ' ') return 'M';            // any other change
   return null;
 }
 
@@ -204,6 +222,55 @@ function setupFileHandlers(mainWindow) {
         success: false,
         error: formatFileError(error, dirPath, 'read directory contents for')
       };
+    }
+  });
+
+  // Git status for the current workspace. Returns a map of absolute file path
+  // -> single-letter decoration code. Always resolves (never throws to the UI);
+  // a missing git binary or a non-repo workspace yields { repo:false, files:{} }.
+  ipcMain.handle('get-git-status', async () => {
+    const cwd = currentWatchPath;
+    if (!cwd) return { success: true, repo: false, files: {} };
+
+    try {
+      // Resolve the repo root so porcelain paths (relative to repo root) can be
+      // turned into absolute paths matching the file-tree item paths.
+      let repoRoot;
+      try {
+        const { stdout } = await execFileP('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { timeout: 8000 });
+        repoRoot = stdout.trim();
+      } catch {
+        return { success: true, repo: false, files: {} };
+      }
+      if (!repoRoot) return { success: true, repo: false, files: {} };
+
+      const { stdout } = await execFileP(
+        'git',
+        ['-c', 'core.quotepath=false', '-C', cwd, 'status', '--porcelain=v1', '--ignored=no', '-z'],
+        { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }
+      );
+
+      const files = {};
+      const tokens = stdout.split('\0');
+      for (let i = 0; i < tokens.length; i++) {
+        const entry = tokens[i];
+        if (!entry || entry.length < 3) continue;
+        const x = entry[0];
+        const y = entry[1];
+        let relPath = entry.slice(3);
+
+        // Renames/copies carry the original path in the next NUL-terminated token.
+        if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
+          i++; // consume original-path token
+        }
+
+        const code = gitStatusCode(x, y);
+        if (code) files[path.join(repoRoot, relPath)] = code;
+      }
+
+      return { success: true, repo: true, files };
+    } catch {
+      return { success: true, repo: false, files: {} };
     }
   });
 

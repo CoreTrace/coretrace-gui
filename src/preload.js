@@ -55,6 +55,7 @@ const INVOKE_CHANNELS = [
   'force-open-file',
   'force-load-full-file',
   'get-directory-contents',
+  'get-git-status',
   'search-in-files',
   'create-file',
   'create-folder',
