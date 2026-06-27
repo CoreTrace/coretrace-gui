@@ -51,6 +51,27 @@
   min-height: 160px;
 }
 
+.open-folder-btn {
+  width: 100%;
+  padding: 10px 12px;
+  background: #2f7fb0;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.open-folder-btn:hover {
+  background: #3a90c4;
+}
+
+.open-folder-btn:active {
+  background: #2a719d;
+}
+
 #explorer-view {
   display: flex;
   flex-direction: column;
@@ -68,17 +89,17 @@
 .file-tree-item {
   display: flex;
   align-items: center;
-  padding: 5px 8px;
+  height: 22px;
+  padding: 0 6px 0 4px;
   cursor: pointer;
-  border-radius: 10px;
-  margin: 2px 0;
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  border-radius: 4px;
+  margin: 1px 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
   color: var(--text-secondary);
 }
 
 .file-tree-item:hover {
   background: rgba(255, 255, 255, 0.06);
-  transform: translateX(1px);
 }
 
 .file-tree-item.selected {
@@ -87,9 +108,47 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
+/* Workspace root row (collapses the whole tree) */
+.file-tree-root {
+  user-select: none;
+  cursor: pointer;
+}
+.file-tree-root .name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Indent guides — one per ancestor level */
+.file-tree-item .indent-guide {
+  flex: 0 0 16px;
+  align-self: stretch;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  margin-left: 7px;
+}
+
+/* Folder expand/collapse chevron */
+.file-tree-item .twisty {
+  flex: 0 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.file-tree-item .twisty::before {
+  content: '▸';
+  transition: transform 0.12s ease;
+}
+.file-tree-item.expanded .twisty::before {
+  transform: rotate(90deg);
+}
+
 .file-tree-item .icon {
+  flex: 0 0 16px;
   margin-right: 6px;
-  width: 16px;
   display: flex;
   justify-content: center;
 }
@@ -105,6 +164,46 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ===== Git status decorations ===== */
+.file-tree-item .git-badge {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  min-width: 12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* Folder "contains changes" dot */
+.file-tree-item .git-badge.git-dot {
+  width: 8px;
+  height: 8px;
+  min-width: 0;
+  border-radius: 50%;
+  background: #73c991;
+}
+
+/* Filename + badge colors per status (VSCode palette) */
+.file-tree-item[data-git="U"] .name,
+.file-tree-item[data-git="U"] .git-badge,
+.file-tree-item[data-git="A"] .name,
+.file-tree-item[data-git="A"] .git-badge,
+.file-tree-item[data-git="R"] .name,
+.file-tree-item[data-git="R"] .git-badge {
+  color: #73c991;
+}
+.file-tree-item[data-git="M"] .name,
+.file-tree-item[data-git="M"] .git-badge {
+  color: #e2c08d;
+}
+.file-tree-item[data-git="D"] .name,
+.file-tree-item[data-git="D"] .git-badge,
+.file-tree-item[data-git="C"] .name,
+.file-tree-item[data-git="C"] .git-badge {
+  color: #c74e39;
 }
 
 #workspace-name {

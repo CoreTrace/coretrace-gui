@@ -13,6 +13,7 @@ const inputFiles = [
   'src/renderer/managers/NotificationManager.js',
   'src/renderer/managers/MonacoEditorManager.js',
   'src/renderer/managers/TabManager.js',
+  'src/renderer/managers/SplitPaneManager.js',
   'src/renderer/managers/SearchManager.js',
   'src/renderer/managers/FileOperationsManager.js',
   'src/renderer/managers/DiagnosticsManager.js',

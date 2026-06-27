@@ -49,6 +49,11 @@ class FileOperationsManager {
     this._fileTreeClickHandler = this._fileTreeClickHandler.bind(this);
     this._fileTreeClickHandlerAttached = false;
     this._selectedFileTreeItem = null;
+
+    /** Git decoration state: absolute file path -> status code ('U'|'M'|'A'|'D'|'R'|'C'). */
+    this._gitFiles = {};
+    /** Set of absolute folder paths that contain at least one changed file. */
+    this._gitDirs = new Set();
   }
 
   /**
@@ -271,6 +276,7 @@ class FileOperationsManager {
           if (!options.silent) {
             this.notificationManager.showSuccess('File saved successfully');
           }
+          this.refreshGitStatus();
           return result;
         } else {
           // If save failed because the file no longer exists, mark tab as missing
@@ -322,6 +328,7 @@ class FileOperationsManager {
         if (!options.silent) {
           this.notificationManager.showSuccess('File saved successfully');
         }
+        this.refreshGitStatus();
         return result;
       }
 
@@ -564,6 +571,18 @@ class FileOperationsManager {
     if (workspaceName) {
       workspaceName.textContent = folderName.toUpperCase();
     }
+
+    // Wire the collapsible workspace-root row once. Clicking it toggles the
+    // whole tree; the chevron rotates via the `.expanded` class.
+    const rootRow = document.getElementById('workspace-root');
+    const treeEl = document.getElementById('file-tree');
+    if (rootRow && treeEl && !this._workspaceRootToggleAttached) {
+      this._workspaceRootToggleAttached = true;
+      rootRow.addEventListener('click', () => {
+        const expanded = rootRow.classList.toggle('expanded');
+        treeEl.style.display = expanded ? '' : 'none';
+      });
+    }
     
     if (workspaceFolder) {
       workspaceFolder.style.display = 'block';
@@ -579,6 +598,74 @@ class FileOperationsManager {
         this._fileTreeClickHandlerAttached = true;
       }
       this.renderFileTree(fileTree, fileTreeElement);
+      this.refreshGitStatus();
+    }
+  }
+
+  /**
+   * Fetch git status for the workspace and (re)apply decorations to the tree.
+   * Safe to call repeatedly; resolves quietly when there is no repo/git.
+   */
+  async refreshGitStatus() {
+    if (!window.api || typeof window.api.invoke !== 'function') return;
+    try {
+      const res = await window.api.invoke('get-git-status');
+      const files = (res && res.files) || {};
+      this._gitFiles = files;
+
+      // Roll up: mark every ancestor folder of a changed file.
+      const dirs = new Set();
+      for (const filePath of Object.keys(files)) {
+        let dir = filePath.replace(/[/\\][^/\\]*$/, '');
+        while (dir && dir.length > 1) {
+          if (dirs.has(dir)) break;
+          dirs.add(dir);
+          const parent = dir.replace(/[/\\][^/\\]*$/, '');
+          if (parent === dir) break;
+          dir = parent;
+        }
+      }
+      this._gitDirs = dirs;
+
+      this.redecorateVisibleTree();
+    } catch {
+      // Ignore — decorations are best-effort.
+    }
+  }
+
+  /** Re-apply git decorations to every currently rendered tree row. */
+  redecorateVisibleTree() {
+    const container = document.getElementById('file-tree');
+    if (!container) return;
+    container.querySelectorAll('.file-tree-item').forEach((el) => {
+      const item = this._fileTreeNodeData.get(el);
+      if (item) this.applyGitDecoration(el, item);
+    });
+  }
+
+  /**
+   * Apply (or clear) the git decoration for a single tree row. Idempotent.
+   * @param {Element} el - The .file-tree-item element
+   * @param {Object} item - The tree node { path, type }
+   */
+  applyGitDecoration(el, item) {
+    const badge = el.querySelector('.git-badge');
+    // Reset prior decoration.
+    el.removeAttribute('data-git');
+    if (badge) { badge.textContent = ''; badge.className = 'git-badge'; }
+
+    if (item.type === 'directory') {
+      if (this._gitDirs.has(item.path) && badge) {
+        el.setAttribute('data-git', 'dir');
+        badge.classList.add('git-dot');
+      }
+      return;
+    }
+
+    const code = this._gitFiles[item.path];
+    if (code && badge) {
+      el.setAttribute('data-git', code);
+      badge.textContent = code;
     }
   }
 
@@ -609,16 +696,14 @@ class FileOperationsManager {
           this.renderFileTree(item.children, childContainer, (parseInt(itemElement.getAttribute('data-level') || '0', 10) + 1));
         }
 
-        const icon = itemElement.querySelector('.icon');
-        if (icon) icon.textContent = '📂';
+        itemElement.classList.add('expanded');
         itemElement.setAttribute('data-expanded', 'true');
       } else {
         const nextSibling = itemElement.nextSibling;
         if (nextSibling && nextSibling.getAttribute && nextSibling.getAttribute('data-parent-path') === item.path) {
           nextSibling.remove();
         }
-        const icon = itemElement.querySelector('.icon');
-        if (icon) icon.textContent = '📁';
+        itemElement.classList.remove('expanded');
         itemElement.setAttribute('data-expanded', 'false');
       }
 
@@ -665,12 +750,10 @@ class FileOperationsManager {
         // Store children in the item
         item.children = result.contents;
         
-        // Render the children
+        // Render the children (rows are git-decorated as they are built)
         this.renderFileTree(result.contents, container, level);
-        
-        // Update icon
-        const icon = itemElement.querySelector('.icon');
-        if (icon) icon.textContent = '📂';
+
+        itemElement.classList.add('expanded');
         itemElement.setAttribute('data-expanded', 'true');
       } else {
         // Show error
@@ -712,7 +795,6 @@ class FileOperationsManager {
       for (let i = startIndex; i < Math.min(startIndex + CHUNK_SIZE, tree.length); i++) {
         const item = tree[i];
         const itemElement = document.createElement('div');
-        itemElement.style.marginLeft = (level * 16) + 'px';
         itemElement.className = 'file-tree-item';
         itemElement.setAttribute('data-path', item.path);
         itemElement.setAttribute('data-type', item.type);
@@ -721,20 +803,26 @@ class FileOperationsManager {
 
         this._fileTreeNodeData.set(itemElement, item);
 
+        // Indent guide lines, one per ancestor level (VSCode style).
+        const guides = '<span class="indent-guide"></span>'.repeat(level);
+
         if (item.type === 'directory') {
           itemElement.setAttribute('data-expanded', 'false');
           itemElement.innerHTML = `
-            <span class="icon">📁</span>
+            ${guides}<span class="twisty"></span>
             <span class="name">${item.name}</span>
+            <span class="git-badge"></span>
           `;
         } else {
           const fileIcon = this.getFileIcon(item.name);
           itemElement.innerHTML = `
-            <span class="icon">${fileIcon}</span>
+            ${guides}<span class="icon">${fileIcon}</span>
             <span class="name">${item.name}</span>
+            <span class="git-badge"></span>
           `;
         }
 
+        this.applyGitDecoration(itemElement, item);
         fragment.appendChild(itemElement);
       }
 

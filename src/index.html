@@ -166,7 +166,7 @@
       <div class="sidebar-content">
         <div id="explorer-view">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em;">WORKSPACE</div>
+            <div style="color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em;">EXPLORER</div>
             <button id="refresh-file-tree" title="Refresh" style="background: none; border: none; cursor: pointer; padding: 2px;">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 1 .908-.418A4 4 0 1 0 8 4V1.5a.5.5 0 0 1 1 0v3A.5.5 0 0 1 8.5 5h-3a.5.5 0 0 1 0-1H8z"/>
@@ -174,14 +174,14 @@
             </button>
           </div>
           <div id="workspace-folder" style="display: none;">
-            <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 8px; font-weight: 600; cursor: context-menu; user-select: none;" id="workspace-name" title="Right-click to close workspace"></div>
+            <div id="workspace-root" class="file-tree-item file-tree-root expanded" title="Right-click to close workspace">
+              <span class="twisty"></span>
+              <span class="name" id="workspace-name"></span>
+            </div>
             <div id="file-tree" class="file-tree"></div>
           </div>
           <div id="no-workspace">
-            <div style="padding: 10px 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; cursor: pointer; margin-bottom: 8px; transition: all 0.15s ease;" onclick="openWorkspace()">
-              <div style="font-size: 12px; font-weight: 500;">📁 Open Folder</div>
-              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Open a workspace or folder</div>
-            </div>
+            <button type="button" class="open-folder-btn" onclick="openWorkspace()">Open Folder</button>
           </div>
         </div>
         <div id="search-view" style="display: none;">
@@ -280,6 +280,11 @@
               <span class="shortcut">Ctrl+Shift+F</span>
             </div>
             <div class="dropdown-separator"></div>
+            <div class="dropdown-item" onclick="toggleVisualEffects(); hideAllMenus();">
+              <span>Visual Effects</span>
+              <span class="shortcut" id="visual-effects-state">On</span>
+            </div>
+            <div class="dropdown-separator"></div>
             <div class="dropdown-item" onclick="toggleSidebar(); hideAllMenus();">
               <span>Toggle Sidebar</span>
               <span class="shortcut">Ctrl+B</span>
@@ -303,51 +308,60 @@
 
       </div>
         
-      <!-- Tabs -->
-      <div class="tabs-container" id="tabs-container" style="display: none;">
-        <!-- Tabs will be added dynamically -->
-      </div>
-
-      <!-- Editor Container -->
-      <div class="editor-container">
-        <div class="editor-main">
-          <!-- Welcome Screen (shown by default) -->
-          <div class="welcome-screen" id="welcome-screen">
-            <h1>Welcome to CTraceGUI</h1>
-            <p>Import a file to start analysis!</p>
-            <div class="welcome-actions">
-              <button class="welcome-action" onclick="createNewFile()">
-                📝 New File
-              </button>
-              <button class="welcome-action" onclick="openFile()">
-                📄 Open File
-              </button>
-              <button class="welcome-action" onclick="openWorkspace()">
-                📁 Open Folder
-              </button>
-            </div>
-            <p style="font-size: 14px; color: var(--text-muted); margin-top: 24px;">
-              You can also use the <strong>File</strong> menu above to access all file operations.
-            </p>
+      <!-- Editor split row: main group | resizer | secondary group -->
+      <div class="editor-split-row" id="editor-split-row">
+        <!-- Main editor group -->
+        <div class="editor-group editor-group-main" id="editor-group-main">
+          <!-- Tabs -->
+          <div class="tabs-container" id="tabs-container" style="display: none;">
+            <!-- Tabs will be added dynamically -->
           </div>
-          
-          <!-- Editor Area (hidden by default) -->
-          <div style="display: none; flex-direction: column;" id="editor-area">
-            <div id="file-missing-banner">
-              <span class="fmb-icon">⚠</span>
-              <span class="fmb-msg" id="file-missing-msg">File not found on disk.</span>
-              <button class="fmb-close" id="file-missing-close-btn">Close tab</button>
-            </div>
-            <div class="editor" id="editor" style="flex: 1;"></div>
-            <div id="partial-file-banner">
-              <span class="pfb-icon">📄</span>
-              <span class="pfb-msg" id="partial-file-msg">Showing first 1 MB</span>
-              <button class="pfb-btn" id="partial-load-more-btn">Load next 1 MB</button>
+
+          <!-- Editor Container -->
+          <div class="editor-container">
+            <div class="editor-main">
+              <!-- Welcome Screen (shown by default) -->
+              <div class="welcome-screen" id="welcome-screen">
+                <h1>Welcome to CTraceGUI</h1>
+                <p>Import a file to start analysis!</p>
+                <div class="welcome-actions">
+                  <button class="welcome-action" onclick="createNewFile()">
+                    📝 New File
+                  </button>
+                  <button class="welcome-action" onclick="openFile()">
+                    📄 Open File
+                  </button>
+                  <button class="welcome-action" onclick="openWorkspace()">
+                    📁 Open Folder
+                  </button>
+                </div>
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 24px;">
+                  You can also use the <strong>File</strong> menu above to access all file operations.
+                </p>
+              </div>
+
+              <!-- Editor Area (hidden by default) -->
+              <div style="display: none; flex-direction: column;" id="editor-area">
+                <div id="file-missing-banner">
+                  <span class="fmb-icon">⚠</span>
+                  <span class="fmb-msg" id="file-missing-msg">File not found on disk.</span>
+                  <button class="fmb-close" id="file-missing-close-btn">Close tab</button>
+                </div>
+                <div class="editor" id="editor" style="flex: 1;"></div>
+                <div id="partial-file-banner">
+                  <span class="pfb-icon">📄</span>
+                  <span class="pfb-msg" id="partial-file-msg">Showing first 1 MB</span>
+                  <button class="pfb-btn" id="partial-load-more-btn">Load next 1 MB</button>
+                </div>
+              </div>
             </div>
           </div>
-          
 
+          <!-- Drop-region indicator shown while dragging a tab over this group -->
+          <div class="editor-split-indicator" data-group-indicator="main"></div>
         </div>
+
+        <!-- Extra editor groups (and their resizers) are created dynamically here -->
       </div>
 
       <!-- Terminal Panel (bottom, above status bar) -->
