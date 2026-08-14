@@ -1,11 +1,20 @@
+use floem::reactive::Scope;
 use floem::Application;
 
-use crate::sidecar_panel::sidecar_panel;
+use crate::state::AppState;
+use crate::views::shell::shell;
 
-/// Phase 0 spike entry point: a bare window proving the native Floem UI
-/// can round-trip a command through the extension-host sidecar over IPC.
+/// Phase 1 minimal native shell: window chrome, file tree, tabbed editor.
+/// No LSP, no extensions, no ctrace yet -- see native/docs/phase0-status.md
+/// for the Phase 0 spike this builds on and native/docs/ for Phase 1 status.
 pub fn run() {
     Application::new()
-        .window(|_| sidecar_panel(), None)
+        .window(
+            |_| {
+                let state = AppState::new(Scope::current());
+                shell(state)
+            },
+            None,
+        )
         .run();
 }
