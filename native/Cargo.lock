@@ -703,6 +703,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "coretrace-llm"
+version = "0.1.0"
+dependencies = [
+ "llama-cpp-4",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "coretrace-llm-spike"
 version = "0.1.0"
 dependencies = [
@@ -725,9 +735,12 @@ dependencies = [
  "coretrace-ctrace",
  "coretrace-extensions",
  "coretrace-ipc",
+ "coretrace-llm",
  "coretrace-lsp",
  "floem",
  "rfd",
+ "serde",
+ "serde_json",
  "tree-sitter",
  "tree-sitter-c",
  "tree-sitter-cpp",

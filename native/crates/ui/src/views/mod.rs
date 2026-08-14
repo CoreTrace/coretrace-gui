@@ -1,3 +1,4 @@
+pub mod assistant;
 pub mod commands;
 pub mod diagnostics;
 pub mod editor;

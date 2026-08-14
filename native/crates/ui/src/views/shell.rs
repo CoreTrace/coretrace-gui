@@ -2,6 +2,7 @@ use floem::prelude::*;
 use floem::views::Decorators;
 
 use crate::state::{AppState, SidebarMode};
+use crate::views::assistant::assistant_panel;
 use crate::views::commands::commands_panel;
 use crate::views::diagnostics::diagnostics_panel;
 use crate::views::editor::editor_area;
@@ -31,7 +32,10 @@ fn sidebar(state: AppState) -> impl IntoView {
             h_stack((
                 button("Extensions").action(move || state.sidebar_mode.set(SidebarMode::Extensions)),
                 button("Commands").action(move || state.sidebar_mode.set(SidebarMode::Commands)),
+            )),
+            h_stack((
                 button("Diagnostics").action(move || state.sidebar_mode.set(SidebarMode::Diagnostics)),
+                button("Assistant").action(move || state.sidebar_mode.set(SidebarMode::Assistant)),
             )),
         )),
         dyn_container(
@@ -42,6 +46,7 @@ fn sidebar(state: AppState) -> impl IntoView {
                 SidebarMode::Extensions => extensions_panel(state).into_any(),
                 SidebarMode::Commands => commands_panel(state).into_any(),
                 SidebarMode::Diagnostics => diagnostics_panel(state).into_any(),
+                SidebarMode::Assistant => assistant_panel(state).into_any(),
             },
         ),
     ))

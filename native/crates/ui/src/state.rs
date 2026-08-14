@@ -5,6 +5,7 @@ use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
 
 use coretrace_core::{search_in_files, SearchMatch};
 
+use crate::assistant_state::AssistantState;
 use crate::diagnostics_state::DiagnosticsState;
 use crate::extensions_state::ExtensionsState;
 
@@ -20,6 +21,7 @@ pub enum SidebarMode {
     Extensions,
     Commands,
     Diagnostics,
+    Assistant,
 }
 
 /// An in-progress file-tree edit (rename or create), rendered as an
@@ -49,6 +51,7 @@ pub struct AppState {
     pub extensions: ExtensionsState,
     pub diagnostics: DiagnosticsState,
     pub lsp: Option<&'static coretrace_lsp::LspClient>,
+    pub assistant: AssistantState,
 }
 
 impl AppState {
@@ -71,6 +74,7 @@ impl AppState {
             extensions: ExtensionsState::new(cx, sidecar),
             diagnostics: DiagnosticsState::new(cx),
             lsp,
+            assistant: AssistantState::new(cx),
         }
     }
 
