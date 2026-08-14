@@ -1,0 +1,14 @@
+{
+  "name": "coretrace-extension-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phase 0 spike: sidecar process that will host VSCode-API-compatible extensions, reachable from the native Rust core over local IPC.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
