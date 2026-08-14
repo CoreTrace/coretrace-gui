@@ -1,10 +1,15 @@
 import { Range } from './range.js';
+import { Uri } from './uri.js';
 
 // Fake in-memory TextDocument. Only implements the slice of the real
 // vscode.TextDocument API that the Phase 0 spike extension touches.
 export class TextDocument {
-  constructor(text) {
+  constructor(text, fileName = 'untitled', languageId = 'plaintext') {
     this._lines = text.split('\n');
+    this.fileName = fileName;
+    this.uri = Uri.file(fileName);
+    this.languageId = languageId;
+    this.isClosed = false;
   }
 
   get lineCount() {

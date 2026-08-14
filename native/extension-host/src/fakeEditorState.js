@@ -7,8 +7,8 @@ import { Selection } from './vscode-shim/selection.js';
 
 let activeEditor = null;
 
-export function setDocumentText(text) {
-  const document = new TextDocument(text);
+export function setDocumentText(text, fileName, languageId) {
+  const document = new TextDocument(text, fileName, languageId);
   const editor = new TextEditor(document);
   const lastLine = document.lineCount - 1;
   const lastLineLength = document.lineAt(lastLine).text.length;

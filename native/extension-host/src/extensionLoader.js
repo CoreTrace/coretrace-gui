@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { Memento } from './vscode-shim/memento.js';
+import { Uri } from './vscode-shim/uri.js';
 import { registerConfigDefaults } from './configDefaults.js';
 
 let originalLoad = null;
@@ -31,7 +32,13 @@ export function loadExtension(extensionDir) {
   const mainPath = path.resolve(extensionDir, manifest.main);
 
   const extensionModule = requireFromExtension(mainPath);
-  const context = { subscriptions: [], workspaceState: new Memento(), globalState: new Memento() };
+  const context = {
+    subscriptions: [],
+    workspaceState: new Memento(),
+    globalState: new Memento(),
+    extensionPath: extensionDir,
+    extensionUri: Uri.file(extensionDir),
+  };
   extensionModule.activate(context);
   return { manifest, context };
 }
