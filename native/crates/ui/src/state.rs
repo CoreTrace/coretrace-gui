@@ -48,10 +48,15 @@ pub struct AppState {
     pub search_results: RwSignal<Vec<SearchMatch>>,
     pub extensions: ExtensionsState,
     pub diagnostics: DiagnosticsState,
+    pub lsp: Option<&'static coretrace_lsp::LspClient>,
 }
 
 impl AppState {
-    pub fn new(cx: Scope, sidecar: &'static coretrace_ipc::SidecarSupervisor) -> Self {
+    pub fn new(
+        cx: Scope,
+        sidecar: &'static coretrace_ipc::SidecarSupervisor,
+        lsp: Option<&'static coretrace_lsp::LspClient>,
+    ) -> Self {
         Self {
             workspace_root: cx.create_rw_signal(std::env::current_dir().ok()),
             expanded_dirs: cx.create_rw_signal(HashSet::new()),
@@ -65,6 +70,7 @@ impl AppState {
             search_results: cx.create_rw_signal(Vec::new()),
             extensions: ExtensionsState::new(cx, sidecar),
             diagnostics: DiagnosticsState::new(cx),
+            lsp,
         }
     }
 

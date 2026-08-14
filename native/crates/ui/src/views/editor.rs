@@ -11,6 +11,7 @@ use floem::views::Decorators;
 
 use coretrace_core::{read_file, write_file};
 
+use crate::lsp_bridge::{file_uri, notify_open};
 use crate::sidecar_bridge::sync_document;
 use crate::state::{AppState, OpenTab};
 use crate::syntax::TreeSitterStyling;
@@ -46,7 +47,11 @@ fn is_save_shortcut(keypress: &KeyPress, modifiers: Modifiers) -> bool {
 fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     let content = read_file(&path).unwrap_or_default();
     let diagnostics = state.diagnostics.diagnostics_for(&path);
-    let styling = TreeSitterStyling::with_diagnostics(&path, &content, &diagnostics);
+    if let Some(client) = state.lsp {
+        notify_open(client, &path, &content);
+    }
+    let lsp_diagnostics = state.lsp.map(|c| c.diagnostics_for(&file_uri(&path))).unwrap_or_default();
+    let styling = TreeSitterStyling::with_diagnostics(&path, &content, &diagnostics, &lsp_diagnostics);
     let save_path = path.clone();
     let visible_path = path.clone();
 

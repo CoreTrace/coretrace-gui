@@ -1,6 +1,8 @@
 mod app;
 mod diagnostics_state;
 mod extensions_state;
+mod lsp;
+mod lsp_bridge;
 mod sidecar;
 mod sidecar_bridge;
 mod state;
