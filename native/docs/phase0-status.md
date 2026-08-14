@@ -88,15 +88,40 @@ llama.cpp from source at build time via `cmake`).
   `vscode.window.createWebviewPanel` has been tried — the webview case in
   particular is the one flagged as a possible permanent product
   limitation in the plan, still unverified either way.
-- Transport is TCP loopback for spike convenience; latency/overhead
-  numbers have not been measured yet (the plan's exit criteria asks for
-  concrete IPC round-trip latency and sidecar memory overhead numbers).
+- ~~Latency/memory numbers~~ **done, see `phase0-measurements.md`.**
 - ~~Rust `llama.cpp` binding viability~~ **done, see below.**
 - Sidecar is started manually (`node src/index.js`); no process
   supervision/spawn-from-Rust/crash-recovery yet.
 - `fakeEditorState` is a single global mutable document/editor, not a
   real per-file synced buffer — fine for this proof, not representative
   of Phase 3's actual document-sync design.
+
+## Go/no-go verdict (preliminary)
+
+**GO on the extension-host architecture**, with two follow-ups before
+calling Phase 0 fully closed (see "not done yet" above):
+
+1. The core hypothesis — native GPU UI + a Node sidecar shimming just
+   enough of the `vscode` API to run real, unmodified extensions — works.
+   One real extension's `activate()` ran unchanged and its command
+   produced a correct result through the full IPC path, with a shim under
+   200 lines across 8 small files.
+2. IPC overhead is a non-issue at this scale (~27µs avg round trip,
+   ~38.5MB sidecar RSS) — the architecture isn't going to be slow or
+   heavy because of the sidecar split itself.
+3. Local LLM inference does not need the Node sidecar either — a Rust
+   `llama.cpp` binding initializes and links cleanly on Windows with no
+   unusual toolchain setup.
+
+**Caveat that keeps this "preliminary" and not final**: only one
+extension, exercising only a `commands`-shaped API surface, has been
+tried. The plan explicitly flagged `vscode.window.createWebviewPanel`
+(and other browser-surface-assuming APIs) as the likely permanent
+limitation of a no-webview architecture — that's still untested in
+either direction. Don't scope Phase 3 in detail (per the plan's own
+instruction) until a language-feature/diagnostics-shaped extension has
+been tried and the webview question has an explicit answer, even if
+that answer is "unsupported by design."
 
 ## Next concrete step
 
