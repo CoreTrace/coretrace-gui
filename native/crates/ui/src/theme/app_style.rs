@@ -59,6 +59,15 @@ pub fn app_theme() -> Style {
         })
         // The default is ~12% alpha gray -- effectively invisible.
         .class(PlaceholderTextClass, |s| s.color(TEXT_MUTED).font_size(13.0))
+        // Floem's default handle is 16px thick, which reads as a heavy
+        // bar down the side of a 260px panel. IDE scrollbars are thin
+        // and unobtrusive.
+        .apply_custom(
+            scroll::ScrollCustomStyle::new()
+                .handle_thickness(8.0)
+                .handle_rounded(true)
+                .handle_background(BORDER),
+        )
         .class(scroll::Handle, |s| {
             s.background(BORDER)
                 .border_radius(4.0)

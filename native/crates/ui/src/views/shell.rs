@@ -1,9 +1,11 @@
+use floem::keyboard::{Key, NamedKey};
 use floem::prelude::*;
-use floem::views::{scroll, Decorators};
+use floem::views::{scroll, stack, Decorators};
 
 use crate::state::{AppState, SidebarMode};
 use crate::theme;
 use crate::views::activity_bar::activity_bar;
+use crate::views::palette::{build_items, palette};
 use crate::views::assistant::assistant_panel;
 use crate::views::commands::commands_panel;
 use crate::views::diagnostics::diagnostics_panel;
@@ -23,19 +25,30 @@ const SIDEBAR_WIDTH: f64 = 260.0;
 /// (see `theme::app_theme` for why that's necessary rather than styling
 /// each view individually).
 pub fn shell(state: AppState) -> impl IntoView {
-    v_stack((
+    let base = v_stack((
         h_stack((activity_bar(state), sidebar(state), main_area(state)))
             .style(|s| s.width_full().flex_grow(1.0).min_height(0.0)),
         status_bar(state),
     ))
-    .style(|s| {
-        s.width_full()
-            .height_full()
-            .flex_col()
-            .background(theme::BG_EDITOR)
-            .color(theme::TEXT)
-            .apply(theme::app_theme())
-    })
+    .style(|s| s.size_full().flex_col());
+
+    // The palette is a sibling of the whole shell rather than a child
+    // of any panel, so it can float above everything.
+    stack((base, palette(state)))
+        .keyboard_navigable()
+        .on_key_down(
+            Key::Character("p".into()),
+            |modifiers| modifiers.control() && modifiers.shift(),
+            move |_| state.palette.show(build_items(state)),
+        )
+        .on_key_down(Key::Named(NamedKey::Escape), |_| true, move |_| state.palette.hide())
+        .style(|s| {
+            s.width_full()
+                .height_full()
+                .background(theme::BG_EDITOR)
+                .color(theme::TEXT)
+                .apply(theme::app_theme())
+        })
 }
 
 fn sidebar(state: AppState) -> impl IntoView {

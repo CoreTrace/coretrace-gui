@@ -7,6 +7,7 @@ mod extensions_state;
 mod llm_settings;
 mod lsp;
 mod lsp_bridge;
+mod palette_state;
 mod sidecar;
 mod sidecar_bridge;
 mod session;

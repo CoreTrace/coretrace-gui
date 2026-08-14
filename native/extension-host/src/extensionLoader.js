@@ -28,10 +28,6 @@ export function loadExtension(extensionDir) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   registerConfigDefaults(manifest.contributes?.configuration?.properties);
 
-  const requireFromExtension = createRequire(manifestPath);
-  const mainPath = path.resolve(extensionDir, manifest.main);
-
-  const extensionModule = requireFromExtension(mainPath);
   const context = {
     subscriptions: [],
     workspaceState: new Memento(),
@@ -39,6 +35,22 @@ export function loadExtension(extensionDir) {
     extensionPath: extensionDir,
     extensionUri: Uri.file(extensionDir),
   };
+
+  // Plenty of real extensions ship no code at all: themes, TextMate
+  // grammars, snippets, and extension packs are pure manifest data.
+  // Treating `main` as mandatory made those crash the loader with an
+  // opaque `paths[1] must be of type string` from path.resolve.
+  if (!manifest.main) {
+    return { manifest, context, activated: false, reason: 'declarative extension (no main entry point)' };
+  }
+
+  const requireFromExtension = createRequire(manifestPath);
+  const extensionModule = requireFromExtension(path.resolve(extensionDir, manifest.main));
+
+  if (typeof extensionModule.activate !== 'function') {
+    return { manifest, context, activated: false, reason: 'no activate() export' };
+  }
+
   extensionModule.activate(context);
-  return { manifest, context };
+  return { manifest, context, activated: true };
 }

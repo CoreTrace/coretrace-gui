@@ -18,11 +18,13 @@ pub fn diagnostics_panel(state: AppState) -> impl IntoView {
     v_stack((
         panel_header(
             "DIAGNOSTICS",
+            // The tab is remounted centrally when results arrive (see
+            // AppState::new) -- doing it here would remount before the
+            // analysis had produced anything to show.
             icon_button(icons::play(), "Run CTrace on the active file", move || {
-                let Some(path) = state.active_tab.get_untracked() else { return };
-                state.diagnostics.run_on(&path);
-                state.close_tab(&path);
-                state.open_file(path);
+                if let Some(path) = state.active_tab.get_untracked() {
+                    state.diagnostics.run_on(&path);
+                }
             }),
         ),
         body(state),
@@ -34,12 +36,16 @@ fn body(state: AppState) -> impl IntoView {
     dyn_container(
         move || {
             (
+                state.diagnostics.running.get(),
                 state.diagnostics.error.get(),
                 state.diagnostics.result.get().map(|r| r.diagnostics),
                 state.active_tab.get().is_some(),
             )
         },
-        move |(error, diagnostics, has_file)| {
+        move |(running, error, diagnostics, has_file)| {
+            if running {
+                return running_placeholder().into_any();
+            }
             if let Some(message) = error {
                 return label(move || message.clone())
                     .style(|s| s.color(theme::ERROR).padding(12.0).font_size(12.0).width_full())
@@ -47,14 +53,41 @@ fn body(state: AppState) -> impl IntoView {
             }
             match diagnostics {
                 Some(items) if items.is_empty() => empty_state("No findings").into_any(),
-                Some(items) => dyn_stack(move || items.clone(), |d: &Diagnostic| d.id.clone(), diagnostic_row)
-                    .style(|s| s.flex_col().width_full())
-                    .into_any(),
+                Some(items) => dyn_stack(
+                    move || items.clone(),
+                    |d: &Diagnostic| d.id.clone(),
+                    move |d| diagnostic_row(d, state).into_any(),
+                )
+                .style(|s| s.flex_col().width_full())
+                .into_any(),
                 None if has_file => empty_state("Run CTrace to analyze the active file").into_any(),
                 None => empty_state("Open a C/C++ file to analyze").into_any(),
             }
         },
     )
+}
+
+/// Skeleton rows shown while an analysis is in flight. A ctrace run is
+/// a WSL round trip taking a second or more, and with no feedback the
+/// Run button looked like it did nothing at all.
+fn running_placeholder() -> impl IntoView {
+    let bar = |w: f64, dim: bool| {
+        empty().style(move |s| {
+            s.height(9.0)
+                .width(w)
+                .border_radius(3.0)
+                .background(if dim { theme::BG_ELEVATED } else { theme::ACTIVE })
+        })
+    };
+    v_stack((
+        label(|| "Analyzing...".to_string())
+            .style(|s| s.color(theme::TEXT_MUTED).font_size(11.0).padding_horiz(12.0).padding_bottom(4.0)),
+        v_stack((bar(120.0, false), bar(200.0, true), bar(90.0, true)))
+            .style(|s| s.flex_col().row_gap(6.0).padding_horiz(12.0).padding_vert(7.0).width_full()),
+        v_stack((bar(140.0, false), bar(180.0, true), bar(80.0, true)))
+            .style(|s| s.flex_col().row_gap(6.0).padding_horiz(12.0).padding_vert(7.0).width_full()),
+    ))
+    .style(|s| s.width_full().flex_col())
 }
 
 /// ctrace formats its messages for a terminal: tab indentation, `↳`
@@ -77,9 +110,13 @@ fn clean_message(raw: &str) -> String {
         .join(" ")
 }
 
-fn diagnostic_row(d: Diagnostic) -> impl IntoView {
+fn diagnostic_row(d: Diagnostic, state: AppState) -> impl IntoView {
     let severity_color = theme::severity_color(&d.severity);
     let rule = d.rule_id.clone();
+    let goto_line = d.location.start_line;
+    // ctrace reports the WSL-side path (`/mnt/c/...`), which won't open
+    // on the Windows side -- jump to the file the run targeted instead.
+    let goto_file = state.diagnostics.last_run_file;
     let location = match &d.cwe {
         Some(cwe) => format!("Line {} · {cwe}", d.location.start_line),
         None => format!("Line {}", d.location.start_line),
@@ -95,6 +132,11 @@ fn diagnostic_row(d: Diagnostic) -> impl IntoView {
         label(move || message.clone()).style(|s| s.color(theme::TEXT).font_size(12.0)),
         label(move || location.clone()).style(|s| s.color(theme::TEXT_MUTED).font_size(11.0)),
     ))
+    .on_click_stop(move |_| {
+        if let Some(path) = goto_file.get_untracked() {
+            state.goto_location(path, goto_line);
+        }
+    })
     .style(|s| {
         s.width_full()
             .flex_col()

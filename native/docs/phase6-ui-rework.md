@@ -124,6 +124,90 @@ Commands, and Assistant. The status bar was confirmed to flip from
 "starting" to a green dot with the real negotiated port. The active-item
 accent stripe was confirmed by pixel probe.
 
+## Second review pass
+
+A follow-up review raised more specific issues. All addressed:
+
+- **Scrollbars too thick.** Floem's default handle is 16px; now 8px and
+  rounded, set via `ScrollCustomStyle` in the app theme.
+- **Search panel confusing.** Rebuilt as a VSCode-style grouped tree:
+  collapsible file headers with the parent folder and a match-count
+  badge, matching lines indented beneath with their line numbers.
+  Clicking a match jumps to that line rather than opening at the top.
+- **Extensions: no description, and Install needed scrolling.** The
+  confirm dialog used to be appended *below* the results and the
+  installed list, so reaching it meant scrolling past everything.
+  Clicking a result now opens a full-panel detail view with
+  description, id and version, and the Install action at the top.
+- **No feedback when running CTrace.** The real cause was that
+  `run_on` ran the WSL round trip *on the UI thread*, so `running` was
+  set and cleared within one frame and the UI never repainted in
+  between. Moved to a background thread reporting through a channel,
+  with a skeleton placeholder while in flight. Extension search and
+  install had the identical defect and got the same treatment.
+- **Clicking a diagnostic didn't move the cursor.** Editors now
+  register themselves by path in `AppState::editors`, and a
+  `pending_goto` signal carries jump requests -- routed through a
+  signal because the target file may not be open yet. The editor's own
+  `ensure_visible` tracks the cursor, so scrolling follows for free.
+- **No indicator in the text.** Diagnostic markers are now bold and
+  widened: to the enclosing identifier when the reported column lands
+  in one, otherwise to the line's trimmed content (ctrace often reports
+  column 1, i.e. the indentation, where there is no token to mark).
+  `marker_span` is unit tested for both paths.
+- **No command palette.** Added, on Ctrl+Shift+P, over files, view
+  actions and extension commands, with subsequence fuzzy matching
+  (`fuzzy_score`, unit tested) and arrow/Enter navigation.
+
+### Real bugs found in this pass
+
+1. **Stack overflow that killed the process.** Remounting the analyzed
+   tab when results arrive was done in an effect that called
+   `close_tab`/`open_file` -- which *read* `open_tabs` as well as
+   writing it. A tracked read inside an effect that writes the same
+   signal makes the effect retrigger itself forever. Caught by the app
+   dying silently (a stack overflow aborts without running the panic
+   hook, so no crash log). Fixed by wrapping the body in `untrack`.
+2. **Markers never appeared after a run.** An editor computes its
+   styling once at mount. With analysis now asynchronous, results
+   arrive after mount, so the old "close and reopen the tab" trick
+   (which ran immediately after kicking off the run) rebuilt the editor
+   *before* there was anything to show. The remount now happens when
+   results land.
+3. **Any code-less extension crashed the loader.** `loadExtension`
+   treated `main` as mandatory, so themes, TextMate grammars, snippets
+   and extension packs failed with an opaque `paths[1] must be of type
+   string` from `path.resolve`. They now load as inactive with a stated
+   reason. Found because a real installed extension
+   (`KylinIdeTeam.kylin-cpp-pack`) hit it.
+4. **Palette opened without focus.** Keystrokes still went to the
+   editor, so typing filtered nothing and silently edited the file
+   behind the overlay. Fixed with `request_focus`. (No file was
+   damaged -- the editor only writes on Ctrl+S.)
+5. **The palette shortcut never fired.** The editor consumes key events
+   before they reach the shell, so the shortcut is now also recognized
+   in the editor's own key handler.
+
+### Are syntax-highlighting extensions compatible?
+
+**No, and they can't be without new work.** VSCode syntax extensions
+ship TextMate grammars as declarative data under
+`contributes.grammars`. This host only reads
+`contributes.configuration` (verified in `extension-host/src/`), and
+the editor highlights with tree-sitter, which cannot consume a
+TextMate grammar. So installing one of those succeeds and it now loads
+cleanly as "inactive", but it contributes no highlighting.
+
+Supporting them means adding a TextMate engine (e.g. the `syntect`
+crate) alongside tree-sitter, reading `contributes.grammars` from
+installed extensions, and choosing between the two per language. That
+is a real feature, not a fix -- flagged here rather than silently
+half-done.
+
+Extension *packs* are also unhandled: `extensionPack` lists other
+extensions to pull in, and nothing expands it, so installing a pack
+installs only the pack itself.
+
 ## Known gaps
 
 - No horizontal scrollbar affordance in the editor now that wrapping is

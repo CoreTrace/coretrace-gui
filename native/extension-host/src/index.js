@@ -17,8 +17,9 @@ installVscodeShim(createVscodeShim(registry));
 const extensionDirs = listInstalledExtensionDirs();
 for (const extensionDir of extensionDirs) {
   try {
-    const { manifest } = loadExtension(extensionDir);
-    console.log(`loaded extension: ${manifest.publisher ?? ''}.${manifest.name}@${manifest.version}`);
+    const { manifest, activated, reason } = loadExtension(extensionDir);
+    const id = `${manifest.publisher ?? ''}.${manifest.name}@${manifest.version}`;
+    console.log(activated ? `loaded extension: ${id}` : `loaded extension (inactive): ${id} -- ${reason}`);
   } catch (err) {
     console.error(`failed to load extension at ${extensionDir}: ${err.message}`);
   }

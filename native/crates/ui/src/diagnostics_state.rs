@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use crossbeam_channel::{unbounded, Sender};
+use floem::ext_event::create_signal_from_channel;
 use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate};
 
 use coretrace_ctrace::{run_static_analysis, AnalysisResult, Diagnostic};
@@ -13,42 +15,75 @@ fn ctrace_bin_path() -> PathBuf {
     crate::bundled_path::resolve(dev, "bin/ctrace")
 }
 
+type RunOutcome = Result<AnalysisResult, String>;
+
 #[derive(Clone, Copy)]
 pub struct DiagnosticsState {
     pub running: RwSignal<bool>,
     pub last_run_file: RwSignal<Option<PathBuf>>,
     pub result: RwSignal<Option<AnalysisResult>>,
     pub error: RwSignal<Option<String>>,
+    /// Sends a finished run back to the UI thread. Held here so every
+    /// `run_on` reuses the same channel rather than creating a signal
+    /// per run (`create_signal_from_channel` is a setup-time call).
+    tx: &'static Sender<RunOutcome>,
 }
 
 impl DiagnosticsState {
     pub fn new(cx: Scope) -> Self {
-        Self {
+        let (tx, rx) = unbounded::<RunOutcome>();
+        let incoming = create_signal_from_channel(rx);
+
+        let state = Self {
             running: cx.create_rw_signal(false),
             last_run_file: cx.create_rw_signal(None),
             result: cx.create_rw_signal(None),
             error: cx.create_rw_signal(None),
-        }
+            tx: Box::leak(Box::new(tx)),
+        };
+
+        cx.create_effect(move |_| {
+            let Some(outcome) = incoming.get() else { return };
+            match outcome {
+                Ok(result) => {
+                    state.error.set(None);
+                    state.result.set(Some(result));
+                }
+                Err(message) => {
+                    state.result.set(None);
+                    state.error.set(Some(message));
+                }
+            }
+            state.running.set(false);
+        });
+
+        state
     }
 
-    /// Blocking on purpose -- ctrace's one-shot WSL invocation takes on
-    /// the order of a second for a single file, called from a UI action
-    /// (button click), not a hot path. Async would need real justification
-    /// (a background executor wired into Floem) that this doesn't have yet.
+    /// Runs ctrace on a background thread and reports back through the
+    /// channel above.
+    ///
+    /// This used to run synchronously on the UI thread. That meant the
+    /// `running` signal was set and cleared within a single frame, so
+    /// the UI never repainted in between -- pressing Run appeared to do
+    /// nothing for the second or two the analysis took, which is
+    /// exactly the "no feedback" the review called out. The work is a
+    /// WSL round trip, so it genuinely has to be off the UI thread for
+    /// any progress state to be visible.
     pub fn run_on(&self, file: &Path) {
+        if self.running.get_untracked() {
+            return;
+        }
         self.running.set(true);
         self.error.set(None);
-        match run_static_analysis(&ctrace_bin_path(), file) {
-            Ok(result) => {
-                self.result.set(Some(result));
-                self.last_run_file.set(Some(file.to_path_buf()));
-            }
-            Err(e) => {
-                self.result.set(None);
-                self.error.set(Some(e.to_string()));
-            }
-        }
-        self.running.set(false);
+        self.last_run_file.set(Some(file.to_path_buf()));
+
+        let file = file.to_path_buf();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let outcome = run_static_analysis(&ctrace_bin_path(), &file).map_err(|e| e.to_string());
+            let _ = tx.send(outcome);
+        });
     }
 
     /// Diagnostics belonging to `file`, for gutter/inline rendering in

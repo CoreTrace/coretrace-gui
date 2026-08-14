@@ -6,6 +6,7 @@ pub mod editor;
 pub mod extensions;
 pub mod file_tree;
 pub mod icons;
+pub mod palette;
 pub mod search;
 pub mod shell;
 pub mod status_bar;
