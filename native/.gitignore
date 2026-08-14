@@ -7,3 +7,6 @@ extension-host/spike-extension-webview/*.vsix
 extension-host/spike-extension-webview/unpacked/
 extension-host/spike-extension-diagnostics/*.vsix
 extension-host/spike-extension-diagnostics/unpacked/
+crates/llm-spike/test-models/*.gguf
+extension-host/spike-extension-webview-central/*.vsix
+extension-host/spike-extension-webview-central/unpacked/
