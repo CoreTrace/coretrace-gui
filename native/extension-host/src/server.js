@@ -1,21 +1,6 @@
 import net from 'node:net';
 import { decodeLines, encodeMessage } from './protocol.js';
-
-function handleRequest(request, registry) {
-  switch (request.type) {
-    case 'ping':
-      return { type: 'pong' };
-    case 'invoke_command':
-      try {
-        const result = registry.invoke(request.command, request.args ?? []);
-        return { type: 'command_result', command: request.command, result };
-      } catch (err) {
-        return { type: 'error', message: err.message };
-      }
-    default:
-      return { type: 'error', message: `unknown request type: ${request.type}` };
-  }
-}
+import { handleRequest } from './requestHandlers.js';
 
 export function startServer(port, registry) {
   const server = net.createServer((socket) => {
