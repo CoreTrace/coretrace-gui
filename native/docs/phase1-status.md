@@ -218,9 +218,8 @@ other one) was not root-caused, and doesn't need to be now.
 1. Search-in-files UI panel.
 2. Visual design/theming -- currently bare default Floem styling (plain
    white background, no dark theme, unicode-glyph icons). User flagged
-   this directly (2026-08-14). Not explicitly scoped in any phase of the
-   plan as written -- worth deciding deliberately where it lands rather
-   than leaving it implicit. See open question in the conversation log:
-   light theming pass now (cheap, establishes a design language before
-   Phase 2-4 add more panels) vs. deferring real visual identity to
-   Phase 5 ("polish") as literally named in the plan.
+   this directly (2026-08-14); decided to defer **both** a basic
+   theming/spacing pass **and** a distinctive visual identity to Phase 5
+   ("polish"), rather than doing a light pass now. Deliberate choice, not
+   an oversight -- don't start theming work before Phase 5 without
+   re-confirming.
