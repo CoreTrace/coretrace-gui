@@ -9,6 +9,7 @@ pub mod icons;
 pub mod palette;
 pub mod search;
 pub mod shell;
+pub mod skeleton;
 pub mod status_bar;
 pub mod tab_bar;
 pub mod widgets;

@@ -8,7 +8,7 @@ use coretrace_extensions::{ExtensionManifest, ExtensionSummary};
 
 use crate::state::AppState;
 use crate::theme;
-use crate::views::widgets::{empty_state, panel_header, section_label};
+use crate::views::widgets::{empty_state, panel_header, panel_row, section_label};
 
 pub fn extensions_panel(state: AppState) -> impl IntoView {
     // Selecting a result swaps the whole panel for a detail view.
@@ -30,11 +30,14 @@ fn browse_view(state: AppState) -> impl IntoView {
 
     v_stack((
         panel_header("EXTENSIONS", empty()),
-        text_input(ext.search_query)
-            .placeholder("Search Open VSX")
-            .keyboard_navigable()
-            .on_key_down(Key::Named(NamedKey::Enter), |_| true, move |_| ext.search())
-            .style(|s| s.width_full().margin_horiz(10.0).margin_bottom(4.0)),
+        panel_row(
+            text_input(ext.search_query)
+                .placeholder("Search Open VSX")
+                .keyboard_navigable()
+                .on_key_down(Key::Named(NamedKey::Enter), |_| true, move |_| ext.search())
+                .style(|s| s.width_full()),
+        )
+        .style(|s| s.margin_bottom(4.0)),
         dyn_container(
             move || ext.search_results.get(),
             move |results| {

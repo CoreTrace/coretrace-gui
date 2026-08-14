@@ -63,6 +63,16 @@ pub fn section_label(text: impl Into<String>) -> impl IntoView {
     })
 }
 
+/// Wraps a full-width control in the panel's horizontal gutter.
+///
+/// Use this instead of putting `margin_horiz` on a `width_full` child:
+/// `width_full` resolves to 100% of the panel, so margins are *added*
+/// on top and the control overflows past the sidebar's edge, sliding
+/// under the editor. Padding on a wrapper subtracts instead.
+pub fn panel_row(child: impl IntoView + 'static) -> impl IntoView {
+    child.container().style(|s| s.width_full().padding_horiz(10.0))
+}
+
 /// Centered muted text for "nothing here yet" states.
 pub fn empty_state(text: impl Into<String>) -> impl IntoView {
     let text = text.into();

@@ -58,7 +58,7 @@ fn sidebar(state: AppState) -> impl IntoView {
             if !open {
                 return empty().into_any();
             }
-            scroll(panel(state))
+            panel(state)
                 .style(|s| {
                     s.width(SIDEBAR_WIDTH)
                         .min_width(SIDEBAR_WIDTH)
@@ -73,19 +73,28 @@ fn sidebar(state: AppState) -> impl IntoView {
     )
 }
 
+/// Panels manage their own scrolling. Wrapping the whole sidebar in one
+/// scroll view meant a panel could never bound its own height -- which
+/// the assistant needs, to keep its composer pinned to the bottom while
+/// only the conversation scrolls.
 fn panel(state: AppState) -> impl IntoView {
     dyn_container(
         move || state.sidebar_mode.get(),
         move |mode| match mode {
-            SidebarMode::Files => file_tree_panel(state).into_any(),
-            SidebarMode::Search => search_panel(state).into_any(),
-            SidebarMode::Extensions => extensions_panel(state).into_any(),
-            SidebarMode::Commands => commands_panel(state).into_any(),
-            SidebarMode::Diagnostics => diagnostics_panel(state).into_any(),
+            SidebarMode::Files => scrolled(file_tree_panel(state)).into_any(),
+            SidebarMode::Search => scrolled(search_panel(state)).into_any(),
+            SidebarMode::Extensions => scrolled(extensions_panel(state)).into_any(),
+            SidebarMode::Commands => scrolled(commands_panel(state)).into_any(),
+            SidebarMode::Diagnostics => scrolled(diagnostics_panel(state)).into_any(),
+            // Not wrapped: it scrolls its conversation area internally.
             SidebarMode::Assistant => assistant_panel(state).into_any(),
         },
     )
-    .style(|s| s.width(SIDEBAR_WIDTH).flex_col())
+    .style(|s| s.width(SIDEBAR_WIDTH).height_full().flex_col())
+}
+
+fn scrolled(view: impl IntoView + 'static) -> impl IntoView {
+    scroll(view).style(|s| s.width_full().height_full())
 }
 
 fn main_area(state: AppState) -> impl IntoView {
