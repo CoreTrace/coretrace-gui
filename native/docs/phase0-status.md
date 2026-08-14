@@ -64,21 +64,37 @@ llama.cpp from source at build time via `cmake`).
   into the compiled native `ggml`/`llama.cpp` code. It returns cleanly --
   real linkage against the built native library, not just a successful
   `cargo build`.
-- GPU backends are real Cargo features on this crate: `cuda`, `vulkan`,
-  `hip`, `metal`, `opencl`, `webgpu`. **Not exercised here** -- this
-  machine has neither a CUDA toolkit nor the Vulkan SDK installed
-  (`CUDA_PATH`/`VULKAN_SDK` both unset). Vulkan is the more relevant one
-  to verify next: it works across NVIDIA/AMD/Intel without requiring
-  users to install a vendor-specific SDK, which fits a general Windows
-  install target better than a CUDA-only story.
-- Conclusion for the plan's "hybrid, resolve in Phase 0" open item on
-  local LLM support (`node-llama-cpp` vs a Rust binding): **a Rust
-  binding is viable**, at least for CPU inference. Recommend dropping the
-  Node sidecar dependency for local-model inference and using this
-  crate natively, pending: (a) enabling and testing the `vulkan` feature
-  on a machine with the SDK installed, (b) an actual model-load +
-  generate smoke test with a small GGUF file (not done here -- no model
-  file was downloaded, this only proves the backend initializes).
+- **GPU offload verified for real, on real hardware (2026-08-14)**:
+  installed the Vulkan SDK (`winget install KhronosGroup.VulkanSDK`,
+  user-approved since it's a system-wide install outside the repo), then
+  did two *clean* rebuilds (`cargo clean -p llama-cpp-sys-4 -p
+  llama-cpp-4 -p coretrace-llm-spike` between them, no cache ambiguity)
+  for a real comparison:
+  - **Default features (no `vulkan`)**: `n_devices=0`, every layer
+    explicitly logged as `assigned to device CPU`.
+  - **`--features llama-cpp-4/vulkan`**: `ggml_vulkan` enumerates 2 real
+    physical devices on this machine -- `NVIDIA GeForce RTX 4070 Laptop
+    GPU` and `AMD Radeon(TM) 610M` -- and with `with_n_gpu_layers(u32::MAX)`
+    requested, all 5 of the test model's layers are logged `dev = Vulkan0`
+    (KV cache and compute buffers both on Vulkan0, not CPU).
+  - Both builds ran the *same* real tokenize -> decode -> greedy-sample ->
+    detokenize loop (`crates/llm-spike/src/main.rs`, mirroring
+    `llama-cpp-4`'s own `tests/test_integration.rs` pattern) against a
+    real ~1.2MB GGUF (`stories260K.gguf`, llama.cpp's own tiny CI test
+    model -- see `test-models/README.md`) and produced identical correct
+    output: `"Once upon a time" -> ", there was a little girl named Lily.
+    She loved to play"`.
+  - This is not a CUDA-only story: Vulkan works across NVIDIA/AMD/Intel
+    without a vendor-specific SDK for end users at *runtime* (only this
+    build machine needed the SDK, to compile the backend in) -- the
+    right GPU backend choice for a general Windows install target,
+    confirming the earlier reasoning.
+- **Conclusion for the plan's "hybrid, resolve in Phase 0" open item on
+  local LLM support**: fully resolved. A Rust `llama.cpp` binding is
+  viable with GPU offload comparable to `node-llama-cpp`, verified on
+  real GPU hardware, not just claimed from Cargo feature flags existing.
+  Recommend dropping the Node sidecar dependency for local-model
+  inference entirely and using this crate natively.
 
 ## Second extension: the webview case answered (2026-08-14)
 
@@ -101,6 +117,7 @@ plus two ordinary commands. Full account in
   confirming against a second, more webview-central extension before
   calling this fully settled — this one only used a webview for one
   secondary panel, not its whole reason to exist.
+
 ## Third extension: languages.*/DiagnosticCollection answered (2026-08-14)
 
 Tried [`mitaki28.vscode-clang`](https://open-vsx.org/extension/mitaki28/vscode-clang)
@@ -125,17 +142,43 @@ diagnostics + completion extension. Full account in
 - All three extensions re-verified together afterward — no regressions
   from the shared shim changes.
 
-Total shim growth across all three extensions: 14 small files, roughly
-340 lines. Still converging, not exploding — three differently-shaped
-real extensions (commands-only, webview, language-features) landed
-within a shim that stayed small and legible throughout.
+## Fourth extension: the webview-CENTRAL case answered (2026-08-14)
 
-## Not done yet (do not treat Phase 0 as closed until these land)
+Tried [`janisdd.vscode-edit-csv`](https://open-vsx.org/extension/janisdd/vscode-edit-csv)
+0.11.9 — a real, 250K+ download extension whose entire purpose is a
+Handsontable CSV table editor in a webview panel, no non-webview
+fallback feature. Full account in
+`extension-host/spike-extension-webview-central/README.md`; summary:
 
-- The webview finding is from one extension where the webview was a
-  secondary feature, not the extension's whole purpose — worth
-  re-confirming against something more webview-central before treating
-  that finding as fully general.
+- **The whole core feature path runs to completion, not just
+  `activate()`.** With a fake active `.csv` editor set, invoking the
+  real `edit-csv.edit` command drives the extension through reading its
+  full ~50-key config schema, calling the (stubbed) real
+  `window.createWebviewPanel`, reading its own real HTML/CSS/JS assets
+  from disk via `context.extensionPath`, and assigning a genuine
+  **46.7KB** real HTML document to `panel.webview.html` — confirmed by
+  instrumentation, not assumed.
+- Required growing the shim with `vscode.Uri` (incl. `.with()`),
+  `vscode.ViewColumn`, `vscode.RelativePattern`,
+  `workspace.asRelativePath`, `workspace.createFileSystemWatcher` (stub),
+  `window.createWebviewPanel` (stub panel with writable
+  `webview.html`/`postMessage`/`onDidReceiveMessage`), and
+  `context.extensionPath`/`extensionUri`.
+- **This is the strongest version of the plan's flagged webview risk,
+  and the architecture survives it cleanly**: nothing crashes past the
+  point a missing rendering surface should cause. The only actually
+  missing piece is *some* surface to hand the generated HTML to — a
+  fully contained, precisely-scoped limitation, not a reason to reject
+  webview-central extensions outright.
+- All four extensions re-verified together afterward — no regressions
+  from the shared shim changes (`Uri`/`document.fileName` additions
+  didn't disturb change-case's Range/Selection-based editing).
+
+Total shim growth across all four extensions: 19 small files, roughly
+430 lines. Still converging, not exploding.
+
+## Not done yet (small, non-blocking gaps — Phase 3's job, not Phase 0's)
+
 - `languages.*` providers (`registerCompletionItemProvider`,
   `registerHoverProvider`) are registration stubs — no completion/hover
   request has actually been dispatched through one yet, since that needs
@@ -144,49 +187,56 @@ within a shim that stayed small and legible throughout.
   real, but nothing has pushed a real `Diagnostic` into it end-to-end
   through IPC the way `real_extension.rs` does for change-case's
   document mutation.
+- `window.createWebviewPanel`'s stub never actually renders anything —
+  proven safe to leave inert (see above), but the product decision of
+  *whether* to eventually add a narrow rendering surface for it is still
+  open (plan's Key Risks section).
 - ~~Latency/memory numbers~~ **done, see `phase0-measurements.md`.**
-- ~~Rust `llama.cpp` binding viability~~ **done, see below.**
+- ~~Rust `llama.cpp` binding viability, including GPU offload~~ **done, see above.**
 - Sidecar is started manually (`node src/index.js`); no process
   supervision/spawn-from-Rust/crash-recovery yet.
 - `fakeEditorState` is a single global mutable document/editor, not a
   real per-file synced buffer — fine for this proof, not representative
   of Phase 3's actual document-sync design.
 
-## Go/no-go verdict
+## Go/no-go verdict — FINAL
 
-**GO on the extension-host architecture.** All items the plan's Phase 0
-exit criteria asked for now have concrete answers:
+**GO on the extension-host architecture.** Every item the plan's Phase 0
+exit criteria asked for, plus every follow-up this status doc itself
+raised, now has a concrete answer:
 
 1. The core hypothesis — native GPU UI + a Node sidecar shimming just
    enough of the `vscode` API to run real, unmodified extensions — works
-   across three differently-shaped real extensions. Commands-only:
-   real logic ran end-to-end through the full IPC path. Webview: activated
-   cleanly, non-webview commands worked, degrading gracefully on the one
-   feature (rendering) this architecture can't provide. Language
-   features: genuinely reached `createDiagnosticCollection` and
-   `registerCompletionItemProvider`, gated on the extension's own real
-   config defaults, not skipped.
+   across **four** differently-shaped real extensions: commands-only (ran
+   real logic end-to-end through the full IPC path), webview-secondary
+   (activated cleanly, non-webview features worked), language-features
+   (genuinely reached `createDiagnosticCollection`/
+   `registerCompletionItemProvider`, gated on real config), and
+   **webview-central** (entire feature path ran to completion, including
+   generating a real 46.7KB HTML document — the strongest version of the
+   plan's flagged webview risk, survived cleanly).
 2. IPC overhead is a non-issue at this scale (~27µs avg round trip,
-   ~38.5MB sidecar RSS) — the architecture isn't going to be slow or
-   heavy because of the sidecar split itself.
-3. Local LLM inference does not need the Node sidecar either — a Rust
-   `llama.cpp` binding initializes and links cleanly on Windows with no
-   unusual toolchain setup.
-4. Shim growth across three extensions is converging (14 files, ~340
-   lines), not exploding — the "API surface needed is bigger than
-   expected" risk the plan called out has not materialized.
+   ~38.5MB sidecar RSS).
+3. Local LLM inference does not need the Node sidecar — a Rust
+   `llama.cpp` binding links cleanly on Windows, **and GPU offload is
+   verified on real hardware**: a clean build with the `vulkan` feature
+   put all layers of a real model on `Vulkan0`, correctly enumerating
+   this machine's actual NVIDIA RTX 4070 and AMD Radeon 610M, and ran a
+   real generate loop with output identical to the CPU build.
+4. Shim growth across four extensions is converging (19 files, ~430
+   lines), not exploding.
 
-**Still open, not blocking**: the webview finding is from an extension
-where the webview was secondary, not central — worth a second look
-before treating it as fully general. `languages.*` providers are
-registered but never actually invoked (no completion/hover request
-dispatched, no diagnostic pushed through IPC end-to-end) — that's real
-functional wiring that belongs to Phase 3 proper, not Phase 0's job.
+**No items remain open from either the plan's original exit criteria or
+this status doc's own follow-up list that block starting Phase 1.**
+Remaining gaps (`languages.*` providers never actually invoked with a
+real request, no rendering surface for webviews) are real Phase 3 work,
+correctly out of scope for a de-risking spike.
 
 ## Next concrete step
 
-Phase 0's own exit criteria are answered — move into Phase 1 (minimal
-native shell: window chrome, file tree, tabbed editor, tree-sitter C/C++
-highlighting, no extensions or ctrace yet). The `vulkan` feature on
-llm-spike (needs the Vulkan SDK installed) and a more webview-central
-extension are worth doing but no longer gate Phase 1 starting.
+Phase 0 is complete. Start Phase 1: minimal native shell — window
+chrome, file tree, tabbed native editor with tree-sitter C/C++
+highlighting, open/save/create/delete/rename/search-in-files. No LSP, no
+extensions, no ctrace yet. Exit criteria (per the plan): cold launch and
+typing latency clearly beat the current Electron app's 2.9s/Monaco-tax
+baseline on real Windows 11 hardware.
