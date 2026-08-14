@@ -124,16 +124,98 @@ the tree UI showed it immediately. Right-clicked it, Delete -- gone from
 disk and from the tree. Rename shares the identical `edit_row`/`confirm`
 code path already proven by create, not separately click-tested.
 
+## Cold launch: measured, beats baseline decisively (2026-08-14)
+
+Built `--release` (debug numbers wouldn't be a fair comparison to
+Electron's packaged-build baseline). Measured process-start-to-window-
+created time with a native C# `Stopwatch` + `FindWindow` polling loop
+(no PowerShell-interpreter-loop overhead, which the first attempt at
+this fell into and produced worthless numbers) over 5 runs:
+
+| run | ms |
+|---|---|
+| 1 | 293.8 |
+| 2 | 260.6 |
+| 3 | 261.8 |
+| 4 | 268.2 |
+| 5 | 264.9 |
+
+**~270ms average, ~260-294ms range.**
+
+This is directly comparable to specific milestones in the Electron
+app's own `docs/startup-performance-report.md`, not an apples-to-oranges
+number invented for this comparison:
+
+| milestone | Electron (optimized) | CoreTrace native |
+|---|---|---|
+| `BrowserWindow created` | 371-397ms | **~270ms avg (beats it even here)** |
+| `ready-to-show` (window visible to user) | 2637-2645ms | **~270ms avg -- ~10x faster** |
+| `restored-session-ready` (full KPI) | 2899-2929ms | not comparable -- no session restore exists yet (Phase 2+) |
+
+The fair, honest claim: **time-to-visible-window is roughly 10x faster
+than Electron's own `ready-to-show` milestone**, and beats even
+Electron's earliest `BrowserWindow created` milestone before Electron
+has loaded any renderer content. The `restored-session-ready` headline
+number (2.9s) isn't a fair comparison yet since this app doesn't restore
+a session at all -- that requires Phase 2+ work.
+
+## Typing latency: NOT measured -- a real, documented gap
+
+Attempted to measure this by creating a file, opening it, and
+programmatically typing into the editor via Win32 `SendInput`, timing
+the round trip. **The synthetic keystrokes never reached the editor**,
+across three different injection methods tried in order:
+
+1. `SendKeys.SendWait` -- known-unreliable for non-owned foreground
+   windows, ruled out first.
+2. `SendInput` with `KEYEVENTF_UNICODE` (bypasses keyboard layout,
+   sends characters directly).
+3. `SendInput` with real VK-codes (0x41/0x42/0x43 for A/B/C) -- the most
+   standard, hardware-indistinguishable method.
+
+All three failed silently: no characters appeared, no error. Confirmed
+the window genuinely held OS foreground focus throughout
+(`GetForegroundWindow()` returned the exact `coretrace-ui` window
+handle). The same exact click-then-inject methodology worked perfectly
+for every *other* interactive element tested this session: buttons,
+file tree rows, context menu items, and -- critically -- the simpler
+`floem::views::text_input` widget used for inline rename/create (real
+typed text landed there and was confirmed via `Get-ChildItem`, see
+above). Only the main code editor (`floem::views::text_editor`, backed
+by Lapce's `Editor`/`editor_container_view`) didn't receive synthetic
+keyboard input.
+
+**This points at something specific to how the editor widget acquires
+internal logical focus** (distinct from OS window focus, which was
+confirmed present) -- possibly requiring an event sequence or IME
+initialization step that a mouse click alone doesn't trigger, that only
+genuine hardware input naturally provides. This was not resolved this
+session. **Do not treat typing as verified working** on the strength of
+"it compiles and the click handlers are wired" -- it needs either manual
+verification by a human at a real keyboard, or further investigation
+into `floem::views::editor`'s focus-acquisition path (possibly an
+explicit `request_focus()` call needed on click, since `text_editor()`'s
+`editor_container_view` may not do this automatically the way it does in
+Lapce's own app shell, which has additional focus-coordination code
+around it).
+
 ## Not verified yet
 
 - No search-in-files UI yet (`core::search_in_files` exists, unit-tested,
   unwired to any UI panel).
-- No cold-launch/typing-latency measurement yet -- the actual Phase 1
-  exit criteria.
+- Typing latency (see above -- blocked on the focus issue, not just
+  "not yet attempted").
 
 ## Next concrete steps
 
-1. Search-in-files UI panel.
-2. Cold-launch and typing-latency measurement against the current
-   Electron app's 2.9s baseline -- the actual exit criteria, not yet
-   attempted.
+1. **Resolve the editor keyboard-focus issue** -- this blocks calling
+   Phase 1 done, since "typing latency clearly beats baseline" is the
+   plan's literal exit criteria and typing hasn't been confirmed to work
+   via automation at all (manual human keyboard testing would sidestep
+   this, but hasn't happened either, since this session has been
+   automation-only).
+2. Search-in-files UI panel.
+3. Once typing is confirmed working, get a real typing-latency number
+   (needs either resolving the automation gap above, or a different
+   measurement approach that doesn't depend on synthetic input reaching
+   the editor).
