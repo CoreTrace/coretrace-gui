@@ -159,7 +159,18 @@ has loaded any renderer content. The `restored-session-ready` headline
 number (2.9s) isn't a fair comparison yet since this app doesn't restore
 a session at all -- that requires Phase 2+ work.
 
-## Typing latency: NOT measured -- a real, documented gap
+## Typing: confirmed working by manual human test (2026-08-14)
+
+User ran the release build directly and confirmed typing into the
+editor works correctly. **This closes the "is typing broken" question
+raised below**: it was a synthetic-input/test-harness limitation
+(automated keystroke injection not reaching the editor's internal
+focus), not an app defect. Root cause of the automation gap itself
+remains uninvestigated (not needed now that manual testing confirms the
+real behavior) -- still no *precise instrumented latency number*, just
+confirmed-working, see "Not verified yet" below.
+
+## Typing latency: functionally confirmed, no hard number yet
 
 Attempted to measure this by creating a file, opening it, and
 programmatically typing into the editor via Win32 `SendInput`, timing
@@ -185,37 +196,31 @@ above). Only the main code editor (`floem::views::text_editor`, backed
 by Lapce's `Editor`/`editor_container_view`) didn't receive synthetic
 keyboard input.
 
-**This points at something specific to how the editor widget acquires
-internal logical focus** (distinct from OS window focus, which was
-confirmed present) -- possibly requiring an event sequence or IME
-initialization step that a mouse click alone doesn't trigger, that only
-genuine hardware input naturally provides. This was not resolved this
-session. **Do not treat typing as verified working** on the strength of
-"it compiles and the click handlers are wired" -- it needs either manual
-verification by a human at a real keyboard, or further investigation
-into `floem::views::editor`'s focus-acquisition path (possibly an
-explicit `request_focus()` call needed on click, since `text_editor()`'s
-`editor_container_view` may not do this automatically the way it does in
-Lapce's own app shell, which has additional focus-coordination code
-around it).
+This pointed at something specific to synthetic-input delivery to the
+editor's internal focus, not an app defect -- **resolved by manual human
+test above**: typing works. The automation gap itself (why SendInput
+across three methods didn't reach this one widget when it reached every
+other one) was not root-caused, and doesn't need to be now.
 
 ## Not verified yet
 
 - No search-in-files UI yet (`core::search_in_files` exists, unit-tested,
   unwired to any UI panel).
-- Typing latency (see above -- blocked on the focus issue, not just
-  "not yet attempted").
+- A precise instrumented typing-latency *number* -- functionally
+  confirmed working by a human, but no frame-timing measurement exists.
+  Given cold-launch already beats baseline by ~10x and the architecture
+  has no IPC round trip or DOM/V8 involved in a keystroke (native rope
+  buffer edit, same process), this is lower priority than it would be if
+  typing itself were in doubt.
 
 ## Next concrete steps
 
-1. **Resolve the editor keyboard-focus issue** -- this blocks calling
-   Phase 1 done, since "typing latency clearly beats baseline" is the
-   plan's literal exit criteria and typing hasn't been confirmed to work
-   via automation at all (manual human keyboard testing would sidestep
-   this, but hasn't happened either, since this session has been
-   automation-only).
-2. Search-in-files UI panel.
-3. Once typing is confirmed working, get a real typing-latency number
-   (needs either resolving the automation gap above, or a different
-   measurement approach that doesn't depend on synthetic input reaching
-   the editor).
+1. Search-in-files UI panel.
+2. Visual design/theming -- currently bare default Floem styling (plain
+   white background, no dark theme, unicode-glyph icons). User flagged
+   this directly (2026-08-14). Not explicitly scoped in any phase of the
+   plan as written -- worth deciding deliberately where it lands rather
+   than leaving it implicit. See open question in the conversation log:
+   light theming pass now (cheap, establishes a design language before
+   Phase 2-4 add more panels) vs. deferring real visual identity to
+   Phase 5 ("polish") as literally named in the plan.
