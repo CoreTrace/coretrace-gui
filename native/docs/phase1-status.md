@@ -85,10 +85,28 @@ This was a test-harness bug (DPI awareness), not an app defect --
 recorded here so the debugging path is available if the same class of
 issue resurfaces.
 
+## Tree-sitter C/C++ highlighting: done and verified (2026-08-14)
+
+`crates/ui/src/syntax/` implements `Styling` (`highlighter.rs`) backed by
+`tree-sitter`/`tree-sitter-c`/`tree-sitter-cpp`. Language picked by file
+extension (`language.rs`); each grammar's own bundled `HIGHLIGHT_QUERY`
+(the standard `queries/highlights.scm` every tree-sitter grammar ships)
+is run via `tree_sitter::Query`/`QueryCursor`, and capture names
+(`keyword`, `string`, `comment`, `function`, `number`, etc.) map to
+colors (`colors.rs`). Parsed once against the document's initial content
+at editor-open time -- **known limitation, not a bug**: highlighting
+does not live-update as you type, since there's no incremental reparse
+yet (that's LSP/Phase-2-adjacent territory, out of Phase 1's scope).
+
+**Verified with a real screenshot**, not assumed: wrote a real `.c` file
+with an include, a comment, a function, string literals, and calls,
+opened it in the running app. Correctly colored: `#include`/keywords in
+purple, the comment in gray, `add`/`main`/`printf` function names in
+blue, string literals in green, numbers in tan -- a real, correct parse
+and highlight, not a placeholder.
+
 ## Not verified yet
 
-- Tree-sitter syntax highlighting not implemented yet (`Styling` impl is
-  still Floem's default `SimpleStyling`).
 - No create/delete/rename UI yet (the `core` functions exist and are
   unit-tested, but nothing in the shell calls them).
 - No search-in-files UI yet (same -- `core::search_in_files` exists,
@@ -98,10 +116,8 @@ issue resurfaces.
 
 ## Next concrete steps
 
-1. Tree-sitter `Styling` impl for C/C++ (the other half of the plan's
-   editor requirement).
-2. Wire create/delete/rename into the file tree UI (context menu or
+1. Wire create/delete/rename into the file tree UI (context menu or
    similar) and search-in-files into a UI panel.
-3. Cold-launch and typing-latency measurement against the current
+2. Cold-launch and typing-latency measurement against the current
    Electron app's 2.9s baseline -- the actual exit criteria, not yet
    attempted.
