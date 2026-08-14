@@ -66,28 +66,50 @@ instead of `flex_grow`) fixed it immediately. Worth remembering for any
 future Floem layout: don't put `flex_grow` siblings before interactive
 elements in an `h_stack`.
 
-## Not done (real gap, not just unstarted -- read before assuming extensions are "done")
+## Document sync and command invocation: done and verified (2026-08-14)
 
-**Installed extensions can't actually be used yet.** Install/uninstall
-work end to end, but there's no way to invoke an installed extension's
-commands against the user's real open file:
+Closed the gap this doc previously flagged as the real remaining work.
 
-- The sidecar's document state (`fakeEditorState.js`) is still the
-  single global fake document from Phase 0 -- it is not synced to
-  whatever file is actually open in the native editor. An installed
-  extension's command would run against stale/fake content, not the
-  user's real buffer.
-- There's no command palette or other UI to invoke an installed
-  extension's registered commands at all.
+- **Protocol**: `SetDocumentText` now actually carries `file_name`/
+  `language_id` through to the sidecar (previously accepted by the
+  transport type but silently dropped by the request handler -- real
+  bug, now fixed). New `ListCommands` request/response so the native
+  side can discover what commands installed extensions have registered.
+- **`sidecar_bridge.rs`** (`crates/ui`): `sync_document()` pushes a
+  tab's real content into the sidecar when the tab is mounted and again
+  on save. `run_command_on_file()` runs a real command against a file's
+  actual on-disk content, then writes the sidecar's resulting document
+  back to disk.
+- **Commands panel**: lists real registered commands (snapshot at
+  panel-open time, same pattern as the Extensions panel's sidecar
+  status) with a Run button per command, scoped to the active tab.
 
-This wasn't literally itemized in the plan's Phase 3 bullet list
-(crash recovery / shim surface / registry / install flow / permissions
-UI), but it's the difference between "extensions can be installed" and
-"extensions actually do anything" -- worth treating as required before
-calling the extension system meaningfully complete, not deferred
-indefinitely.
+**Known simplification, stated plainly**: there's no supported way to
+patch an already-mounted Floem `TextDocument`'s content from outside
+its own view (its buffer field is private to the crate), so running a
+command closes and reopens the tab to show the result rather than
+patching it in place. Visually this looks like "the tab reloads" --
+correct end state, momentary flicker instead of a live in-place edit.
 
-Other gaps:
+Document sync itself is mount-time and save-time only, not per-
+keystroke -- a command run via the palette sees the file's on-disk
+content as of the last open/save, not live unsaved edits. Reasonable
+given commands are user-invoked events, not continuous analysis.
+
+**Verified for real, the full loop**: installed `wmaurer.change-case`,
+restarted the app (required -- no hot-reload, see below), opened a real
+text file, saw all 17 of the extension's real commands listed in the
+panel, clicked Run on `extension.changeCase.upper`, and confirmed via a
+direct filesystem read that the file's actual content changed to
+uppercase, with the open tab reloading to show it. This is the
+extension's real logic running against a real user file end to end --
+not a fixture, not a simulation.
+
+## Remaining gaps (smaller, not blocking "extensions work")
+
+- No hot-reload: newly installed extensions need an app restart to
+  load, since the sidecar only enumerates `extensions_dir()` at
+  startup.
 - No "Install from local .vsix file" (sideload) option -- registry-only
   install path right now.
 - `vscode`-API shim surface hasn't grown beyond what Phase 0's four
@@ -96,11 +118,18 @@ Other gaps:
 - Confirm dialog shows name/publisher/description only, not what the
   extension actually declares (commands, activation events) -- a
   thinner signal than it could be.
+- Commands panel is unfiltered (shows every registered command
+  regardless of the active file's language) -- a real VSCode-style
+  command palette would filter by `when` clauses/activation context.
 
-## Next concrete step
+## Phase 3 verdict
 
-Wire real document sync between the native editor's open tabs and the
-sidecar's `fakeEditorState`, plus a minimal command-invocation UI (even
-just a simple command list/palette scoped to the active file's
-language) -- that's what turns "extensions install" into "extensions
-work."
+Every item in the plan's Phase 3 scope is done and verified: crash
+recovery, `RegistrySource` abstraction, `.vsix` install flow,
+permissions UI, and the webview scope-out decision (settled by Phase 0,
+restated here). Beyond the literal checklist, extensions are also
+demonstrably *usable*, not just installable -- a real command from a
+real installed extension modifies a real user file through the full
+native-UI -> IPC -> sidecar -> extension -> back pipeline. Remaining
+gaps above are real but smaller and don't block calling this phase
+complete.
