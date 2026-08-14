@@ -7,7 +7,9 @@ use floem::views::editor::id::EditorId;
 use floem::views::editor::EditorStyle;
 use tree_sitter::{Query, QueryCursor, StreamingIterator};
 
-use super::colors::color_for_capture;
+use coretrace_ctrace::Diagnostic;
+
+use super::colors::{color_for_capture, color_for_severity};
 use super::language::language_for;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -30,13 +32,42 @@ pub struct TreeSitterStyling {
 }
 
 impl TreeSitterStyling {
-    pub fn new(path: &Path, text: &str) -> Self {
+    /// Spans override the syntax color at each
+    /// diagnostic's reported location -- the inline marker for ctrace
+    /// findings. Diagnostic spans are appended after syntax spans so
+    /// `apply_attr_styles` (which applies them in order) lets them win.
+    pub fn with_diagnostics(path: &Path, text: &str, diagnostics: &[Diagnostic]) -> Self {
+        let starts = line_starts(text);
+        let mut spans = parse_spans(path, text).unwrap_or_default();
+        spans.extend(diagnostic_spans(&starts, text, diagnostics));
         Self {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-            line_starts: line_starts(text),
-            spans: parse_spans(path, text).unwrap_or_default(),
+            line_starts: starts,
+            spans,
         }
     }
+}
+
+/// Converts each diagnostic's 1-based (line, column) location to a byte
+/// span within `text`. Columns are treated as character counts (ASCII
+/// assumption -- ctrace's own column numbers come from parsing C/C++
+/// source, which is overwhelmingly ASCII in practice).
+fn diagnostic_spans(line_starts: &[usize], text: &str, diagnostics: &[Diagnostic]) -> Vec<Span> {
+    diagnostics
+        .iter()
+        .filter_map(|d| {
+            let line_idx = d.location.start_line.checked_sub(1)? as usize;
+            let line_start = *line_starts.get(line_idx)?;
+            let line_end = line_starts.get(line_idx + 1).copied().unwrap_or(text.len());
+            let col = d.location.start_column.saturating_sub(1) as usize;
+            let start = (line_start + col).min(line_end);
+            let end = (start + 1).min(line_end);
+            if start >= end {
+                return None;
+            }
+            Some(Span { start, end, color: color_for_severity(&d.severity) })
+        })
+        .collect()
 }
 
 fn line_starts(text: &str) -> Vec<usize> {

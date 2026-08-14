@@ -3,6 +3,7 @@ use floem::views::Decorators;
 
 use crate::state::{AppState, SidebarMode};
 use crate::views::commands::commands_panel;
+use crate::views::diagnostics::diagnostics_panel;
 use crate::views::editor::editor_area;
 use crate::views::extensions::extensions_panel;
 use crate::views::file_tree::file_tree_view;
@@ -16,17 +17,22 @@ pub fn shell(state: AppState) -> impl IntoView {
 
 fn sidebar(state: AppState) -> impl IntoView {
     v_stack((
-        h_stack((
-            button("Open Folder").action(move || {
-                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                    state.workspace_root.set(Some(folder));
-                    state.expanded_dirs.set(Default::default());
-                }
-            }),
-            button("Files").action(move || state.sidebar_mode.set(SidebarMode::Files)),
-            button("Search").action(move || state.sidebar_mode.set(SidebarMode::Search)),
-            button("Extensions").action(move || state.sidebar_mode.set(SidebarMode::Extensions)),
-            button("Commands").action(move || state.sidebar_mode.set(SidebarMode::Commands)),
+        v_stack((
+            h_stack((
+                button("Open Folder").action(move || {
+                    if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                        state.workspace_root.set(Some(folder));
+                        state.expanded_dirs.set(Default::default());
+                    }
+                }),
+                button("Files").action(move || state.sidebar_mode.set(SidebarMode::Files)),
+                button("Search").action(move || state.sidebar_mode.set(SidebarMode::Search)),
+            )),
+            h_stack((
+                button("Extensions").action(move || state.sidebar_mode.set(SidebarMode::Extensions)),
+                button("Commands").action(move || state.sidebar_mode.set(SidebarMode::Commands)),
+                button("Diagnostics").action(move || state.sidebar_mode.set(SidebarMode::Diagnostics)),
+            )),
         )),
         dyn_container(
             move || state.sidebar_mode.get(),
@@ -35,6 +41,7 @@ fn sidebar(state: AppState) -> impl IntoView {
                 SidebarMode::Search => search_panel(state).into_any(),
                 SidebarMode::Extensions => extensions_panel(state).into_any(),
                 SidebarMode::Commands => commands_panel(state).into_any(),
+                SidebarMode::Diagnostics => diagnostics_panel(state).into_any(),
             },
         ),
     ))
