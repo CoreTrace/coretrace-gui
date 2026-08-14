@@ -202,10 +202,24 @@ test above**: typing works. The automation gap itself (why SendInput
 across three methods didn't reach this one widget when it reached every
 other one) was not root-caused, and doesn't need to be now.
 
+## Search-in-files: done and verified (2026-08-14)
+
+Sidebar Files/Search toggle. Search panel is a `text_input` (Enter or
+button-triggered, not per-keystroke, to avoid re-scanning the workspace
+on every character) plus a `dyn_stack` of results calling straight into
+the already-unit-tested `coretrace_core::search_in_files`. Clicking a
+result opens the file via the existing `open_file()` tab machinery.
+
+**Verified for real**: searched "Cargo" against the actual `native/`
+workspace, got genuine cross-file matches (`Cargo.lock`, `main.rs`,
+`phase0-measurements.md`, `phase0-status.md`) with correct
+`filename:line` and trimmed line text. Clicked a result, confirmed it
+opened that file's real content in a new tab.
+
 ## Not verified yet
 
-- No search-in-files UI yet (`core::search_in_files` exists, unit-tested,
-  unwired to any UI panel).
+- No line-jump/cursor-positioning when opening a search result -- it
+  opens the file but doesn't scroll to or select the matching line.
 - A precise instrumented typing-latency *number* -- functionally
   confirmed working by a human, but no frame-timing measurement exists.
   Given cold-launch already beats baseline by ~10x and the architecture
@@ -213,13 +227,22 @@ other one) was not root-caused, and doesn't need to be now.
   buffer edit, same process), this is lower priority than it would be if
   typing itself were in doubt.
 
-## Next concrete steps
+## Phase 1 verdict
 
-1. Search-in-files UI panel.
-2. Visual design/theming -- currently bare default Floem styling (plain
-   white background, no dark theme, unicode-glyph icons). User flagged
-   this directly (2026-08-14); decided to defer **both** a basic
-   theming/spacing pass **and** a distinctive visual identity to Phase 5
-   ("polish"), rather than doing a light pass now. Deliberate choice, not
-   an oversight -- don't start theming work before Phase 5 without
-   re-confirming.
+**All functional deliverables in the plan's Phase 1 scope are done and
+verified**: window chrome, file tree, tabbed editor, tree-sitter C/C++
+highlighting, open/save/create/delete/rename/search-in-files. The named
+exit criteria are met -- cold launch ~270ms vs Electron's 2637-2645ms
+`ready-to-show` (~10x), typing confirmed working by manual human test.
+Two things intentionally not blocking closure, both explicit decisions
+rather than oversights:
+
+1. Visual design/theming -- currently bare default Floem styling. User
+   flagged this directly (2026-08-14); decided to defer **both** a basic
+   theming pass **and** a distinctive visual identity to Phase 5
+   ("polish") rather than doing a light pass now.
+2. A precise typing-latency number (see above) -- functionality is
+   confirmed, the number is a nice-to-have, not a blocker, given the
+   architectural reasoning for why it should be fast holds regardless.
+
+Ready to move to Phase 2 (ctrace/diagnostics integration).
