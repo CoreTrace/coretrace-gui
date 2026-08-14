@@ -1,11 +1,19 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use floem::reactive::{RwSignal, Scope, SignalUpdate, SignalWith};
+use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
+
+use coretrace_core::{search_in_files, SearchMatch};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct OpenTab {
     pub path: PathBuf,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SidebarMode {
+    Files,
+    Search,
 }
 
 /// An in-progress file-tree edit (rename or create), rendered as an
@@ -29,6 +37,9 @@ pub struct AppState {
     pub tree_version: RwSignal<u64>,
     pub pending_edit: RwSignal<Option<PendingEdit>>,
     pub pending_edit_name: RwSignal<String>,
+    pub sidebar_mode: RwSignal<SidebarMode>,
+    pub search_query: RwSignal<String>,
+    pub search_results: RwSignal<Vec<SearchMatch>>,
 }
 
 impl AppState {
@@ -41,6 +52,9 @@ impl AppState {
             tree_version: cx.create_rw_signal(0),
             pending_edit: cx.create_rw_signal(None),
             pending_edit_name: cx.create_rw_signal(String::new()),
+            sidebar_mode: cx.create_rw_signal(SidebarMode::Files),
+            search_query: cx.create_rw_signal(String::new()),
+            search_results: cx.create_rw_signal(Vec::new()),
         }
     }
 
@@ -86,5 +100,14 @@ impl AppState {
 
     pub fn bump_tree_version(&self) {
         self.tree_version.update(|v| *v += 1);
+    }
+
+    pub fn run_search(&self) {
+        let Some(root) = self.workspace_root.get() else {
+            return;
+        };
+        let query = self.search_query.get();
+        let results = search_in_files(&root, &query);
+        self.search_results.set(results);
     }
 }
