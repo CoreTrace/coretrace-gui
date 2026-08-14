@@ -208,6 +208,42 @@ Extension *packs* are also unhandled: `extensionPack` lists other
 extensions to pull in, and nothing expands it, so installing a pack
 installs only the pack itself.
 
+## Third review pass
+
+- **Shimmer skeletons.** Floem's `Style` has no clip/overflow property,
+  so the usual "bright strip sliding behind a mask" approach isn't
+  available, and gradient brushes don't interpolate between keyframes
+  (only solid colors do). Each bar is instead a row of adjacent cells
+  sharing one animation, with each cell's bright moment offset along
+  the keyframe timeline -- the highlight sweeps left to right using
+  only solid-color interpolation. Reused for the assistant's
+  "thinking" state. Verified by diffing consecutive screenshots
+  (~1000 pixels change per frame) and confirming the highlight moves
+  right, not just that something animates.
+- **Diagnostics display reworked.** Summary chips with per-severity
+  counts, results sorted most-severe-first (ctrace emits in source
+  order, so a real error could sit below a pile of notes), a
+  full-height severity stripe per card, line badge, and CWE tag.
+  Distinct empty/clean/error states rather than one generic message.
+- **Input overflow past the sidebar** (search, extensions, assistant).
+  Cause: `width_full()` resolves to 100% of the panel, so an added
+  `margin_horiz` pushed the control *past* the edge and under the
+  editor. Replaced with a `panel_row` wrapper whose padding subtracts
+  instead. Fixed in all three panels.
+- **More languages.** CMake, Rust, Python, JSON, TOML, Markdown,
+  JavaScript, Bash and YAML grammars added alongside C/C++. Detection
+  now matches on *filename* before extension, because `CMakeLists.txt`
+  has no useful extension -- which is exactly why it rendered as plain
+  text. Unit tested.
+- **Assistant panel rebuilt as a chat.** Fixed header, provider as a
+  compact pill with a settings toggle, settings grouped in a card,
+  scrolling conversation, and a composer pinned to the bottom. Pinning
+  needs `flex_grow` **plus** `min_height(0)` on the scroll area:
+  without the zero minimum a flex child won't shrink below its
+  content, so a long conversation pushes the input off the panel. The
+  sidebar's blanket `scroll` wrapper was also removed so panels can
+  bound their own height; each panel now opts into scrolling.
+
 ## Known gaps
 
 - No horizontal scrollbar affordance in the editor now that wrapping is

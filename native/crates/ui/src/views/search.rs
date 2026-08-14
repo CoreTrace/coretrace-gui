@@ -9,7 +9,7 @@ use coretrace_core::SearchMatch;
 use crate::state::AppState;
 use crate::theme;
 use crate::views::icons;
-use crate::views::widgets::{empty_state, panel_header};
+use crate::views::widgets::{empty_state, panel_header, panel_row};
 
 /// One file's worth of hits.
 #[derive(Clone, PartialEq, Eq)]
@@ -21,11 +21,14 @@ struct FileGroup {
 pub fn search_panel(state: AppState) -> impl IntoView {
     v_stack((
         panel_header("SEARCH", empty()),
-        text_input(state.search_query)
-            .placeholder("Search in files")
-            .keyboard_navigable()
-            .on_key_down(Key::Named(NamedKey::Enter), |_| true, move |_| state.run_search())
-            .style(|s| s.width_full().margin_horiz(10.0).margin_bottom(6.0)),
+        panel_row(
+            text_input(state.search_query)
+                .placeholder("Search in files")
+                .keyboard_navigable()
+                .on_key_down(Key::Named(NamedKey::Enter), |_| true, move |_| state.run_search())
+                .style(|s| s.width_full()),
+        )
+        .style(|s| s.margin_bottom(6.0)),
         results(state),
     ))
     .style(|s| s.width_full().flex_col())
