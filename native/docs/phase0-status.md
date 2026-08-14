@@ -49,6 +49,37 @@ effect round-trips back to the native side over IPC.**
   library it ships), reads the document back, and gets `"helloWorld"`.
   This is the extension's real logic running, not a simulation of it.
 
+## Rust llama.cpp binding: viable on Windows (2026-08-14)
+
+`crates/llm-spike` depends on [`llama-cpp-4`](https://crates.io/crates/llama-cpp-4)
+0.5.1 (safe bindings over `llama-cpp-sys-4`, which vendors and compiles
+llama.cpp from source at build time via `cmake`).
+
+- **Builds clean with default (CPU) features** on this machine: `cmake`
+  was present, and the MSVC compiler was auto-discovered by the `cc`
+  crate's `find-msvc-tools` helper even though `cl.exe` wasn't on this
+  shell's `PATH` -- no manual `vcvarsall.bat` dance needed.
+- **Runtime-verified, not just compile-verified**: `cargo run -p
+  coretrace-llm-spike` calls `LlamaBackend::init()`, which calls straight
+  into the compiled native `ggml`/`llama.cpp` code. It returns cleanly --
+  real linkage against the built native library, not just a successful
+  `cargo build`.
+- GPU backends are real Cargo features on this crate: `cuda`, `vulkan`,
+  `hip`, `metal`, `opencl`, `webgpu`. **Not exercised here** -- this
+  machine has neither a CUDA toolkit nor the Vulkan SDK installed
+  (`CUDA_PATH`/`VULKAN_SDK` both unset). Vulkan is the more relevant one
+  to verify next: it works across NVIDIA/AMD/Intel without requiring
+  users to install a vendor-specific SDK, which fits a general Windows
+  install target better than a CUDA-only story.
+- Conclusion for the plan's "hybrid, resolve in Phase 0" open item on
+  local LLM support (`node-llama-cpp` vs a Rust binding): **a Rust
+  binding is viable**, at least for CPU inference. Recommend dropping the
+  Node sidecar dependency for local-model inference and using this
+  crate natively, pending: (a) enabling and testing the `vulkan` feature
+  on a machine with the SDK installed, (b) an actual model-load +
+  generate smoke test with a small GGUF file (not done here -- no model
+  file was downloaded, this only proves the backend initializes).
+
 ## Not done yet (do not treat Phase 0 as closed until these land)
 
 - Only one extension, and only the API surface it happens to touch, has
@@ -60,8 +91,7 @@ effect round-trips back to the native side over IPC.**
 - Transport is TCP loopback for spike convenience; latency/overhead
   numbers have not been measured yet (the plan's exit criteria asks for
   concrete IPC round-trip latency and sidecar memory overhead numbers).
-- Rust `llama.cpp` binding viability (the other Phase 0 spike item, for
-  local-model LLM support) has not been investigated at all yet.
+- ~~Rust `llama.cpp` binding viability~~ **done, see below.**
 - Sidecar is started manually (`node src/index.js`); no process
   supervision/spawn-from-Rust/crash-recovery yet.
 - `fakeEditorState` is a single global mutable document/editor, not a
@@ -72,6 +102,7 @@ effect round-trips back to the native side over IPC.**
 
 Try a second, differently-shaped real extension (something that needs
 `vscode.languages.registerHoverProvider` or a `DiagnosticCollection`, not
-just commands) to see how much the shim's surface has to grow, then take
-the latency/memory measurements the plan's exit criteria actually asks
-for.
+just commands) to see how much the shim's surface has to grow. Latency
+and memory numbers are now in `phase0-measurements.md`. On the llm-spike
+side: get the `vulkan` feature building (needs the Vulkan SDK installed
+first) and try an actual small-GGUF load+generate, not just backend init.
