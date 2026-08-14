@@ -8,8 +8,9 @@ use floem::views::editor::EditorStyle;
 use tree_sitter::{Query, QueryCursor, StreamingIterator};
 
 use coretrace_ctrace::Diagnostic;
+use coretrace_lsp::Diagnostic as LspDiagnostic;
 
-use super::colors::{color_for_capture, color_for_severity};
+use super::colors::{color_for_capture, color_for_lsp_severity, color_for_severity};
 use super::language::language_for;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -36,16 +37,41 @@ impl TreeSitterStyling {
     /// diagnostic's reported location -- the inline marker for ctrace
     /// findings. Diagnostic spans are appended after syntax spans so
     /// `apply_attr_styles` (which applies them in order) lets them win.
-    pub fn with_diagnostics(path: &Path, text: &str, diagnostics: &[Diagnostic]) -> Self {
+    pub fn with_diagnostics(
+        path: &Path,
+        text: &str,
+        diagnostics: &[Diagnostic],
+        lsp_diagnostics: &[LspDiagnostic],
+    ) -> Self {
         let starts = line_starts(text);
         let mut spans = parse_spans(path, text).unwrap_or_default();
         spans.extend(diagnostic_spans(&starts, text, diagnostics));
+        spans.extend(lsp_diagnostic_spans(&starts, text, lsp_diagnostics));
         Self {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             line_starts: starts,
             spans,
         }
     }
+}
+
+/// Same idea as `diagnostic_spans`, but for LSP diagnostics: 0-based
+/// (line, character) positions and a real start..end range rather than
+/// a single-character point.
+fn lsp_diagnostic_spans(line_starts: &[usize], text: &str, diagnostics: &[LspDiagnostic]) -> Vec<Span> {
+    let byte_offset = |line: u32, character: u32| -> Option<usize> {
+        let line_start = *line_starts.get(line as usize)?;
+        let line_end = line_starts.get(line as usize + 1).copied().unwrap_or(text.len());
+        Some((line_start + character as usize).min(line_end))
+    };
+    diagnostics
+        .iter()
+        .filter_map(|d| {
+            let start = byte_offset(d.range.start.line, d.range.start.character)?;
+            let end = byte_offset(d.range.end.line, d.range.end.character)?;
+            (start < end).then(|| Span { start, end, color: color_for_lsp_severity(d.severity) })
+        })
+        .collect()
 }
 
 /// Converts each diagnostic's 1-based (line, column) location to a byte

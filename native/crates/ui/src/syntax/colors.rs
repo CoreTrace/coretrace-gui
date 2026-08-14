@@ -31,3 +31,13 @@ pub fn color_for_severity(severity: &str) -> Color {
         _ => Color::rgb8(0x61, 0xAF, 0xEF),
     }
 }
+
+/// Color for an LSP diagnostic's severity (1=Error, 2=Warning,
+/// 3=Information, 4=Hint per the LSP spec; unset defaults to Warning).
+pub fn color_for_lsp_severity(severity: Option<u8>) -> Color {
+    match severity {
+        Some(1) => Color::rgb8(0xE0, 0x6C, 0x75),
+        Some(3) | Some(4) => Color::rgb8(0x61, 0xAF, 0xEF),
+        _ => Color::rgb8(0xE5, 0xA0, 0x3B),
+    }
+}

@@ -119,15 +119,73 @@ deferred to Phase 5.
   app's visualizer was a richer, separate view; this phase treats the
   diagnostics panel as the equivalent, scoped down.
 
+## clangd LSP client
+
+- **`coretrace-lsp` crate** (new): a general LSP client speaking the
+  standard JSON-RPC-over-stdio wire protocol (`Content-Length`
+  framing, id-correlated requests, notification demuxing) -- not
+  clangd-specific, works against any conforming LSP server.
+  `LspClient::spawn`, `.initialize`, `.did_open`, `.did_change`,
+  `.hover`, `.definition`, `.diagnostics_for` (reads diagnostics
+  collected from `textDocument/publishDiagnostics` by a background
+  reader thread).
+- **Honest gap**: clangd is not installed anywhere on this dev
+  machine -- checked both Windows `PATH` (`where clangd`) and the WSL
+  Ubuntu install (`which clangd`), neither has it. So unlike ctrace
+  (a real binary in the repo) and extensions (a real live registry),
+  there is no real clangd process available to click through in this
+  environment.
+- **What's actually verified**: the client's own logic -- framing,
+  JSON-RPC id correlation, request/response vs notification demuxing,
+  the `initialize`/`did_open`/`publishDiagnostics`/`hover` call
+  shapes -- against a real subprocess (`examples/fake_lsp_server.rs`,
+  a minimal but protocol-accurate fake server) speaking the real wire
+  protocol over real stdio pipes, not an in-process mock. See
+  `tests/fake_server_roundtrip.rs`.
+- **UI wiring exists and compiles, but is unverified end to end**:
+  `crates/ui/src/lsp.rs` looks up `clangd` on `PATH` at startup and,
+  if found, spawns and initializes a client stored in `AppState`;
+  `lsp_bridge.rs` calls `did_open` when a tab mounts;
+  `TreeSitterStyling::with_diagnostics` was extended to also color
+  LSP diagnostic ranges (reusing the same severity-color approach as
+  ctrace's inline markers, mapped from LSP's numeric severity).
+  `state.lsp` is `None` in every manual run in this environment, so
+  this path has never actually run with real diagnostics flowing
+  through it -- flagged plainly rather than claimed as verified.
+  Deliberately did not build hover/go-to-definition UI (tooltips,
+  click-to-jump) on top of this: no way to verify it here, and it's
+  a meaningfully larger UI surface than the plumbing above.
+- WSL wasn't used for clangd process management even though ctrace
+  uses it: wrapping a *long-lived* LSP process through `wsl.exe`
+  carries the same kind of stdio-encoding risk that's already known
+  to bite `wsl.exe`'s own text output (see `coretrace-ctrace`'s `wsl`
+  module) and clangd isn't installed in WSL either, so there was
+  nothing to verify that approach against.
+
 ## Not yet done
 
-- **clangd LSP client**: not started. Substantial remaining work --
-  spawn `clangd`, JSON-RPC over stdio, diagnostics-as-you-type,
-  hover, go-to-definition, wired into the editor. Tracked as the next
-  piece of Phase 2.
 - WSL-not-installed UX (install prompts, distro checks) -- explicitly
   out of scope per the "don't care about WSL" instruction; WSL is
   simply assumed present, matching this dev machine's real state. If
   `wsl_available()` returns false, `run_static_analysis` returns
   `CtraceError::WslUnavailable`, surfaced as an error string in the
   panel -- no onboarding flow beyond that.
+- clangd hover/go-to-definition UI (see above) -- the client supports
+  the calls, nothing in the editor surfaces them yet.
+
+## Phase 2 verdict
+
+ctrace integration is done and verified for real: real binary, real
+WSL invocation, real parsed diagnostics, real inline markers and
+panel, confirmed via UI automation down to reading back the exact
+marker pixel color. The clangd LSP client is real, working code with
+real subprocess-level verification (framing/correlation/demuxing),
+but its clangd-specific value (actual diagnostics-as-you-type, hover,
+go-to-def in the running app) is unverified because clangd isn't
+installed anywhere on this machine -- stated plainly rather than
+glossed over. Calling Phase 2 complete on that basis: the scoped-down
+"visualizer panel equivalent" and diagnostics work is fully real and
+verified; the LSP client is real infrastructure ready to be exercised
+the moment clangd is available, which is a reasonable place to leave
+it given what's actually installable and testable in this
+environment.
