@@ -4,11 +4,12 @@ use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate};
 
 use coretrace_extensions::{extensions_dir, install_extension, list_installed, uninstall_extension};
 use coretrace_extensions::{ExtensionManifest, ExtensionSummary, RegistrySource};
-use coretrace_ipc::SidecarSupervisor;
+
+use crate::sidecar::SidecarHandle;
 
 #[derive(Clone, Copy)]
 pub struct ExtensionsState {
-    pub sidecar: &'static SidecarSupervisor,
+    pub sidecar: SidecarHandle,
     pub installed: RwSignal<Vec<(PathBuf, ExtensionManifest)>>,
     pub search_query: RwSignal<String>,
     pub search_results: RwSignal<Vec<ExtensionSummary>>,
@@ -19,7 +20,7 @@ pub struct ExtensionsState {
 }
 
 impl ExtensionsState {
-    pub fn new(cx: Scope, sidecar: &'static SidecarSupervisor) -> Self {
+    pub fn new(cx: Scope, sidecar: SidecarHandle) -> Self {
         let state = Self {
             sidecar,
             installed: cx.create_rw_signal(Vec::new()),

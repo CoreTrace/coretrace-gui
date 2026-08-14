@@ -2,13 +2,13 @@ use std::path::{Path, PathBuf};
 
 use floem::keyboard::{Key, NamedKey};
 use floem::menu::{Menu, MenuItem};
-use floem::peniko::Color;
 use floem::prelude::*;
 use floem::views::Decorators;
 
 use coretrace_core::{create_dir, create_file, delete_path, rename_path, scan_directory, FileEntry};
 
 use crate::state::{AppState, PendingEdit};
+use crate::theme;
 
 pub fn file_tree_view(state: AppState) -> impl IntoView {
     dyn_container(
@@ -131,11 +131,7 @@ fn display_row(path: PathBuf, name: String, depth: usize, is_dir: bool, state: A
                 state.open_file(click_path.clone());
             }
         })
-        .style(|s| {
-            s.padding(4.0)
-                .width_full()
-                .hover(|s| s.background(Color::rgba8(255, 255, 255, 20)))
-        })
+        .style(|s| s.padding(4.0).width_full().hover(|s| s.background(theme::BUTTON_BG_HOVER)))
 }
 
 /// Inline rename/create text input, shown in place of a row. `to_path`
@@ -162,7 +158,7 @@ fn edit_row(depth: usize, state: AppState, to_path: impl Fn(&str) -> PathBuf + '
     let confirm_click = confirm.clone();
 
     h_stack((
-        text_input(state.pending_edit_name)
+        theme::text_input(state.pending_edit_name)
             .keyboard_navigable()
             .on_key_down(Key::Named(NamedKey::Enter), |_| true, {
                 let confirm = confirm.clone();

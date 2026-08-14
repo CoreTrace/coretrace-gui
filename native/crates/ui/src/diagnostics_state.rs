@@ -4,12 +4,13 @@ use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate};
 
 use coretrace_ctrace::{run_static_analysis, AnalysisResult, Diagnostic};
 
-/// Dev-time only: resolves the real `bin/ctrace` binary shipped in this
-/// repo, same as `sidecar.rs` resolves the extension-host entry script.
-/// A packaged build needs a real answer to "where does ctrace live" --
-/// Phase 5 concern, not this one.
+/// Packaged installs bundle `bin/ctrace` next to the exe (same
+/// electron-builder `extraResources` layout the old app used, kept for
+/// parity -- see `native/packaging/`); dev builds fall back to the
+/// repo's own `bin/ctrace`. See `bundled_path::resolve`.
 fn ctrace_bin_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../bin/ctrace")
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../bin/ctrace");
+    crate::bundled_path::resolve(dev, "bin/ctrace")
 }
 
 #[derive(Clone, Copy)]

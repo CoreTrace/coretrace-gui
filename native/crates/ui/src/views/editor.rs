@@ -15,19 +15,22 @@ use crate::lsp_bridge::{file_uri, notify_open};
 use crate::sidecar_bridge::sync_document;
 use crate::state::{AppState, OpenTab};
 use crate::syntax::TreeSitterStyling;
+use crate::theme;
 
 pub fn editor_area(state: AppState) -> impl IntoView {
     dyn_container(
         move || state.open_tabs.with(|tabs| tabs.is_empty()),
         move |is_empty| {
             if is_empty {
-                label(|| "Open a file from the sidebar".to_string()).into_any()
+                label(|| "Open a file from the sidebar".to_string())
+                    .style(|s| s.padding(12.0).color(theme::TEXT_MUTED))
+                    .into_any()
             } else {
                 tabs_stack(state).into_any()
             }
         },
     )
-    .style(|s| s.width_full().height_full())
+    .style(|s| s.width_full().height_full().background(theme::BG_SURFACE))
 }
 
 fn tabs_stack(state: AppState) -> impl IntoView {
@@ -47,10 +50,11 @@ fn is_save_shortcut(keypress: &KeyPress, modifiers: Modifiers) -> bool {
 fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     let content = read_file(&path).unwrap_or_default();
     let diagnostics = state.diagnostics.diagnostics_for(&path);
-    if let Some(client) = state.lsp {
+    let lsp_client = state.lsp_client();
+    if let Some(client) = lsp_client {
         notify_open(client, &path, &content);
     }
-    let lsp_diagnostics = state.lsp.map(|c| c.diagnostics_for(&file_uri(&path))).unwrap_or_default();
+    let lsp_diagnostics = lsp_client.map(|c| c.diagnostics_for(&file_uri(&path))).unwrap_or_default();
     let styling = TreeSitterStyling::with_diagnostics(&path, &content, &diagnostics, &lsp_diagnostics);
     let save_path = path.clone();
     let visible_path = path.clone();
@@ -73,7 +77,7 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     .styling(styling);
 
     editor.style(move |s| {
-        s.width_full().height_full().apply_if(
+        s.width_full().height_full().background(theme::BG_SURFACE).color(theme::TEXT).apply_if(
             state.active_tab.get().as_deref() != Some(visible_path.as_path()),
             |s| s.hide(),
         )

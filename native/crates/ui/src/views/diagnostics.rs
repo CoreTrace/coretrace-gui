@@ -4,6 +4,7 @@ use floem::views::Decorators;
 use coretrace_ctrace::Diagnostic;
 
 use crate::state::AppState;
+use crate::theme;
 
 /// Runs `ctrace`'s one-shot static analysis on the active file and lists
 /// the resulting diagnostics. Reopens the tab after a run so the editor
@@ -17,7 +18,9 @@ pub fn diagnostics_panel(state: AppState) -> impl IntoView {
         dyn_container(
             move || state.diagnostics.error.get(),
             move |err| match err {
-                Some(message) => label(move || format!("Error: {message}")).into_any(),
+                Some(message) => {
+                    label(move || format!("Error: {message}")).style(|s| s.padding(4.0).color(theme::ERROR)).into_any()
+                }
                 None => empty().into_any(),
             },
         ),
@@ -29,19 +32,19 @@ pub fn diagnostics_panel(state: AppState) -> impl IntoView {
                     |d: &Diagnostic| d.id.clone(),
                     diagnostic_row,
                 )
-                .style(|s| s.flex_col().width_full())
+                .style(|s| s.flex_col().width_full().row_gap(4.0))
                 .into_any(),
-                None => label(|| "No analysis run yet".to_string()).into_any(),
+                None => label(|| "No analysis run yet".to_string()).style(|s| s.color(theme::TEXT_MUTED)).into_any(),
             },
         ),
     ))
-    .style(|s| s.width_full())
+    .style(|s| s.width_full().row_gap(6.0))
 }
 
 fn header(state: AppState) -> impl IntoView {
     let active_path = state.active_tab;
     h_stack((
-        button("Run CTrace").action(move || {
+        theme::button("Run CTrace").action(move || {
             if let Some(path) = active_path.get_untracked() {
                 state.diagnostics.run_on(&path);
                 state.close_tab(&path);
@@ -59,14 +62,15 @@ fn header(state: AppState) -> impl IntoView {
                         None => "No active file".to_string(),
                     }
                 };
-                label(move || text.clone()).style(|s| s.margin_left(8.0)).into_any()
+                label(move || text.clone()).style(|s| s.margin_left(8.0).color(theme::TEXT_MUTED)).into_any()
             },
         ),
     ))
-    .style(|s| s.padding(4.0).items_center())
+    .style(|s| s.items_center())
 }
 
 fn diagnostic_row(d: Diagnostic) -> impl IntoView {
+    let severity_color = theme::color_for_severity(&d.severity);
     let summary = format!(
         "[{}] {}:{} {} ({})",
         d.severity,
@@ -76,8 +80,10 @@ fn diagnostic_row(d: Diagnostic) -> impl IntoView {
         d.cwe.clone().unwrap_or_default()
     );
     v_stack((
-        label(move || summary.clone()),
-        label(move || d.details.message.trim().to_string()).style(|s| s.margin_left(12.0)),
+        label(move || summary.clone()).style(move |s| s.color(severity_color).font_weight(floem::text::Weight::BOLD)),
+        label(move || d.details.message.trim().to_string()).style(|s| s.margin_top(2.0).color(theme::TEXT_MUTED)),
     ))
-    .style(|s| s.padding(4.0).width_full())
+    .style(|s| {
+        s.padding(8.0).width_full().background(theme::BG_SURFACE).border_radius(6.0).border(1.0).border_color(theme::BORDER)
+    })
 }

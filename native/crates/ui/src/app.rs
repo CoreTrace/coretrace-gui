@@ -1,6 +1,7 @@
 use floem::reactive::Scope;
 use floem::Application;
 
+use crate::crash_report;
 use crate::lsp;
 use crate::sidecar;
 use crate::state::AppState;
@@ -10,16 +11,14 @@ use crate::views::shell::shell;
 /// ctrace diagnostics, and an optional clangd LSP client -- see
 /// native/docs/ for phase status.
 pub fn run() {
-    let sidecar = sidecar::spawn();
-    let lsp_client = lsp::spawn();
-    if lsp_client.is_none() {
-        println!("[lsp] clangd not found on PATH -- LSP diagnostics/hover disabled, ctrace diagnostics unaffected");
-    }
+    crash_report::install();
+    let sidecar = sidecar::spawn_async();
+    let lsp = lsp::spawn_async();
 
     Application::new()
         .window(
             move |_| {
-                let state = AppState::new(Scope::current(), sidecar, lsp_client);
+                let state = AppState::new(Scope::current(), sidecar, lsp);
                 shell(state)
             },
             None,

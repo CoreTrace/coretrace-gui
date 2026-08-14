@@ -3,6 +3,7 @@ use floem::views::Decorators;
 
 use crate::sidecar_bridge::{list_commands, run_command_on_file};
 use crate::state::AppState;
+use crate::theme;
 
 /// Lists commands registered by installed extensions and runs one
 /// against the active tab's file. Snapshot at panel-open time (shell.rs
@@ -17,13 +18,13 @@ pub fn commands_panel(state: AppState) -> impl IntoView {
             Some(path) => format!("Active file: {}", path.display()),
             None => "No active file -- open one to run a command against it".to_string(),
         })
-        .style(|s| s.padding(4.0)),
+        .style(|s| s.padding(4.0).color(theme::TEXT_MUTED)),
         dyn_stack(
             move || commands.clone(),
             |c: &String| c.clone(),
             move |command| command_row(command, state).into_any(),
         )
-        .style(|s| s.flex_col().width_full()),
+        .style(|s| s.flex_col().width_full().row_gap(2.0)),
     ))
     .style(|s| s.width_full())
 }
@@ -31,7 +32,7 @@ pub fn commands_panel(state: AppState) -> impl IntoView {
 fn command_row(command: String, state: AppState) -> impl IntoView {
     let run_command = command.clone();
     h_stack((
-        button("Run").action(move || {
+        theme::button("Run").action(move || {
             if let Some(path) = state.active_tab.get_untracked() {
                 if run_command_on_file(state.extensions.sidecar, &path, &run_command) {
                     // Force the tab to remount with the file's new
