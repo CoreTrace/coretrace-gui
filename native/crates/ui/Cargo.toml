@@ -7,3 +7,6 @@ publish.workspace = true
 [dependencies]
 floem = "0.2.0"
 coretrace-ipc = { path = "../ipc" }
+tree-sitter = "0.26.12"
+tree-sitter-c = "0.24.2"
+tree-sitter-cpp = "0.23.4"
