@@ -3,6 +3,16 @@ import { getActiveEditor } from '../fakeEditorState.js';
 // See workspace.js's noopEvent comment -- same deal, no real firing yet.
 const noopEvent = () => ({ dispose() {} });
 
+function createOutputChannel() {
+  return {
+    show() {},
+    clear() {},
+    appendLine() {},
+    append() {},
+    dispose() {},
+  };
+}
+
 export function createWindowApi() {
   return {
     get activeTextEditor() {
@@ -14,6 +24,13 @@ export function createWindowApi() {
     showInformationMessage(message) {
       return Promise.resolve(message);
     },
+    showWarningMessage(message) {
+      return Promise.resolve(message);
+    },
+    showErrorMessage(message) {
+      return Promise.resolve(message);
+    },
+    createOutputChannel,
     onDidChangeActiveTextEditor: noopEvent,
     onDidChangeTextEditorSelection: noopEvent,
     onDidChangeVisibleTextEditors: noopEvent,

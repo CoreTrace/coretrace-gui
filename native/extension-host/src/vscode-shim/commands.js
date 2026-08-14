@@ -7,6 +7,10 @@ export function createCommandsApi(registry) {
       registry.register(id, handler);
       return { dispose() {} };
     },
+    registerTextEditorCommand(id, handler) {
+      registry.register(id, handler);
+      return { dispose() {} };
+    },
     executeCommand(id, ...args) {
       try {
         return Promise.resolve(registry.invoke(id, args));
