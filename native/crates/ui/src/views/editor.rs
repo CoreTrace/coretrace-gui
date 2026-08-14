@@ -45,7 +45,8 @@ fn is_save_shortcut(keypress: &KeyPress, modifiers: Modifiers) -> bool {
 
 fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     let content = read_file(&path).unwrap_or_default();
-    let styling = TreeSitterStyling::new(&path, &content);
+    let diagnostics = state.diagnostics.diagnostics_for(&path);
+    let styling = TreeSitterStyling::with_diagnostics(&path, &content, &diagnostics);
     let save_path = path.clone();
     let visible_path = path.clone();
 

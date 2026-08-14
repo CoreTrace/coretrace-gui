@@ -1,4 +1,5 @@
 mod app;
+mod diagnostics_state;
 mod extensions_state;
 mod sidecar;
 mod sidecar_bridge;

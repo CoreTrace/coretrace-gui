@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod diagnostics;
 pub mod editor;
 pub mod extensions;
 pub mod file_tree;

@@ -19,3 +19,15 @@ pub fn color_for_capture(name: &str) -> Option<Color> {
     };
     Some(color)
 }
+
+/// Color for a ctrace diagnostic's severity, used to flag its exact
+/// location inline (overriding the syntax color for that span) --
+/// the closest equivalent to a squiggly underline this text renderer
+/// supports (cosmic-text 0.12's `Attrs` has no underline field).
+pub fn color_for_severity(severity: &str) -> Color {
+    match severity.to_ascii_uppercase().as_str() {
+        "ERROR" => Color::rgb8(0xE0, 0x6C, 0x75),
+        "WARNING" => Color::rgb8(0xE5, 0xA0, 0x3B),
+        _ => Color::rgb8(0x61, 0xAF, 0xEF),
+    }
+}
