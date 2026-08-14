@@ -20,15 +20,43 @@ Tracks progress against the Phase 0 exit criteria in the relaunch plan
 - Floem window (`crates/ui`) wires the same client to a button + label so
   the round-trip is reachable interactively, not just from the example.
 
+## Real extension loaded (2026-08-14)
+
+**A real, unmodified VSCode extension now runs inside the sidecar and its
+effect round-trips back to the native side over IPC.**
+
+- Extension: [`wmaurer.change-case`](https://open-vsx.org/extension/wmaurer/change-case)
+  1.0.0, fetched unmodified from Open VSX (see
+  `extension-host/spike-extension/README.md` for the fetch steps — not
+  vendored into the repo). Plain CommonJS, ships its own `node_modules`.
+- `extension-host/src/vscode-shim/` implements just the slice of the
+  `vscode` API this extension touches: `Position`/`Range`/`Selection`,
+  `commands.registerCommand` (backed by the same `CommandRegistry` the
+  IPC server dispatches through), `window.activeTextEditor` /
+  `showQuickPick` / `showInformationMessage`, `workspace.getConfiguration`.
+  A fake in-memory `TextDocument`/`TextEditor`
+  (`extension-host/src/fakeEditorState.js`) stands in for a real synced
+  buffer until Phase 3.
+- `extension-host/src/extensionLoader.js` patches `Module._load` (the
+  same technique real VSCode itself uses) so the extension's own
+  `require('vscode')` resolves to the shim, then calls its real
+  `activate(context)` — all 17 of its commands register successfully,
+  unmodified.
+- **Proof**: `cargo run --example real_extension -p coretrace-ipc` sends
+  `set_document_text("hello world")`, invokes the real
+  `extension.changeCase.camel` command (no stub involved — this is the
+  extension's actual `runCommand` calling the real `change-case` npm
+  library it ships), reads the document back, and gets `"helloWorld"`.
+  This is the extension's real logic running, not a simulation of it.
+
 ## Not done yet (do not treat Phase 0 as closed until these land)
 
-- **No real VSCode extension has been loaded.** The sidecar currently
-  runs one hand-written stub command, not an actual unmodified `.vsix`
-  extension. This is the actual Phase 0 exit bar per the plan — proving
-  IPC plumbing works is a prerequisite, not the goal itself.
-- No `vscode` API shim exists at all yet (no `vscode.commands`,
-  `vscode.window`, etc.) — needed before any real extension's code can
-  even load without throwing on `require('vscode')`.
+- Only one extension, and only the API surface it happens to touch, has
+  been proven. No language-server-shaped extension, no extension that
+  needs `vscode.languages.*`, `DiagnosticCollection`, or
+  `vscode.window.createWebviewPanel` has been tried — the webview case in
+  particular is the one flagged as a possible permanent product
+  limitation in the plan, still unverified either way.
 - Transport is TCP loopback for spike convenience; latency/overhead
   numbers have not been measured yet (the plan's exit criteria asks for
   concrete IPC round-trip latency and sidecar memory overhead numbers).
@@ -36,10 +64,14 @@ Tracks progress against the Phase 0 exit criteria in the relaunch plan
   local-model LLM support) has not been investigated at all yet.
 - Sidecar is started manually (`node src/index.js`); no process
   supervision/spawn-from-Rust/crash-recovery yet.
+- `fakeEditorState` is a single global mutable document/editor, not a
+  real per-file synced buffer — fine for this proof, not representative
+  of Phase 3's actual document-sync design.
 
 ## Next concrete step
 
-Pick one small, real, unmodified VSCode extension (a formatter or
-syntax-only extension, not something LSP-heavy) and get it to load inside
-the Node sidecar against a minimal `vscode` shim — that is what actually
-answers the Phase 0 go/no-go question.
+Try a second, differently-shaped real extension (something that needs
+`vscode.languages.registerHoverProvider` or a `DiagnosticCollection`, not
+just commands) to see how much the shim's surface has to grow, then take
+the latency/memory measurements the plan's exit criteria actually asks
+for.
