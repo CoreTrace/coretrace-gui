@@ -28,5 +28,13 @@ export function createWorkspaceApi() {
     onDidOpenTextDocument: noopEvent,
     onDidCloseTextDocument: noopEvent,
     onDidSaveTextDocument: noopEvent,
+    asRelativePath(pathOrUri) {
+      return typeof pathOrUri === 'string' ? pathOrUri : pathOrUri.fsPath;
+    },
+    // Never fires (no real filesystem watching yet), but extensions that
+    // create-then-dispose a watcher during a command need this to exist.
+    createFileSystemWatcher() {
+      return { onDidChange: noopEvent, onDidCreate: noopEvent, onDidDelete: noopEvent, dispose() {} };
+    },
   };
 }

@@ -1,4 +1,5 @@
 import { getActiveEditor } from '../fakeEditorState.js';
+import { createWebviewPanel } from './webviewPanel.js';
 
 // See workspace.js's noopEvent comment -- same deal, no real firing yet.
 const noopEvent = () => ({ dispose() {} });
@@ -42,5 +43,6 @@ export function createWindowApi() {
     registerWebviewViewProvider() {
       return { dispose() {} };
     },
+    createWebviewPanel,
   };
 }

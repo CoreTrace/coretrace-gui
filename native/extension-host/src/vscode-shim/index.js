@@ -4,6 +4,9 @@ import { Selection } from './selection.js';
 import { EventEmitter } from './eventEmitter.js';
 import { Disposable } from './disposable.js';
 import { Diagnostic, DiagnosticSeverity } from './diagnostic.js';
+import { Uri } from './uri.js';
+import { ViewColumn } from './viewColumn.js';
+import { RelativePattern } from './relativePattern.js';
 import { createWindowApi } from './window.js';
 import { createWorkspaceApi } from './workspace.js';
 import { createCommandsApi } from './commands.js';
@@ -21,6 +24,9 @@ export function createVscodeShim(registry) {
     Disposable,
     Diagnostic,
     DiagnosticSeverity,
+    Uri,
+    ViewColumn,
+    RelativePattern,
     window: createWindowApi(),
     workspace: createWorkspaceApi(),
     commands: createCommandsApi(registry),
