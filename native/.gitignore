@@ -3,3 +3,5 @@ node_modules/
 *.log
 extension-host/spike-extension/*.vsix
 extension-host/spike-extension/unpacked/
+extension-host/spike-extension-webview/*.vsix
+extension-host/spike-extension-webview/unpacked/
