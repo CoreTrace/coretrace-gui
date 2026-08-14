@@ -8,6 +8,7 @@ use coretrace_core::{search_in_files, SearchMatch};
 use crate::assistant_state::AssistantState;
 use crate::diagnostics_state::DiagnosticsState;
 use crate::extensions_state::ExtensionsState;
+use crate::session::{self, SessionData};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct OpenTab {
@@ -50,21 +51,22 @@ pub struct AppState {
     pub search_results: RwSignal<Vec<SearchMatch>>,
     pub extensions: ExtensionsState,
     pub diagnostics: DiagnosticsState,
-    pub lsp: Option<&'static coretrace_lsp::LspClient>,
+    pub lsp: crate::lsp::LspHandle,
     pub assistant: AssistantState,
 }
 
 impl AppState {
-    pub fn new(
-        cx: Scope,
-        sidecar: &'static coretrace_ipc::SidecarSupervisor,
-        lsp: Option<&'static coretrace_lsp::LspClient>,
-    ) -> Self {
-        Self {
-            workspace_root: cx.create_rw_signal(std::env::current_dir().ok()),
+    pub fn new(cx: Scope, sidecar: crate::sidecar::SidecarHandle, lsp: crate::lsp::LspHandle) -> Self {
+        let restored = session::load();
+        let workspace_root = restored.workspace_root.clone().or_else(|| std::env::current_dir().ok());
+        let open_tabs: Vec<OpenTab> = restored.open_tabs.iter().map(|p| OpenTab { path: p.clone() }).collect();
+        let active_tab = restored.active_tab.clone();
+
+        let state = Self {
+            workspace_root: cx.create_rw_signal(workspace_root),
             expanded_dirs: cx.create_rw_signal(HashSet::new()),
-            open_tabs: cx.create_rw_signal(Vec::new()),
-            active_tab: cx.create_rw_signal(None),
+            open_tabs: cx.create_rw_signal(open_tabs),
+            active_tab: cx.create_rw_signal(active_tab),
             tree_version: cx.create_rw_signal(0),
             pending_edit: cx.create_rw_signal(None),
             pending_edit_name: cx.create_rw_signal(String::new()),
@@ -75,7 +77,27 @@ impl AppState {
             diagnostics: DiagnosticsState::new(cx),
             lsp,
             assistant: AssistantState::new(cx),
-        }
+        };
+
+        // Persist whenever the workspace/tabs change -- continuous
+        // rather than only on a clean exit, so a crash doesn't lose the
+        // last-known session (see native/docs/phase5-status.md).
+        cx.create_effect(move |_| {
+            let data = SessionData {
+                workspace_root: state.workspace_root.get(),
+                open_tabs: state.open_tabs.with(|tabs| tabs.iter().map(|t| t.path.clone()).collect()),
+                active_tab: state.active_tab.get(),
+            };
+            session::save(&data);
+        });
+
+        state
+    }
+
+    /// `None` if clangd wasn't found, or hasn't finished the
+    /// background lookup/initialize yet -- see `lsp::LspHandle`.
+    pub fn lsp_client(&self) -> Option<&'static coretrace_lsp::LspClient> {
+        self.lsp.get().copied().flatten()
     }
 
     pub fn toggle_expanded(&self, path: PathBuf) {

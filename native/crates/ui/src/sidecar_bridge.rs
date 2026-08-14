@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use coretrace_ipc::{ExtensionHostClient, HostResponse, SidecarSupervisor};
+use coretrace_ipc::{ExtensionHostClient, HostResponse};
+
+use crate::sidecar::SidecarHandle;
 
 /// VSCode-style languageId from a file extension -- a different,
 /// simpler mapping than syntax::language_for (which picks a
@@ -19,8 +21,8 @@ pub fn language_id_for(path: &Path) -> &'static str {
     }
 }
 
-fn connect(sidecar: &SidecarSupervisor) -> Option<ExtensionHostClient> {
-    ExtensionHostClient::connect(sidecar.port()?).ok()
+fn connect(sidecar: SidecarHandle) -> Option<ExtensionHostClient> {
+    ExtensionHostClient::connect(sidecar.get()?.port()?).ok()
 }
 
 /// Pushes a tab's content into the sidecar's document state. Called
@@ -29,14 +31,14 @@ fn connect(sidecar: &SidecarSupervisor) -> Option<ExtensionHostClient> {
 /// the file's on-disk content as of when the tab was opened, not
 /// necessarily unsaved in-editor changes. Known limitation, see
 /// native/docs/phase3-status.md.
-pub fn sync_document(sidecar: &SidecarSupervisor, path: &Path, text: &str) {
+pub fn sync_document(sidecar: SidecarHandle, path: &Path, text: &str) {
     let Some(mut client) = connect(sidecar) else { return };
     let file_name = path.to_string_lossy().into_owned();
     let language_id = language_id_for(path);
     let _ = client.set_document_text(text, Some(&file_name), Some(language_id));
 }
 
-pub fn list_commands(sidecar: &SidecarSupervisor) -> Vec<String> {
+pub fn list_commands(sidecar: SidecarHandle) -> Vec<String> {
     let Some(mut client) = connect(sidecar) else {
         return Vec::new();
     };
@@ -52,7 +54,7 @@ pub fn list_commands(sidecar: &SidecarSupervisor) -> Vec<String> {
 /// reopen) to show the result, since there's no supported way to patch
 /// an already-mounted Floem `TextDocument`'s content from outside its
 /// own view.
-pub fn run_command_on_file(sidecar: &SidecarSupervisor, path: &Path, command: &str) -> bool {
+pub fn run_command_on_file(sidecar: SidecarHandle, path: &Path, command: &str) -> bool {
     let Ok(content) = coretrace_core::read_file(path) else {
         return false;
     };

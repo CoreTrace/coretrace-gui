@@ -5,17 +5,18 @@ use floem::views::Decorators;
 use coretrace_core::SearchMatch;
 
 use crate::state::AppState;
+use crate::theme;
 
 pub fn search_panel(state: AppState) -> impl IntoView {
     v_stack((
         h_stack((
-            text_input(state.search_query)
+            theme::text_input(state.search_query)
                 .keyboard_navigable()
                 .on_key_down(Key::Named(NamedKey::Enter), |_| true, move |_| state.run_search())
                 .style(|s| s.flex_grow(1.0)),
-            button("Search").action(move || state.run_search()),
+            theme::button("Search").action(move || state.run_search()),
         ))
-        .style(|s| s.width_full().padding(4.0)),
+        .style(|s| s.width_full().column_gap(6.0)),
         dyn_stack(
             move || state.search_results.get(),
             |m: &SearchMatch| (m.path.clone(), m.line_number),
@@ -23,7 +24,7 @@ pub fn search_panel(state: AppState) -> impl IntoView {
         )
         .style(|s| s.flex_col().width_full()),
     ))
-    .style(|s| s.width_full())
+    .style(|s| s.width_full().row_gap(6.0))
 }
 
 fn search_result_row(m: SearchMatch, state: AppState) -> impl IntoView {
@@ -37,9 +38,5 @@ fn search_result_row(m: SearchMatch, state: AppState) -> impl IntoView {
 
     label(move || display.clone())
         .on_click_stop(move |_| state.open_file(open_path.clone()))
-        .style(|s| {
-            s.padding(4.0)
-                .width_full()
-                .hover(|s| s.background(floem::peniko::Color::rgba8(255, 255, 255, 20)))
-        })
+        .style(|s| s.padding(4.0).width_full().hover(|s| s.background(theme::BUTTON_BG_HOVER)))
 }

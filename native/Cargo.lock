@@ -747,6 +747,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "coretrace-updater"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cosmic-text"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
