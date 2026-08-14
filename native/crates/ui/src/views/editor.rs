@@ -46,7 +46,18 @@ fn tabs_stack(state: AppState) -> impl IntoView {
 
 fn is_save_shortcut(keypress: &KeyPress, modifiers: Modifiers) -> bool {
     modifiers.contains(Modifiers::CONTROL)
+        && !modifiers.contains(Modifiers::SHIFT)
         && matches!(&keypress.key, KeyInput::Keyboard(Key::Character(c), _) if c.eq_ignore_ascii_case("s"))
+}
+
+/// The editor consumes key events before they reach the shell, so the
+/// palette shortcut has to be recognized here too -- otherwise it only
+/// works while focus happens to be outside the editor, which is almost
+/// never.
+fn is_palette_shortcut(keypress: &KeyPress, modifiers: Modifiers) -> bool {
+    modifiers.contains(Modifiers::CONTROL)
+        && modifiers.contains(Modifiers::SHIFT)
+        && matches!(&keypress.key, KeyInput::Keyboard(Key::Character(c), _) if c.eq_ignore_ascii_case("p"))
 }
 
 fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
@@ -67,7 +78,10 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     sync_document(state.extensions.sidecar, &path, &content);
 
     let editor = text_editor_keys(content, move |editor_sig, keypress, modifiers| {
-        if is_save_shortcut(keypress, modifiers) {
+        if is_palette_shortcut(keypress, modifiers) {
+            state.palette.show(crate::views::palette::build_items(state));
+            CommandExecuted::Yes
+        } else if is_save_shortcut(keypress, modifiers) {
             let text = editor_sig.get_untracked().doc().text().to_string();
             let _ = write_file(&save_path, &text);
             sync_document(state.extensions.sidecar, &save_path, &text);
@@ -96,6 +110,33 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
             .gutter_current_color(theme::GUTTER_CURRENT_BG)
             .gutter_left_padding(14.0)
             .gutter_right_padding(14.0)
+    });
+
+    // Register this tab's editor so panels can drive its caret, then
+    // watch for jump requests aimed at this path. Both directions go
+    // through signals because the requester (e.g. the Diagnostics
+    // panel) may ask for a file that isn't open yet.
+    let register_path = path.clone();
+    let editor = editor.with_editor(|ed| {
+        let handle = ed.clone();
+        let goto_path = register_path.clone();
+        state.editors.update(|editors| {
+            editors.insert(register_path.clone(), handle.clone());
+        });
+        floem::reactive::create_effect(move |_| {
+            let Some((target, line)) = state.pending_goto.get() else { return };
+            if target != goto_path {
+                return;
+            }
+            // Diagnostics report 1-based lines; the editor is 0-based.
+            let line_idx = (line.saturating_sub(1)) as usize;
+            let offset = handle.offset_of_line(line_idx);
+            handle.cursor.update(|cursor| cursor.set_offset(offset, false, false));
+            // The editor view's own `ensure_visible` tracks the cursor
+            // signal, so scrolling follows from this without a manual
+            // scroll call.
+            state.pending_goto.set(None);
+        });
     });
 
     editor.style(move |s| {

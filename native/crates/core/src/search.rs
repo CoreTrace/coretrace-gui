@@ -4,7 +4,7 @@ const MAX_RESULTS: usize = 500;
 const MAX_DEPTH: usize = 12;
 const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", "out", "dist", ".vs"];
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchMatch {
     pub path: PathBuf,
     pub line_number: usize,

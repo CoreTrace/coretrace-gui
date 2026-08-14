@@ -19,6 +19,11 @@ struct Span {
     start: usize,
     end: usize,
     color: floem::peniko::Color,
+    /// Diagnostic spans are bolded as well as recolored. `Attrs` in
+    /// cosmic-text 0.12 exposes only color/weight/style -- there is no
+    /// background or underline -- so weight is the one extra axis
+    /// available to make a marker stand out from ordinary syntax color.
+    bold: bool,
 }
 
 /// A `Styling` impl that colors text using a tree-sitter parse of the
@@ -47,11 +52,84 @@ impl TreeSitterStyling {
         let mut spans = parse_spans(path, text).unwrap_or_default();
         spans.extend(diagnostic_spans(&starts, text, diagnostics));
         spans.extend(lsp_diagnostic_spans(&starts, text, lsp_diagnostics));
+
         Self {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             line_starts: starts,
             spans,
         }
+    }
+}
+
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Chooses the byte range to mark for a diagnostic reported at `point`.
+///
+/// ctrace reports a diagnostic as a single point (start == end), so a
+/// literal one-character marker was effectively invisible in an already
+/// syntax-colored file -- which is what the review reported. Two cases:
+///
+/// - The point lands inside an identifier: mark that whole identifier,
+///   which is both findable and precise about what it refers to.
+/// - The point lands on whitespace or punctuation (ctrace often reports
+///   column 1, i.e. the indentation): fall back to the line's trimmed
+///   content, so the line is still visibly flagged.
+fn marker_span(text: &str, line_start: usize, line_end: usize, point: usize) -> Option<(usize, usize)> {
+    let bytes = text.as_bytes();
+    if point < bytes.len() && is_word_byte(bytes[point]) {
+        let mut start = point;
+        while start > line_start && is_word_byte(bytes[start - 1]) {
+            start -= 1;
+        }
+        let mut end = point + 1;
+        while end < line_end.min(bytes.len()) && is_word_byte(bytes[end]) {
+            end += 1;
+        }
+        return Some((start, end));
+    }
+
+    let line = text.get(line_start..line_end.min(text.len()))?;
+    let trimmed = line.trim_end_matches(['\n', '\r']);
+    let leading = trimmed.len() - trimmed.trim_start().len();
+    let content_end = line_start + trimmed.trim_end().len();
+    let content_start = line_start + leading;
+    (content_start < content_end).then_some((content_start, content_end))
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::marker_span;
+
+    #[test]
+    fn marks_the_identifier_the_point_lands_in() {
+        let text = "    printf(input);\n";
+        // point on the 'n' of "input"
+        let point = text.find("input").unwrap() + 1;
+        let (s, e) = marker_span(text, 0, text.len(), point).unwrap();
+        assert_eq!(&text[s..e], "input");
+    }
+
+    #[test]
+    fn falls_back_to_line_content_when_the_point_is_whitespace() {
+        // ctrace commonly reports column 1, which is indentation.
+        let text = "    char user_input[100];\n";
+        let (s, e) = marker_span(text, 0, text.len(), 0).unwrap();
+        assert_eq!(&text[s..e], "char user_input[100];");
+    }
+
+    #[test]
+    fn does_not_run_past_the_end_of_its_line() {
+        let text = "ab\ncd\n";
+        let (s, e) = marker_span(text, 0, 3, 0).unwrap();
+        assert_eq!(&text[s..e], "ab");
+    }
+
+    #[test]
+    fn returns_nothing_for_a_blank_line() {
+        let text = "   \n";
+        assert_eq!(marker_span(text, 0, text.len(), 0), None);
     }
 }
 
@@ -69,7 +147,12 @@ fn lsp_diagnostic_spans(line_starts: &[usize], text: &str, diagnostics: &[LspDia
         .filter_map(|d| {
             let start = byte_offset(d.range.start.line, d.range.start.character)?;
             let end = byte_offset(d.range.end.line, d.range.end.character)?;
-            (start < end).then(|| Span { start, end, color: color_for_lsp_severity(d.severity) })
+            (start < end).then(|| Span {
+                start,
+                end,
+                color: color_for_lsp_severity(d.severity),
+                bold: true,
+            })
         })
         .collect()
 }
@@ -86,12 +169,9 @@ fn diagnostic_spans(line_starts: &[usize], text: &str, diagnostics: &[Diagnostic
             let line_start = *line_starts.get(line_idx)?;
             let line_end = line_starts.get(line_idx + 1).copied().unwrap_or(text.len());
             let col = d.location.start_column.saturating_sub(1) as usize;
-            let start = (line_start + col).min(line_end);
-            let end = (start + 1).min(line_end);
-            if start >= end {
-                return None;
-            }
-            Some(Span { start, end, color: color_for_severity(&d.severity) })
+            let point = (line_start + col).min(line_end.saturating_sub(1));
+            let (start, end) = marker_span(text, line_start, line_end, point)?;
+            Some(Span { start, end, color: color_for_severity(&d.severity), bold: true })
         })
         .collect()
 }
@@ -125,7 +205,7 @@ fn parse_spans(path: &Path, text: &str) -> Option<Vec<Span>> {
                 continue;
             };
             let range = capture.node.byte_range();
-            spans.push(Span { start: range.start, end: range.end, color });
+            spans.push(Span { start: range.start, end: range.end, color, bold: false });
         }
     }
     Some(spans)
@@ -156,7 +236,11 @@ impl Styling for TreeSitterStyling {
             let start = span.start.max(line_start) - line_start;
             let end = span.end.min(line_end) - line_start;
             if start < end {
-                attrs.add_span(start..end, default.color(span.color));
+                let mut attr = default.color(span.color);
+                if span.bold {
+                    attr = attr.weight(floem::text::Weight::BOLD);
+                }
+                attrs.add_span(start..end, attr);
             }
         }
     }
