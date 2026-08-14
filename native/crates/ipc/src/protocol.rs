@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub enum HostRequest {
     Ping,
     InvokeCommand { command: String, args: Vec<serde_json::Value> },
+    SetDocumentText { text: String },
+    GetDocumentText,
 }
 
 /// Message sent from the extension-host sidecar back to the native core.
@@ -14,5 +16,6 @@ pub enum HostRequest {
 pub enum HostResponse {
     Pong,
     CommandResult { command: String, result: serde_json::Value },
+    DocumentText { text: String },
     Error { message: String },
 }

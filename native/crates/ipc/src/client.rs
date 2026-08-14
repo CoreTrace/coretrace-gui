@@ -27,4 +27,14 @@ impl ExtensionHostClient {
         })?;
         self.transport.recv()
     }
+
+    pub fn set_document_text(&mut self, text: &str) -> std::io::Result<HostResponse> {
+        self.transport.send(&HostRequest::SetDocumentText { text: text.to_string() })?;
+        self.transport.recv()
+    }
+
+    pub fn get_document_text(&mut self) -> std::io::Result<HostResponse> {
+        self.transport.send(&HostRequest::GetDocumentText)?;
+        self.transport.recv()
+    }
 }
