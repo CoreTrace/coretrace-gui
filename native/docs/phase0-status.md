@@ -101,20 +101,49 @@ plus two ordinary commands. Full account in
   confirming against a second, more webview-central extension before
   calling this fully settled — this one only used a webview for one
   secondary panel, not its whole reason to exist.
-- Total shim growth across both extensions so far: 10 small files,
-  roughly 230 lines, covering `Position`/`Range`/`Selection`/
-  `EventEmitter`, `commands` (register + execute), a chunk of `window`,
-  and a chunk of `workspace`. Converging, not exploding.
+## Third extension: languages.*/DiagnosticCollection answered (2026-08-14)
+
+Tried [`mitaki28.vscode-clang`](https://open-vsx.org/extension/mitaki28/vscode-clang)
+0.2.4 — real, unmodified, dependency-free (13.8KB), a clang-backed C/C++
+diagnostics + completion extension. Full account in
+`extension-host/spike-extension-diagnostics/README.md`; summary:
+
+- **Activates cleanly and genuinely reaches
+  `languages.createDiagnosticCollection` and
+  `languages.registerCompletionItemProvider`** — confirmed by
+  instrumenting the shim, not just assumed: both calls fire during
+  `activate()`, gated on config values the extension reads from its own
+  declared defaults (not skipped by a stub returning a falsy default).
+- Required growing `workspace.getConfiguration()` from a dumb
+  default-passthrough into something that reads the loaded extension's
+  own `contributes.configuration.properties` at load time
+  (`configDefaults.js`) — matches how real VSCode configuration defaults
+  actually work, not a spike-only shortcut. Also added a real `Memento`
+  for `context.workspaceState`/`globalState`, `Disposable.from(...)`,
+  `Diagnostic`/`DiagnosticSeverity`, `registerTextEditorCommand`,
+  `createOutputChannel`, and warning/error message variants.
+- All three extensions re-verified together afterward — no regressions
+  from the shared shim changes.
+
+Total shim growth across all three extensions: 14 small files, roughly
+340 lines. Still converging, not exploding — three differently-shaped
+real extensions (commands-only, webview, language-features) landed
+within a shim that stayed small and legible throughout.
 
 ## Not done yet (do not treat Phase 0 as closed until these land)
 
-- Both extensions tried lean on `commands` + editor/window state. Nothing
-  needing `vscode.languages.*` (hover providers, completion providers) or
-  a `DiagnosticCollection` has been tried yet — that's the remaining
-  differently-shaped API surface worth checking before Phase 3 is scoped.
-- The webview finding above is from one extension where the webview was
-  a secondary feature, not the extension's whole purpose — worth
-  re-confirming against something more webview-central.
+- The webview finding is from one extension where the webview was a
+  secondary feature, not the extension's whole purpose — worth
+  re-confirming against something more webview-central before treating
+  that finding as fully general.
+- `languages.*` providers (`registerCompletionItemProvider`,
+  `registerHoverProvider`) are registration stubs — no completion/hover
+  request has actually been dispatched through one yet, since that needs
+  a real document-sync + provider-invocation path this spike doesn't
+  build. Same for diagnostic computation: the collection is created for
+  real, but nothing has pushed a real `Diagnostic` into it end-to-end
+  through IPC the way `real_extension.rs` does for change-case's
+  document mutation.
 - ~~Latency/memory numbers~~ **done, see `phase0-measurements.md`.**
 - ~~Rust `llama.cpp` binding viability~~ **done, see below.**
 - Sidecar is started manually (`node src/index.js`); no process
@@ -125,42 +154,39 @@ plus two ordinary commands. Full account in
 
 ## Go/no-go verdict
 
-**GO on the extension-host architecture.** All four items the plan's
-Phase 0 exit criteria asked for now have concrete answers:
+**GO on the extension-host architecture.** All items the plan's Phase 0
+exit criteria asked for now have concrete answers:
 
 1. The core hypothesis — native GPU UI + a Node sidecar shimming just
    enough of the `vscode` API to run real, unmodified extensions — works
-   for two differently-shaped real extensions. A commands-only extension
-   ran its real logic end-to-end through the full IPC path; a
-   webview-using extension activated cleanly and its non-webview
-   commands worked too, degrading gracefully rather than crashing on the
-   one feature (the webview surface) this architecture can't render.
+   across three differently-shaped real extensions. Commands-only:
+   real logic ran end-to-end through the full IPC path. Webview: activated
+   cleanly, non-webview commands worked, degrading gracefully on the one
+   feature (rendering) this architecture can't provide. Language
+   features: genuinely reached `createDiagnosticCollection` and
+   `registerCompletionItemProvider`, gated on the extension's own real
+   config defaults, not skipped.
 2. IPC overhead is a non-issue at this scale (~27µs avg round trip,
    ~38.5MB sidecar RSS) — the architecture isn't going to be slow or
    heavy because of the sidecar split itself.
 3. Local LLM inference does not need the Node sidecar either — a Rust
    `llama.cpp` binding initializes and links cleanly on Windows with no
    unusual toolchain setup.
-4. Shim growth across two extensions is converging (10 files, ~230
-   lines), not exploding — evidence against the "API surface needed is
-   bigger than expected" risk the plan called out.
+4. Shim growth across three extensions is converging (14 files, ~340
+   lines), not exploding — the "API surface needed is bigger than
+   expected" risk the plan called out has not materialized.
 
-**Still open, but no longer blocking**: nothing exercising
-`vscode.languages.*` or `DiagnosticCollection` has been tried (the
-language-feature-shaped surface, distinct from both extensions tried so
-far), and the webview finding is from an extension where the webview was
-secondary, not central. Worth doing before Phase 3 implementation
-*starts*, but the go/no-go call itself no longer hinges on them — the
-architecture has survived enough real, unmodified extensions with a
-small, converging shim that the fallback (WASI plugins instead of
-VSCode-API compatibility) does not need to be invoked.
+**Still open, not blocking**: the webview finding is from an extension
+where the webview was secondary, not central — worth a second look
+before treating it as fully general. `languages.*` providers are
+registered but never actually invoked (no completion/hover request
+dispatched, no diagnostic pushed through IPC end-to-end) — that's real
+functional wiring that belongs to Phase 3 proper, not Phase 0's job.
 
 ## Next concrete step
 
-Try a third real extension, this time needing
-`vscode.languages.registerHoverProvider` or a `DiagnosticCollection` (the
-one API shape neither spike extension exercised) to close out the
-remaining open item above. On the llm-spike side: get the `vulkan`
-feature building (needs the Vulkan SDK installed first) and try an
-actual small-GGUF load+generate, not just backend init. After that,
-Phase 0 is done and Phase 1 (minimal native shell) can start.
+Phase 0's own exit criteria are answered — move into Phase 1 (minimal
+native shell: window chrome, file tree, tabbed editor, tree-sitter C/C++
+highlighting, no extensions or ctrace yet). The `vulkan` feature on
+llm-spike (needs the Vulkan SDK installed) and a more webview-central
+extension are worth doing but no longer gate Phase 1 starting.
