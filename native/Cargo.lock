@@ -737,6 +737,7 @@ dependencies = [
  "coretrace-ipc",
  "coretrace-llm",
  "coretrace-lsp",
+ "crossbeam-channel",
  "floem",
  "rfd",
  "serde",

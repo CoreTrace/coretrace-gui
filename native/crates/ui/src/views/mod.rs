@@ -1,9 +1,13 @@
+pub mod activity_bar;
 pub mod assistant;
 pub mod commands;
 pub mod diagnostics;
 pub mod editor;
 pub mod extensions;
 pub mod file_tree;
+pub mod icons;
 pub mod search;
 pub mod shell;
+pub mod status_bar;
 pub mod tab_bar;
+pub mod widgets;
