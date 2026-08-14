@@ -6,3 +6,8 @@ publish.workspace = true
 
 [dependencies]
 llama-cpp-4 = "0.5"
+
+[features]
+# Off by default: requires the Vulkan SDK installed (VULKAN_SDK env var
+# set) to compile the ggml-vulkan backend. See native/docs/phase0-status.md.
+vulkan = ["llama-cpp-4/vulkan"]
