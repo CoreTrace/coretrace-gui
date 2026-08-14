@@ -1,5 +1,6 @@
 mod app;
-mod sidecar_panel;
+mod state;
+mod views;
 
 fn main() {
     app::run();
