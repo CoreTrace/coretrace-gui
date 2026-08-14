@@ -12,6 +12,7 @@ use floem::views::Decorators;
 use coretrace_core::{read_file, write_file};
 
 use crate::state::{AppState, OpenTab};
+use crate::syntax::TreeSitterStyling;
 
 pub fn editor_area(state: AppState) -> impl IntoView {
     dyn_container(
@@ -43,6 +44,7 @@ fn is_save_shortcut(keypress: &KeyPress, modifiers: Modifiers) -> bool {
 
 fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     let content = read_file(&path).unwrap_or_default();
+    let styling = TreeSitterStyling::new(&path, &content);
     let save_path = path.clone();
     let visible_path = path.clone();
 
@@ -54,7 +56,8 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
         } else {
             default_key_handler(editor_sig)(keypress, modifiers)
         }
-    });
+    })
+    .styling(styling);
 
     editor.style(move |s| {
         s.width_full().height_full().apply_if(
