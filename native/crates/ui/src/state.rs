@@ -5,6 +5,8 @@ use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
 
 use coretrace_core::{search_in_files, SearchMatch};
 
+use crate::extensions_state::ExtensionsState;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct OpenTab {
     pub path: PathBuf,
@@ -14,6 +16,7 @@ pub struct OpenTab {
 pub enum SidebarMode {
     Files,
     Search,
+    Extensions,
 }
 
 /// An in-progress file-tree edit (rename or create), rendered as an
@@ -40,10 +43,11 @@ pub struct AppState {
     pub sidebar_mode: RwSignal<SidebarMode>,
     pub search_query: RwSignal<String>,
     pub search_results: RwSignal<Vec<SearchMatch>>,
+    pub extensions: ExtensionsState,
 }
 
 impl AppState {
-    pub fn new(cx: Scope) -> Self {
+    pub fn new(cx: Scope, sidecar: &'static coretrace_ipc::SidecarSupervisor) -> Self {
         Self {
             workspace_root: cx.create_rw_signal(std::env::current_dir().ok()),
             expanded_dirs: cx.create_rw_signal(HashSet::new()),
@@ -55,6 +59,7 @@ impl AppState {
             sidebar_mode: cx.create_rw_signal(SidebarMode::Files),
             search_query: cx.create_rw_signal(String::new()),
             search_results: cx.create_rw_signal(Vec::new()),
+            extensions: ExtensionsState::new(cx, sidecar),
         }
     }
 

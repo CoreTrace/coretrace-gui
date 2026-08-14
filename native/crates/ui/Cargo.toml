@@ -12,3 +12,4 @@ tree-sitter-c = "0.24.2"
 tree-sitter-cpp = "0.23.4"
 rfd = "0.17.2"
 coretrace-core = { version = "0.1.0", path = "../core" }
+coretrace-extensions = { version = "0.1.0", path = "../extensions" }

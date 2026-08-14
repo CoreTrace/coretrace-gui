@@ -706,6 +706,7 @@ name = "coretrace-ui"
 version = "0.1.0"
 dependencies = [
  "coretrace-core",
+ "coretrace-extensions",
  "coretrace-ipc",
  "floem",
  "rfd",
