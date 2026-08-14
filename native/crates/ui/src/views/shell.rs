@@ -3,6 +3,7 @@ use floem::views::Decorators;
 
 use crate::state::{AppState, SidebarMode};
 use crate::views::editor::editor_area;
+use crate::views::extensions::extensions_panel;
 use crate::views::file_tree::file_tree_view;
 use crate::views::search::search_panel;
 use crate::views::tab_bar::tab_bar;
@@ -23,16 +24,18 @@ fn sidebar(state: AppState) -> impl IntoView {
             }),
             button("Files").action(move || state.sidebar_mode.set(SidebarMode::Files)),
             button("Search").action(move || state.sidebar_mode.set(SidebarMode::Search)),
+            button("Extensions").action(move || state.sidebar_mode.set(SidebarMode::Extensions)),
         )),
         dyn_container(
             move || state.sidebar_mode.get(),
             move |mode| match mode {
                 SidebarMode::Files => file_tree_view(state).into_any(),
                 SidebarMode::Search => search_panel(state).into_any(),
+                SidebarMode::Extensions => extensions_panel(state).into_any(),
             },
         ),
     ))
-    .style(|s| s.width(260.0).height_full().padding(6.0).flex_col())
+    .style(|s| s.width(320.0).height_full().padding(6.0).flex_col())
 }
 
 fn main_area(state: AppState) -> impl IntoView {
