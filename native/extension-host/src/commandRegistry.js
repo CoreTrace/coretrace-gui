@@ -18,4 +18,8 @@ export class CommandRegistry {
     }
     return handler(...args);
   }
+
+  list() {
+    return Array.from(this.commands.keys());
+  }
 }

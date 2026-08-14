@@ -17,6 +17,7 @@ pub enum SidebarMode {
     Files,
     Search,
     Extensions,
+    Commands,
 }
 
 /// An in-progress file-tree edit (rename or create), rendered as an

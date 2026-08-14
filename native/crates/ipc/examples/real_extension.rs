@@ -8,7 +8,7 @@ fn main() {
     let mut client = ExtensionHostClient::connect(7331).expect("connect to sidecar");
 
     client
-        .set_document_text("hello world")
+        .set_document_text("hello world", None, None)
         .expect("set document text");
 
     let response = client

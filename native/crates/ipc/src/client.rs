@@ -28,13 +28,27 @@ impl ExtensionHostClient {
         self.transport.recv()
     }
 
-    pub fn set_document_text(&mut self, text: &str) -> std::io::Result<HostResponse> {
-        self.transport.send(&HostRequest::SetDocumentText { text: text.to_string() })?;
+    pub fn set_document_text(
+        &mut self,
+        text: &str,
+        file_name: Option<&str>,
+        language_id: Option<&str>,
+    ) -> std::io::Result<HostResponse> {
+        self.transport.send(&HostRequest::SetDocumentText {
+            text: text.to_string(),
+            file_name: file_name.map(str::to_string),
+            language_id: language_id.map(str::to_string),
+        })?;
         self.transport.recv()
     }
 
     pub fn get_document_text(&mut self) -> std::io::Result<HostResponse> {
         self.transport.send(&HostRequest::GetDocumentText)?;
+        self.transport.recv()
+    }
+
+    pub fn list_commands(&mut self) -> std::io::Result<HostResponse> {
+        self.transport.send(&HostRequest::ListCommands)?;
         self.transport.recv()
     }
 }

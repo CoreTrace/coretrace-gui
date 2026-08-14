@@ -11,6 +11,7 @@ use floem::views::Decorators;
 
 use coretrace_core::{read_file, write_file};
 
+use crate::sidecar_bridge::sync_document;
 use crate::state::{AppState, OpenTab};
 use crate::syntax::TreeSitterStyling;
 
@@ -48,10 +49,16 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
     let save_path = path.clone();
     let visible_path = path.clone();
 
+    // Mount-time sync only (see sidecar_bridge::sync_document's doc
+    // comment) -- an extension command run via the palette sees this
+    // tab's content as of when it was opened, not live unsaved edits.
+    sync_document(state.extensions.sidecar, &path, &content);
+
     let editor = text_editor_keys(content, move |editor_sig, keypress, modifiers| {
         if is_save_shortcut(keypress, modifiers) {
             let text = editor_sig.get_untracked().doc().text().to_string();
             let _ = write_file(&save_path, &text);
+            sync_document(state.extensions.sidecar, &save_path, &text);
             CommandExecuted::Yes
         } else {
             default_key_handler(editor_sig)(keypress, modifiers)
