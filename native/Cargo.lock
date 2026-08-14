@@ -678,6 +678,7 @@ version = "0.1.0"
 name = "coretrace-extensions"
 version = "0.1.0"
 dependencies = [
+ "coretrace-ipc",
  "reqwest",
  "serde",
  "serde_json",
