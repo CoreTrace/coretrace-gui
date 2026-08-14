@@ -7,5 +7,15 @@ export function createCommandsApi(registry) {
       registry.register(id, handler);
       return { dispose() {} };
     },
+    executeCommand(id, ...args) {
+      try {
+        return Promise.resolve(registry.invoke(id, args));
+      } catch {
+        // Likely a VSCode built-in command (e.g. 'setContext') this shim
+        // doesn't implement -- resolve rather than reject so fire-and-
+        // forget callers don't crash the extension.
+        return Promise.resolve(undefined);
+      }
+    },
   };
 }
