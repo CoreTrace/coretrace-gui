@@ -1,29 +1,34 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { CommandRegistry } from './commandRegistry.js';
 import { startServer } from './server.js';
 import { createVscodeShim } from './vscode-shim/index.js';
 import { installVscodeShim, loadExtension } from './extensionLoader.js';
+import { listInstalledExtensionDirs } from './extensionsDirectory.js';
 
-const PORT = 7331;
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SPIKE_EXTENSION_DIR = path.join(__dirname, '..', 'spike-extension', 'unpacked', 'extension');
+// Port 0 (default) asks the OS for a free port and prints it back via
+// the READY line below -- how the Rust supervisor learns which port to
+// connect to. --port <n> / PORT env var override for manual dev runs
+// (e.g. `PORT=7331 node src/index.js` to match the old Phase 0 examples).
+const portArg = process.argv.find((arg) => arg.startsWith('--port='));
+const requestedPort = portArg ? Number(portArg.slice('--port='.length)) : Number(process.env.PORT || 0);
 
 const registry = new CommandRegistry();
-registry.register('coretrace.spike.echo', (...args) => ({ echoed: args }));
-
 installVscodeShim(createVscodeShim(registry));
 
-try {
-  const { manifest } = loadExtension(SPIKE_EXTENSION_DIR);
-  console.log(`loaded real extension: ${manifest.publisher}.${manifest.name}@${manifest.version}`);
-} catch (err) {
-  console.error(
-    `could not load spike extension from ${SPIKE_EXTENSION_DIR} ` +
-      `(see extension-host/spike-extension/README.md to fetch it): ${err.message}`,
-  );
+const extensionDirs = listInstalledExtensionDirs();
+for (const extensionDir of extensionDirs) {
+  try {
+    const { manifest } = loadExtension(extensionDir);
+    console.log(`loaded extension: ${manifest.publisher ?? ''}.${manifest.name}@${manifest.version}`);
+  } catch (err) {
+    console.error(`failed to load extension at ${extensionDir}: ${err.message}`);
+  }
+}
+if (extensionDirs.length === 0) {
+  console.log('no installed extensions found');
 }
 
-startServer(PORT, registry);
-console.log(`extension-host spike listening on 127.0.0.1:${PORT}`);
+startServer(requestedPort, registry, (actualPort) => {
+  // The Rust supervisor greps stdout for this exact line -- keep the
+  // format stable (see native/crates/ipc/src/supervisor.rs).
+  console.log(`READY ${actualPort}`);
+});
