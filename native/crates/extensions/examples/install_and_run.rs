@@ -37,7 +37,7 @@ fn main() {
     let port = wait_for("sidecar start", Duration::from_secs(10), || supervisor.port());
 
     let mut client = ExtensionHostClient::connect(port).expect("connect to sidecar");
-    client.set_document_text("hello world").expect("set document text");
+    client.set_document_text("hello world", None, None).expect("set document text");
     client.invoke_command("extension.changeCase.camel", vec![]).expect("invoke real command");
     let HostResponse::DocumentText { text } = client.get_document_text().expect("read document text") else {
         panic!("unexpected response reading document text");

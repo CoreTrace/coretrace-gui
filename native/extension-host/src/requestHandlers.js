@@ -5,10 +5,12 @@ export function handleRequest(request, registry) {
     case 'ping':
       return { type: 'pong' };
     case 'set_document_text':
-      setDocumentText(request.text);
+      setDocumentText(request.text, request.file_name, request.language_id);
       return { type: 'document_text', text: getDocumentText() };
     case 'get_document_text':
       return { type: 'document_text', text: getDocumentText() };
+    case 'list_commands':
+      return { type: 'commands', commands: registry.list() };
     case 'invoke_command':
       try {
         const result = registry.invoke(request.command, request.args ?? []);
