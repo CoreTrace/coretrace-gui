@@ -105,19 +105,35 @@ purple, the comment in gray, `add`/`main`/`printf` function names in
 blue, string literals in green, numbers in tan -- a real, correct parse
 and highlight, not a placeholder.
 
+## Create/delete/rename: done and verified (2026-08-14)
+
+Right-click any file tree row for a native OS context menu (`.context_menu()`
++ `floem::menu::Menu`): New File / New Folder (inside a directory row, or
+alongside a file row) / Rename / Delete. New/Rename show an inline
+`text_input` in place of the row (confirm via Enter, Escape, or ✓/✕
+buttons), calling straight into `coretrace_core`'s already-unit-tested
+`create_file`/`create_dir`/`rename_path`/`delete_path`. A `tree_version`
+counter signal (bumped after every mutation) is what makes the tree
+re-scan and show the change -- `dyn_stack`'s scan closure otherwise has
+no reactive dependency on the filesystem itself.
+
+**Verified for real, not assumed**: right-clicked `docs`, New File,
+typed `test-created.txt`, confirmed -- `Get-ChildItem` on the real
+`native/docs/` directory showed the file actually created on disk, and
+the tree UI showed it immediately. Right-clicked it, Delete -- gone from
+disk and from the tree. Rename shares the identical `edit_row`/`confirm`
+code path already proven by create, not separately click-tested.
+
 ## Not verified yet
 
-- No create/delete/rename UI yet (the `core` functions exist and are
-  unit-tested, but nothing in the shell calls them).
-- No search-in-files UI yet (same -- `core::search_in_files` exists,
-  unwired).
+- No search-in-files UI yet (`core::search_in_files` exists, unit-tested,
+  unwired to any UI panel).
 - No cold-launch/typing-latency measurement yet -- the actual Phase 1
   exit criteria.
 
 ## Next concrete steps
 
-1. Wire create/delete/rename into the file tree UI (context menu or
-   similar) and search-in-files into a UI panel.
+1. Search-in-files UI panel.
 2. Cold-launch and typing-latency measurement against the current
    Electron app's 2.9s baseline -- the actual exit criteria, not yet
    attempted.

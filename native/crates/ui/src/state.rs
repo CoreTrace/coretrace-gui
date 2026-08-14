@@ -8,12 +8,27 @@ pub struct OpenTab {
     pub path: PathBuf,
 }
 
+/// An in-progress file-tree edit (rename or create), rendered as an
+/// inline text input in place of the row it applies to.
+#[derive(Clone, PartialEq, Eq)]
+pub enum PendingEdit {
+    Rename { path: PathBuf },
+    NewFile { parent: PathBuf },
+    NewDir { parent: PathBuf },
+}
+
 #[derive(Clone, Copy)]
 pub struct AppState {
     pub workspace_root: RwSignal<Option<PathBuf>>,
     pub expanded_dirs: RwSignal<HashSet<PathBuf>>,
     pub open_tabs: RwSignal<Vec<OpenTab>>,
     pub active_tab: RwSignal<Option<PathBuf>>,
+    /// Bumped after any create/delete/rename so file_tree's dyn_stack
+    /// (which otherwise has no reactive dependency on the filesystem)
+    /// knows to re-scan the affected directory.
+    pub tree_version: RwSignal<u64>,
+    pub pending_edit: RwSignal<Option<PendingEdit>>,
+    pub pending_edit_name: RwSignal<String>,
 }
 
 impl AppState {
@@ -23,6 +38,9 @@ impl AppState {
             expanded_dirs: cx.create_rw_signal(HashSet::new()),
             open_tabs: cx.create_rw_signal(Vec::new()),
             active_tab: cx.create_rw_signal(None),
+            tree_version: cx.create_rw_signal(0),
+            pending_edit: cx.create_rw_signal(None),
+            pending_edit_name: cx.create_rw_signal(String::new()),
         }
     }
 
@@ -55,5 +73,18 @@ impl AppState {
             let next = self.open_tabs.with(|tabs| tabs.last().map(|t| t.path.clone()));
             self.active_tab.set(next);
         }
+    }
+
+    pub fn begin_edit(&self, edit: PendingEdit, initial_name: String) {
+        self.pending_edit_name.set(initial_name);
+        self.pending_edit.set(Some(edit));
+    }
+
+    pub fn cancel_edit(&self) {
+        self.pending_edit.set(None);
+    }
+
+    pub fn bump_tree_version(&self) {
+        self.tree_version.update(|v| *v += 1);
     }
 }
