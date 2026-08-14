@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["crates/ui", "crates/ipc"]
+
+[workspace.package]
+edition = "2021"
+publish = false
