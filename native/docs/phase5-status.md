@@ -126,17 +126,25 @@ Re-measured cold launch with the same method Phase 1 used (`Stopwatch`
 real startup-path work (sidecar spawn, LSP lookup, crash-report
 install, session load).
 
-**A real regression found**: `app::run()` called `sidecar::spawn()`
-and `lsp::spawn()` *before* creating the window, and
-`SidecarSupervisor::start` blocks synchronously on a `READY <port>`
-handshake with the Node sidecar process -- meaning Node's own cold-
-start time was sitting directly in front of the first window paint,
-which didn't exist as a cost in Phase 1's baseline. Fixed by making
-both spawns asynchronous (`sidecar::spawn_async`/`lsp::spawn_async`,
-returning a `&'static OnceLock<...>` handle populated by a background
-thread; call sites check `.get()` and degrade gracefully -- e.g. the
-Extensions panel shows "Extension host: starting..." -- instead of
-blocking).
+**A real regression found**: `app::run()` called `sidecar::spawn()` and
+`lsp::spawn()` *before* creating the window, putting their startup
+work directly in front of the first window paint -- a cost that didn't
+exist in Phase 1's baseline. Fixed by making both spawns asynchronous
+(`sidecar::spawn_async`/`lsp::spawn_async`, returning a
+`&'static OnceLock<...>` handle populated by a background thread; call
+sites check `.get()` and degrade gracefully instead of blocking).
+
+**Correction (made during the later UI rework)**: this section
+originally claimed `SidecarSupervisor::start` "blocks synchronously on
+a `READY <port>` handshake". That was wrong -- reading its source
+(`crates/ipc/src/supervisor.rs`) shows it spawns its own supervise
+thread and returns immediately, with the port filled in later. The
+blocking cost that actually sat in front of window creation was
+`lsp::spawn`'s `where clangd` process launch plus, when clangd is
+present, a real `initialize` round trip. Backgrounding both was still
+the right fix, but the stated cause was inaccurate and is corrected
+here rather than left standing. The same wrong assumption also caused
+a real bug in the status bar -- see phase6-ui-rework.md.
 
 **Confirmed at the code level**: added temporary instrumentation
 (`Instant::now()` timestamps through `crash_report::install` ->

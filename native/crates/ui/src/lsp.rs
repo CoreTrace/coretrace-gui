@@ -2,6 +2,8 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::OnceLock;
 
+use crossbeam_channel::{bounded, Receiver};
+
 use coretrace_lsp::LspClient;
 
 /// `None` inside the `OnceLock` means "checked, clangd isn't
@@ -37,16 +39,28 @@ fn spawn_and_initialize() -> Option<&'static LspClient> {
     Some(Box::leak(Box::new(client)))
 }
 
+/// What `spawn_async` hands back: the handle used for real work, plus a
+/// one-shot channel carrying whether clangd was found, so the status
+/// bar can re-render when the answer arrives (`OnceLock` alone isn't
+/// reactive).
+pub struct LspStartup {
+    pub handle: LspHandle,
+    pub ready: Receiver<bool>,
+}
+
 /// Starts the clangd lookup/spawn/initialize on a background thread and
 /// returns immediately -- see `LspHandle`'s doc comment for why.
-pub fn spawn_async() -> LspHandle {
+pub fn spawn_async() -> LspStartup {
     let cell: LspHandle = Box::leak(Box::new(OnceLock::new()));
+    let (tx, ready) = bounded(1);
     std::thread::spawn(move || {
         let client = spawn_and_initialize();
         if client.is_none() {
             println!("[lsp] clangd not found on PATH -- LSP diagnostics/hover disabled, ctrace diagnostics unaffected");
         }
+        let found = client.is_some();
         let _ = cell.set(client);
+        let _ = tx.send(found);
     });
-    cell
+    LspStartup { handle: cell, ready }
 }

@@ -1,78 +1,86 @@
 use floem::prelude::*;
-use floem::views::Decorators;
+use floem::views::{scroll, Decorators};
 
 use crate::state::{AppState, SidebarMode};
 use crate::theme;
+use crate::views::activity_bar::activity_bar;
 use crate::views::assistant::assistant_panel;
 use crate::views::commands::commands_panel;
 use crate::views::diagnostics::diagnostics_panel;
 use crate::views::editor::editor_area;
 use crate::views::extensions::extensions_panel;
-use crate::views::file_tree::file_tree_view;
+use crate::views::file_tree::file_tree_panel;
 use crate::views::search::search_panel;
+use crate::views::status_bar::status_bar;
 use crate::views::tab_bar::tab_bar;
 
+const SIDEBAR_WIDTH: f64 = 260.0;
+
+/// Standard IDE shell: a fixed icon rail, a collapsible sidebar panel,
+/// the editor area, and a status strip along the bottom. The app theme
+/// is applied here at the root -- class rules cascade, so this one call
+/// restyles every button, input, scrollbar, and tooltip in the tree
+/// (see `theme::app_theme` for why that's necessary rather than styling
+/// each view individually).
 pub fn shell(state: AppState) -> impl IntoView {
-    h_stack((sidebar(state), main_area(state)))
-        .style(|s| s.width_full().height_full().background(theme::BG).color(theme::TEXT))
-}
-
-fn mode_button(state: AppState, label: &str, mode: SidebarMode) -> impl IntoView {
-    theme::toggle_button(label, move || state.sidebar_mode.get() == mode)
-        .on_click_stop(move |_| state.sidebar_mode.set(mode))
-}
-
-fn sidebar(state: AppState) -> impl IntoView {
     v_stack((
-        v_stack((
-            h_stack((
-                theme::button("Open Folder").action(move || {
-                    if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                        state.workspace_root.set(Some(folder));
-                        state.expanded_dirs.set(Default::default());
-                    }
-                }),
-                mode_button(state, "Files", SidebarMode::Files),
-                mode_button(state, "Search", SidebarMode::Search),
-            ))
-            .style(|s| s.column_gap(4.0)),
-            h_stack((
-                mode_button(state, "Extensions", SidebarMode::Extensions),
-                mode_button(state, "Commands", SidebarMode::Commands),
-            ))
-            .style(|s| s.column_gap(4.0)),
-            h_stack((
-                mode_button(state, "Diagnostics", SidebarMode::Diagnostics),
-                mode_button(state, "Assistant", SidebarMode::Assistant),
-            ))
-            .style(|s| s.column_gap(4.0)),
-        ))
-        .style(|s| s.row_gap(4.0)),
-        dyn_container(
-            move || state.sidebar_mode.get(),
-            move |mode| match mode {
-                SidebarMode::Files => file_tree_view(state).into_any(),
-                SidebarMode::Search => search_panel(state).into_any(),
-                SidebarMode::Extensions => extensions_panel(state).into_any(),
-                SidebarMode::Commands => commands_panel(state).into_any(),
-                SidebarMode::Diagnostics => diagnostics_panel(state).into_any(),
-                SidebarMode::Assistant => assistant_panel(state).into_any(),
-            },
-        ),
+        h_stack((activity_bar(state), sidebar(state), main_area(state)))
+            .style(|s| s.width_full().flex_grow(1.0).min_height(0.0)),
+        status_bar(state),
     ))
     .style(|s| {
-        s.width(320.0)
+        s.width_full()
             .height_full()
-            .padding(8.0)
             .flex_col()
-            .row_gap(8.0)
-            .background(theme::BG_ELEVATED)
-            .border_right(1.0)
-            .border_color(theme::BORDER)
+            .background(theme::BG_EDITOR)
+            .color(theme::TEXT)
+            .apply(theme::app_theme())
     })
 }
 
+fn sidebar(state: AppState) -> impl IntoView {
+    dyn_container(
+        move || state.sidebar_open.get(),
+        move |open| {
+            if !open {
+                return empty().into_any();
+            }
+            scroll(panel(state))
+                .style(|s| {
+                    s.width(SIDEBAR_WIDTH)
+                        .min_width(SIDEBAR_WIDTH)
+                        .flex_shrink(0.0)
+                        .height_full()
+                        .background(theme::BG_SIDEBAR)
+                        .border_right(1.0)
+                        .border_color(theme::BORDER)
+                })
+                .into_any()
+        },
+    )
+}
+
+fn panel(state: AppState) -> impl IntoView {
+    dyn_container(
+        move || state.sidebar_mode.get(),
+        move |mode| match mode {
+            SidebarMode::Files => file_tree_panel(state).into_any(),
+            SidebarMode::Search => search_panel(state).into_any(),
+            SidebarMode::Extensions => extensions_panel(state).into_any(),
+            SidebarMode::Commands => commands_panel(state).into_any(),
+            SidebarMode::Diagnostics => diagnostics_panel(state).into_any(),
+            SidebarMode::Assistant => assistant_panel(state).into_any(),
+        },
+    )
+    .style(|s| s.width(SIDEBAR_WIDTH).flex_col())
+}
+
 fn main_area(state: AppState) -> impl IntoView {
-    v_stack((tab_bar(state), editor_area(state)))
-        .style(|s| s.flex_grow(1.0).height_full().flex_col())
+    v_stack((tab_bar(state), editor_area(state))).style(|s| {
+        s.flex_grow(1.0)
+            .min_width(0.0)
+            .height_full()
+            .flex_col()
+            .background(theme::BG_EDITOR)
+    })
 }

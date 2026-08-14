@@ -4,6 +4,10 @@ use floem::peniko::Color;
 /// "function.builtin") to a color, using only the top-level segment
 /// before the first dot. `None` means "leave the default text color" --
 /// e.g. plain variables aren't specially colored.
+///
+/// These are One Dark Pro-family hues, which is why the app's UI
+/// surfaces are dark: on the framework's default light background they
+/// rendered washed out and low-contrast.
 pub fn color_for_capture(name: &str) -> Option<Color> {
     let top = name.split('.').next().unwrap_or(name);
     let color = match top {
@@ -24,20 +28,15 @@ pub fn color_for_capture(name: &str) -> Option<Color> {
 /// location inline (overriding the syntax color for that span) --
 /// the closest equivalent to a squiggly underline this text renderer
 /// supports (cosmic-text 0.12's `Attrs` has no underline field).
+///
+/// Delegates to the theme palette so a warning is literally the same
+/// color in the editor and in the Diagnostics panel.
 pub fn color_for_severity(severity: &str) -> Color {
-    match severity.to_ascii_uppercase().as_str() {
-        "ERROR" => Color::rgb8(0xE0, 0x6C, 0x75),
-        "WARNING" => Color::rgb8(0xE5, 0xA0, 0x3B),
-        _ => Color::rgb8(0x61, 0xAF, 0xEF),
-    }
+    crate::theme::severity_color(severity)
 }
 
 /// Color for an LSP diagnostic's severity (1=Error, 2=Warning,
 /// 3=Information, 4=Hint per the LSP spec; unset defaults to Warning).
 pub fn color_for_lsp_severity(severity: Option<u8>) -> Color {
-    match severity {
-        Some(1) => Color::rgb8(0xE0, 0x6C, 0x75),
-        Some(3) | Some(4) => Color::rgb8(0x61, 0xAF, 0xEF),
-        _ => Color::rgb8(0xE5, 0xA0, 0x3B),
-    }
+    crate::theme::lsp_severity_color(severity)
 }

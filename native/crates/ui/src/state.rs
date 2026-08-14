@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
+use floem::ext_event::create_signal_from_channel;
+use floem::reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
 
 use coretrace_core::{search_in_files, SearchMatch};
 
@@ -47,16 +48,30 @@ pub struct AppState {
     pub pending_edit: RwSignal<Option<PendingEdit>>,
     pub pending_edit_name: RwSignal<String>,
     pub sidebar_mode: RwSignal<SidebarMode>,
+    /// Whether the sidebar panel is expanded. Clicking the already-
+    /// active activity-bar icon collapses it, the same toggle every
+    /// IDE with an icon rail uses to reclaim width for the editor.
+    pub sidebar_open: RwSignal<bool>,
     pub search_query: RwSignal<String>,
     pub search_results: RwSignal<Vec<SearchMatch>>,
     pub extensions: ExtensionsState,
     pub diagnostics: DiagnosticsState,
     pub lsp: crate::lsp::LspHandle,
     pub assistant: AssistantState,
+    /// Sidecar port once the background spawn finishes, for the status
+    /// bar. Reactive (unlike the `OnceLock` handles), so the bar
+    /// re-renders the moment startup completes.
+    pub sidecar_port: ReadSignal<Option<u16>>,
+    /// `Some(true)`/`Some(false)` once the clangd lookup finishes.
+    pub lsp_found: ReadSignal<Option<bool>>,
 }
 
 impl AppState {
-    pub fn new(cx: Scope, sidecar: crate::sidecar::SidecarHandle, lsp: crate::lsp::LspHandle) -> Self {
+    pub fn new(cx: Scope, sidecar: crate::sidecar::SidecarStartup, lsp: crate::lsp::LspStartup) -> Self {
+        let sidecar_port = create_signal_from_channel(sidecar.ready);
+        let lsp_found = create_signal_from_channel(lsp.ready);
+        let sidecar = sidecar.handle;
+        let lsp = lsp.handle;
         let restored = session::load();
         let workspace_root = restored.workspace_root.clone().or_else(|| std::env::current_dir().ok());
         let open_tabs: Vec<OpenTab> = restored.open_tabs.iter().map(|p| OpenTab { path: p.clone() }).collect();
@@ -71,12 +86,15 @@ impl AppState {
             pending_edit: cx.create_rw_signal(None),
             pending_edit_name: cx.create_rw_signal(String::new()),
             sidebar_mode: cx.create_rw_signal(SidebarMode::Files),
+            sidebar_open: cx.create_rw_signal(true),
             search_query: cx.create_rw_signal(String::new()),
             search_results: cx.create_rw_signal(Vec::new()),
             extensions: ExtensionsState::new(cx, sidecar),
             diagnostics: DiagnosticsState::new(cx),
             lsp,
             assistant: AssistantState::new(cx),
+            sidecar_port,
+            lsp_found,
         };
 
         // Persist whenever the workspace/tabs change -- continuous
@@ -98,6 +116,17 @@ impl AppState {
     /// background lookup/initialize yet -- see `lsp::LspHandle`.
     pub fn lsp_client(&self) -> Option<&'static coretrace_lsp::LspClient> {
         self.lsp.get().copied().flatten()
+    }
+
+    /// Switches the sidebar to `mode`, or collapses the panel if that
+    /// mode was already showing.
+    pub fn toggle_panel(&self, mode: SidebarMode) {
+        if self.sidebar_mode.get_untracked() == mode && self.sidebar_open.get_untracked() {
+            self.sidebar_open.set(false);
+        } else {
+            self.sidebar_mode.set(mode);
+            self.sidebar_open.set(true);
+        }
     }
 
     pub fn toggle_expanded(&self, path: PathBuf) {

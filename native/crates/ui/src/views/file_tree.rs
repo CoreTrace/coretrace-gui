@@ -3,19 +3,41 @@ use std::path::{Path, PathBuf};
 use floem::keyboard::{Key, NamedKey};
 use floem::menu::{Menu, MenuItem};
 use floem::prelude::*;
-use floem::views::Decorators;
+use floem::views::{svg, Decorators};
 
 use coretrace_core::{create_dir, create_file, delete_path, rename_path, scan_directory, FileEntry};
 
 use crate::state::{AppState, PendingEdit};
 use crate::theme;
+use crate::views::icons;
+use crate::views::widgets::{empty_state, icon_button, panel_header};
 
-pub fn file_tree_view(state: AppState) -> impl IntoView {
+const ROW_HEIGHT: f64 = 23.0;
+const INDENT: f64 = 12.0;
+const BASE_PAD: f64 = 8.0;
+
+pub fn file_tree_panel(state: AppState) -> impl IntoView {
+    v_stack((
+        panel_header(
+            "EXPLORER",
+            icon_button(icons::folder_open(), "Open Folder", move || {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    state.workspace_root.set(Some(folder));
+                    state.expanded_dirs.set(Default::default());
+                }
+            }),
+        ),
+        file_tree_view(state),
+    ))
+    .style(|s| s.width_full().flex_col())
+}
+
+fn file_tree_view(state: AppState) -> impl IntoView {
     dyn_container(
         move || state.workspace_root.get(),
         move |root| match root {
             Some(root) => file_tree_children(root, 0, state).into_any(),
-            None => label(|| "No folder open".to_string()).into_any(),
+            None => empty_state("No folder open").into_any(),
         },
     )
     .style(|s| s.flex_col().width_full())
@@ -73,24 +95,21 @@ fn file_tree_node(entry: FileEntry, depth: usize, state: AppState) -> impl IntoV
     };
 
     let parent = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let row = dyn_container(
-        renaming,
-        {
-            let path = path.clone();
-            let entry_name = entry.name.clone();
-            move |is_renaming| {
-                if is_renaming {
-                    let path = path.clone();
-                    edit_row(depth, state, move |name| {
-                        path.parent().map(|p| p.join(name)).unwrap_or_else(|| PathBuf::from(name))
-                    })
-                    .into_any()
-                } else {
-                    display_row(path.clone(), entry_name.clone(), depth, is_dir, state).into_any()
-                }
+    let row = dyn_container(renaming, {
+        let path = path.clone();
+        let entry_name = entry.name.clone();
+        move |is_renaming| {
+            if is_renaming {
+                let path = path.clone();
+                edit_row(depth, state, move |name| {
+                    path.parent().map(|p| p.join(name)).unwrap_or_else(|| PathBuf::from(name))
+                })
+                .into_any()
+            } else {
+                display_row(path.clone(), entry_name.clone(), depth, is_dir, state).into_any()
             }
-        },
-    );
+        }
+    });
 
     let ctx_path = path.clone();
     let ctx_parent = parent.clone();
@@ -119,11 +138,32 @@ fn file_tree_node(entry: FileEntry, depth: usize, state: AppState) -> impl IntoV
 }
 
 fn display_row(path: PathBuf, name: String, depth: usize, is_dir: bool, state: AppState) -> impl IntoView {
-    let icon = if is_dir { "\u{25B8}" } else { "\u{2022}" };
-    let label_text = format!("{}{} {}", "  ".repeat(depth), icon, name);
     let click_path = path.clone();
+    let active_path = path.clone();
+    let expanded_path = path.clone();
 
-    label(move || label_text.clone())
+    // Directories get a chevron that flips with their open state;
+    // files get a document glyph. `Svg::update_value` re-reads its
+    // source reactively, so the chevron follows expansion without
+    // rebuilding the row.
+    let leading = svg(if is_dir { icons::chevron_right() } else { icons::file_generic() })
+        .update_value(move || {
+            if !is_dir {
+                return icons::file_generic();
+            }
+            if state.is_expanded(&expanded_path) {
+                icons::chevron_down()
+            } else {
+                icons::chevron_right()
+            }
+        })
+        .style(move |s| {
+            s.size(13.0, 13.0)
+                .min_width(13.0)
+                .color(if is_dir { theme::TEXT_MUTED } else { theme::TEXT_MUTED.multiply_alpha(0.7) })
+        });
+
+    h_stack((leading, label(move || name.clone()).style(|s| s.min_width(0.0))))
         .on_click_stop(move |_| {
             if is_dir {
                 state.toggle_expanded(click_path.clone());
@@ -131,7 +171,18 @@ fn display_row(path: PathBuf, name: String, depth: usize, is_dir: bool, state: A
                 state.open_file(click_path.clone());
             }
         })
-        .style(|s| s.padding(4.0).width_full().hover(|s| s.background(theme::BUTTON_BG_HOVER)))
+        .style(move |s| {
+            let is_active = state.active_tab.get().as_deref() == Some(active_path.as_path());
+            s.height(ROW_HEIGHT)
+                .width_full()
+                .items_center()
+                .column_gap(5.0)
+                .padding_left(BASE_PAD + depth as f64 * INDENT)
+                .padding_right(6.0)
+                .color(if is_active { theme::TEXT_BRIGHT } else { theme::TEXT })
+                .apply_if(is_active, |s| s.background(theme::SELECTED))
+                .hover(|s| s.background(theme::HOVER))
+        })
 }
 
 /// Inline rename/create text input, shown in place of a row. `to_path`
@@ -155,21 +206,21 @@ fn edit_row(depth: usize, state: AppState, to_path: impl Fn(&str) -> PathBuf + '
         state.bump_tree_version();
         state.cancel_edit();
     });
-    let confirm_click = confirm.clone();
 
-    h_stack((
-        theme::text_input(state.pending_edit_name)
-            .keyboard_navigable()
-            .on_key_down(Key::Named(NamedKey::Enter), |_| true, {
-                let confirm = confirm.clone();
-                move |_| confirm(state)
-            })
-            .on_key_down(Key::Named(NamedKey::Escape), |_| true, move |_| state.cancel_edit())
-            .style(|s| s.flex_grow(1.0)),
-        label(|| "\u{2713}".to_string()).on_click_stop(move |_| confirm_click(state)),
-        label(|| "\u{2715}".to_string()).on_click_stop(move |_| state.cancel_edit()),
-    ))
-    .style(move |s| s.padding_left(4.0 + depth as f64 * 12.0).width_full().items_center())
+    text_input(state.pending_edit_name)
+        .keyboard_navigable()
+        .on_key_down(Key::Named(NamedKey::Enter), |_| true, {
+            let confirm = confirm.clone();
+            move |_| confirm(state)
+        })
+        .on_key_down(Key::Named(NamedKey::Escape), |_| true, move |_| state.cancel_edit())
+        .style(move |s| {
+            s.width_full()
+                .margin_left(BASE_PAD + depth as f64 * INDENT)
+                .margin_right(6.0)
+                .margin_vert(1.0)
+                .padding_vert(2.0)
+        })
 }
 
 fn tree_context_menu(path: PathBuf, parent: PathBuf, is_dir: bool, state: AppState) -> Menu {

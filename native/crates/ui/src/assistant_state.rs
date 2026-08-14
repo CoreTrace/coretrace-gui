@@ -26,6 +26,10 @@ pub struct AssistantState {
     pub input: RwSignal<String>,
     pub sending: RwSignal<bool>,
     pub error: RwSignal<Option<String>>,
+    /// Whether the provider settings form is expanded. Collapsed by
+    /// default so the panel shows the conversation, not a form -- keys
+    /// and model paths are set once and then just take up space.
+    pub settings_open: RwSignal<bool>,
 }
 
 impl AssistantState {
@@ -43,6 +47,9 @@ impl AssistantState {
             input: cx.create_rw_signal(String::new()),
             sending: cx.create_rw_signal(false),
             error: cx.create_rw_signal(None),
+            // Opens on first run so an unconfigured provider is
+            // discoverable rather than hidden behind a toggle.
+            settings_open: cx.create_rw_signal(settings.selected.is_none()),
         }
     }
 
