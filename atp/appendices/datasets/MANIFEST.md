@@ -1,7 +1,7 @@
 # CoreTrace GUI — ATP data set
 
 Every file below was run through the exact binary shipped inside
-`CtraceGUI-5.0.2.AppImage` with the panel's default arguments:
+`CtraceGUI-5.1.0.AppImage` with the panel's default arguments:
 
 ```
 --invoke=ctrace_stack_analyzer --sarif-format
