@@ -29,11 +29,16 @@ RUN curl -fL --retry 3 -o /tmp/CtraceGUI.AppImage \
     && chmod +x /tmp/CtraceGUI.AppImage \
     && cd /opt && /tmp/CtraceGUI.AppImage --appimage-extract > /dev/null \
     && mv squashfs-root ctrace-gui \
-    && rm /tmp/CtraceGUI.AppImage
+    && rm /tmp/CtraceGUI.AppImage \
+    && chmod -R a+rX /opt/ctrace-gui
 
 # Electron refuses to run its sandbox as root, so the app runs as an ordinary user.
+# /tmp/.X11-unix is created here because Xvfb cannot create it as a non-root user
+# and prints an alarming "ERROR" when it is missing, even though it goes on to
+# start normally — a tester should not have to judge whether that is a defect.
 RUN useradd -m -s /bin/bash tester && mkdir -p /home/tester/workspace \
-    && chown -R tester:tester /home/tester
+    && chown -R tester:tester /home/tester \
+    && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
