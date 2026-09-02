@@ -136,6 +136,15 @@ class UIController {
   }
 
   /**
+   * True when the app runs on macOS, where the primary modifier is Cmd.
+   * @returns {boolean}
+   * @private
+   */
+  isMacPlatform() {
+    return (typeof window !== 'undefined' && window.api && window.api.platform === 'darwin');
+  }
+
+  /**
    * Convert Windows path to WSL path
    * @param {string} windowsPath - Windows path (e.g., C:\Users\file.txt)
    * @returns {string} WSL path (e.g., /mnt/c/Users/file.txt)
@@ -213,9 +222,32 @@ class UIController {
     }
   }
 
+  /**
+   * Rewrite the menu shortcut hints with macOS symbols (Cmd is the primary
+   * modifier there, see the keydown handler). Entries that do not describe a
+   * shortcut — the Visual Effects On/Off state, for instance — are left alone.
+   * @private
+   */
+  applyPlatformShortcutLabels() {
+    if (!this.isMacPlatform()) return;
+
+    const symbols = { Ctrl: '⌘', Shift: '⇧', Alt: '⌥' };
+
+    document.querySelectorAll('.menubar .shortcut').forEach((el) => {
+      const label = (el.textContent || '').trim();
+      if (!/^(Ctrl|Shift|Alt)\+/.test(label)) return;
+
+      el.textContent = label
+        .split('+')
+        .map((part) => symbols[part] || part)
+        .join('');
+    });
+  }
+
   deferNonCriticalStartup() {
     runAfterFirstPaint(() => {
       this.updateAppVersionLabel();
+      this.applyPlatformShortcutLabels();
       this.performanceManager.init();
       this.setupFileTreeWatcher();
       this.loadAutoSaveState();
@@ -595,7 +627,16 @@ class UIController {
       const isSearchVisible = searchWidget?.classList.contains('visible') ?? false;
       const isGotoVisible = gotoDialog?.classList.contains('visible') ?? false;
 
-      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+      // Primary modifier: Cmd on macOS, Ctrl everywhere else. Tab and PageUp/
+      // PageDown navigation stays on Ctrl on every platform, because Cmd+Tab is
+      // the system application switcher on macOS.
+      const mod = this.isMacPlatform() ? e.metaKey : e.ctrlKey;
+
+      // Option+<letter> on macOS produces a different character (Option+Z is Ω),
+      // so Alt combinations match on the physical key instead of e.key.
+      const altKeyIs = (letter) => e.code === `Key${letter.toUpperCase()}` || e.key.toLowerCase() === letter;
+
+      if (mod && e.altKey && altKeyIs('p')) {
         e.stopPropagation();
         e.preventDefault();
         this.togglePerformanceHud();
@@ -640,59 +681,50 @@ class UIController {
       }
 
       // File operations
-      if (e.ctrlKey && !e.shiftKey && e.key === 's') {
+      if (mod && !e.shiftKey && e.key === 's') {
         e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.saveFile();
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key === 'o') {
+      if (mod && !e.shiftKey && e.key === 'o') {
         e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.openFile();
       }
 
-      if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+      if (mod && e.shiftKey && e.key === 'O') {
         e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.openWorkspace();
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key === 'n') {
+      if (mod && !e.shiftKey && e.key === 'n') {
         e.stopPropagation();
         e.preventDefault();
         this.tabManager.createNewFile();
       }
 
-      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+      if (mod && e.shiftKey && e.key === 'S') {
         e.stopPropagation();
         e.preventDefault();
         this.fileOpsManager.saveAsFile();
       }
 
       // UI navigation
-      if (e.ctrlKey && !e.shiftKey && e.key === 'b') {
+      if (mod && !e.shiftKey && e.key === 'b') {
         e.stopPropagation();
         e.preventDefault();
         this.toggleSidebar();
       }
 
-      if (e.altKey && !e.ctrlKey && e.key === 'z') {
+      if (e.altKey && !mod && altKeyIs('z')) {
         e.stopPropagation();
         e.preventDefault();
         this.editorManager.toggleWordWrap();
       }
 
-      if (e.shiftKey && e.altKey && e.key === 'F') {
-        e.stopPropagation();
-        e.preventDefault();
-        const formatted = this.editorManager.formatCode();
-        if (this.tabManager.activeTabId) {
-          this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
-        }
-      }
-
-      if (e.ctrlKey && !e.shiftKey && e.key === 'w') {
+      if (mod && !e.shiftKey && e.key === 'w') {
         e.stopPropagation();
         e.preventDefault();
         if (this.tabManager.activeTabId) {
@@ -700,14 +732,14 @@ class UIController {
         }
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key === 'f') {
+      if (mod && !e.shiftKey && e.key === 'f') {
         e.stopPropagation();
         e.preventDefault();
         const editor = this.editorManager.getMonacoInstance();
         if (editor) editor.getAction('actions.find').run();
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key === 'g') {
+      if (mod && !e.shiftKey && e.key === 'g') {
         e.stopPropagation();
         e.preventDefault();
         const editor = this.editorManager.getMonacoInstance();
@@ -733,26 +765,26 @@ class UIController {
         this.tabManager.switchToPreviousTab();
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key === '`') {
+      if (mod && !e.shiftKey && e.key === '`') {
         e.stopPropagation();
         e.preventDefault();
         this.toggleToolsPanel();
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key === 'j') {
+      if (mod && !e.shiftKey && e.key === 'j') {
         e.stopPropagation();
         e.preventDefault();
         this.terminalManager.toggle();
         this._syncTerminalActivityIcon();
       }
 
-      if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+      if (mod && e.shiftKey && e.key === 'F') {
         e.stopPropagation();
         e.preventDefault();
         this.showSearch();
       }
 
-      if (e.ctrlKey && e.shiftKey && e.key === 'E') {
+      if (mod && e.shiftKey && e.key === 'E') {
         e.stopPropagation();
         e.preventDefault();
         this.showExplorer();
@@ -858,12 +890,6 @@ class UIController {
     };
 
     // Editor operations
-    window.formatCode = () => {
-      const formatted = this.editorManager.formatCode();
-      if (this.tabManager.activeTabId) {
-        this.tabManager.handleContentChange(this.tabManager.activeTabId, formatted);
-      }
-    };
     window.toggleWordWrap = () => this.editorManager.toggleWordWrap();
 
     // Open Monaco's built-in find/go-to-line widgets
