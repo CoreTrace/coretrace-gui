@@ -56,7 +56,8 @@ test('run-ctrace handler reports missing binary when access fails', async (t) =>
     ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
     callApi: t.mock.fn(async () => ({ ok: true, json: { result: {} }, statusCode: 200 })),
     shutdownServer: t.mock.fn(async () => ({ success: true })),
-    resolveBinaryPath: () => '/fake/bin/ctrace'
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
   };
 
   const { setupCtraceHandlers } = withModuleMocks({
@@ -97,7 +98,8 @@ test('run-ctrace handler executes binary and returns output', async (t) => {
     ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
     callApi: t.mock.fn(async () => ({ ok: true, json: { result: { meta: { tool: 'ctrace' }, diagnostics: [] } }, statusCode: 200 })),
     shutdownServer: t.mock.fn(async () => ({ success: true })),
-    resolveBinaryPath: () => '/fake/bin/ctrace'
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
   };
 
   const { setupCtraceHandlers } = withModuleMocks({
@@ -166,7 +168,8 @@ test('run-ctrace handler flattens result.outputs stack analyzer JSON', async (t)
       }
     })),
     shutdownServer: t.mock.fn(async () => ({ success: true })),
-    resolveBinaryPath: () => '/fake/bin/ctrace'
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
   };
 
   const { setupCtraceHandlers } = withModuleMocks({
@@ -222,7 +225,8 @@ test('run-ctrace handler ignores generic ERROR text from normal tool output', as
       }
     })),
     shutdownServer: t.mock.fn(async () => ({ success: true })),
-    resolveBinaryPath: () => '/fake/bin/ctrace'
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
   };
 
   const { setupCtraceHandlers } = withModuleMocks({
@@ -274,7 +278,8 @@ test('run-ctrace handler preserves tool name for real unknown tool failures', as
       }
     })),
     shutdownServer: t.mock.fn(async () => ({ success: true })),
-    resolveBinaryPath: () => '/fake/bin/ctrace'
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
   };
 
   const { setupCtraceHandlers } = withModuleMocks({

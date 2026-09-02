@@ -40,10 +40,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # os: [windows-latest, macos-latest, ubuntu-latest]
         # windows-2022 pinned: windows-latest (now windows-2025, build 26100)
-        # breaks node-gyp VS detection during node-pty native rebuild.
-        os: [windows-2022, ubuntu-24.04]
+        # breaks node-gyp VS detection during the node-pty native rebuild.
+        #
+        # macOS ships two jobs rather than one universal build: node-pty and
+        # node-llama-cpp are native modules, so each architecture is compiled on
+        # a runner of that architecture (macos-latest is arm64, macos-13 x64).
+        # The builds are unsigned — see the note below.
+        os: [windows-2022, ubuntu-24.04, macos-latest, macos-13]
 
     steps:
       - name: Checkout code
@@ -58,53 +62,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # - name: Create entitlements (macOS only)
-      #   if: matrix.os == 'macos-latest'
-      #   run: |
-      #     mkdir -p build
-      #     cat > build/entitlements.mac.plist <<'PLIST'
-      #     <?xml version="1.0" encoding="UTF-8"?>
-      #     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-      #     <plist version="1.0">
-      #       <dict>
-      #         <key>com.apple.security.cs.allow-jit</key>
-      #         <true/>
-      #         <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-      #         <true/>
-      #         <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-      #         <true/>
-      #         <key>com.apple.security.cs.disable-library-validation</key>
-      #         <true/>
-      #       </dict>
-      #     </plist>
-      #     PLIST
-
-      # - name: Setup macOS signing (macOS only)
-      #   if: matrix.os == 'macos-latest'
-      #   env:
-      #     APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      #     APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      #     APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-      #   run: |
-      #     set -euo pipefail
-      #
-      #     CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
-      #     KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-      #
-      #     echo -n "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
-      #
-      #     security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-      #     security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-      #     security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-      #     security list-keychains -d user -s "$KEYCHAIN_PATH"
-      #     security default-keychain -s "$KEYCHAIN_PATH"
-      #     security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-      #     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
+      # macOS artifacts are deliberately unsigned and un-notarized: that needs a
+      # paid Apple Developer account, and we would rather ship a build testers
+      # can run today. Gatekeeper blocks the first launch, so users open the app
+      # once with right-click > Open, or run `xattr -cr /Applications/CtraceGUI.app`.
+      # To sign later, restore an Apple certificate here and set `identity`,
+      # `hardenedRuntime` and `notarize` in the `mac` block of package.json.
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist:publish
