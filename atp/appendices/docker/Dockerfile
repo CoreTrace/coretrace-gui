@@ -59,6 +59,16 @@ RUN useradd -m -s /bin/bash tester && mkdir -p /home/tester/workspace \
     && chown -R tester:tester /home/tester \
     && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
+# noVNC's own vnc.html opens a panel with a Connect button and shows a blank
+# canvas until it is clicked, which reads as "the container is broken". Make the
+# bare URL redirect straight into a connected, scaled session so a tester only
+# has to open http://localhost:6080/ and never hunts for a control to press.
+RUN printf '%s\n' \
+      '<!doctype html><meta charset="utf-8"><title>CoreTrace GUI</title>' \
+      '<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale&reconnect=true">' \
+      '<p>Connecting to CoreTrace GUI… <a href="vnc.html?autoconnect=true&resize=scale&reconnect=true">open it manually</a>.</p>' \
+      > /usr/share/novnc/index.html
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
