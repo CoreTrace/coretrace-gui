@@ -17,7 +17,7 @@ done
 x11vnc -display :99 -forever -shared -nopw -quiet -rfbport 5900 &
 websockify --web=/usr/share/novnc 6080 localhost:5900 &
 
-echo "CoreTrace GUI is starting. Open http://localhost:6080/vnc.html in a browser."
+echo "CoreTrace GUI is starting. Open http://localhost:6080/ in a browser (it connects on its own)."
 
 # AppRun resolves the app as "$APPDIR/ctrace-gui" and only detects APPDIR when it
 # runs from a mounted AppImage. This one is extracted, so set it explicitly —
