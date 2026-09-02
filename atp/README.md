@@ -27,9 +27,15 @@ The scenarios live in `scripts/gen_atp.py` next to this README; re-run it with
 `python gen_atp.py` after editing, then rebuild the archive:
 
 ```sh
-cd atp && rm -f CoreTrace-GUI_ATP_appendices.zip \
-  && python -c "import shutil; shutil.make_archive('CoreTrace-GUI_ATP_appendices','zip','.','appendices')"
+cd atp && python scripts/make_appendices_zip.py
 ```
+
+Do **not** rebuild the archive with `shutil.make_archive`. Built from a Windows
+working copy it produced a ZIP that failed for every tester: CRLF shebangs, so
+`entrypoint.sh` reported *"no such file or directory"*, and mode 0644 scripts,
+so `./build.sh` was refused outright. `make_appendices_zip.py` normalises line
+endings, sets 0755 on scripts, and marks entries as Unix-created so `unzip`
+honours the mode at all.
 
 ## Known gaps to close before the next test cycle
 
@@ -58,8 +64,11 @@ Still open:
 6. **Third-party analysers are unreachable.** `--invoke=cppcheck` resolves to
    the hard-coded path `/opt/homebrew/bin/cppcheck` and silently produces no
    output. Only `ctrace_stack_analyzer` is exercised by the plan.
-7. **The Docker image has not been built end to end here** (no Docker daemon
-   available on the authoring machine). Run `appendices/docker/build.sh` once
-   before shipping the ZIP.
+7. ~~**The Docker image has not been built end to end here.**~~ It now has
+   been, from the delivered archive rather than the working copy: unzip into a
+   clean directory, run `build.sh` and `run.sh` from those files, and confirm
+   the app window on the virtual display with
+   `docker exec <container> xwininfo -root -tree -display :99`. Re-run that
+   after any change under `appendices/docker/`.
 8. **Windows is not in the plan.** The WSL detection and setup flow
    (`main.js`) has no scenario, because the delivery targets Linux and macOS.
