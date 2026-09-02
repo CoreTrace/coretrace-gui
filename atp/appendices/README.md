@@ -57,6 +57,30 @@ Stop the container with `Ctrl+C` in the terminal running `run.sh`.
 
 ## Setup B — Linux, native AppImage
 
+**Install clang 20 first.** The analyser compiles the source under test to LLVM
+IR before analysing it, and needs a toolchain matching the LLVM it links
+(`libclang-cpp.so.20.1`). Ubuntu 24.04 ships clang 18, which is not enough:
+it fails with `'stddef.h' file not found`.
+
+This matters more than it looks. **Without clang 20 the analyser does not
+report an error — it returns "0 diagnostics" for every file.** `F29` (clean
+file, no diagnostic) would then appear to pass while nothing is being analysed
+at all, and `F28`, `F30`, `F32` and `F33` would fail for a reason no message
+explains. Scenario **F27b** exists to catch exactly that, and must be run
+before the analysis scenarios.
+
+```sh
+wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+  | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" \
+  | sudo tee /etc/apt/sources.list.d/llvm20.list
+sudo apt-get update && sudo apt-get install -y clang-20
+sudo ln -sf /usr/bin/clang-20 /usr/bin/clang
+clang --version      # must report 20.x
+```
+
+Then run the application:
+
 ```sh
 wget https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-5.1.0.AppImage
 chmod +x CtraceGUI-5.1.0.AppImage
@@ -66,6 +90,10 @@ chmod +x CtraceGUI-5.1.0.AppImage
 If your distribution has no FUSE 2 runtime, run
 `./CtraceGUI-5.1.0.AppImage --appimage-extract` and start `squashfs-root/AppRun`
 instead.
+
+> The Docker environment in Setup A already contains clang 20, which is the
+> main reason to prefer it: the analysis scenarios are reproducible there
+> without touching your machine's toolchain.
 
 ## Setup C — macOS, Apple Silicon (native)
 
