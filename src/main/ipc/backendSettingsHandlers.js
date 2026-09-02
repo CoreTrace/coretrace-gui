@@ -40,12 +40,15 @@ function setupBackendSettingsHandlers(mainWindow) {
 
   ipcMain.handle('backend-browse-binary', async () => {
     const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    // macOS and Linux executables carry no extension, so only Windows gets an
+    // .exe filter — elsewhere it would hide the very file the user is after.
+    const filters = process.platform === 'win32'
+      ? [{ name: 'Executable', extensions: ['exe'] }, { name: 'All Files', extensions: ['*'] }]
+      : [{ name: 'All Files', extensions: ['*'] }];
+
     const opts = {
-      title: 'Locate ctrace.exe',
-      filters: [
-        { name: 'Executable', extensions: ['exe'] },
-        { name: 'All Files', extensions: ['*'] }
-      ],
+      title: process.platform === 'win32' ? 'Locate ctrace.exe' : 'Locate the ctrace binary',
+      filters,
       properties: ['openFile']
     };
     const result = win

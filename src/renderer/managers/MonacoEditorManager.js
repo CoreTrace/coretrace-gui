@@ -462,21 +462,6 @@ class MonacoEditorManager {
   }
 
   /**
-   * Format code
-   */
-  async formatCode() {
-    if (!this.editor) return;
-
-    const action = this.editor.getAction('editor.action.formatDocument');
-    if (action) {
-      await action.run();
-      return this.getContent();
-    }
-    
-    return this.getContent();
-  }
-
-  /**
    * Toggle word wrap
    */
   toggleWordWrap() {

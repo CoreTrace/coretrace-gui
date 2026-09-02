@@ -336,34 +336,6 @@ class EditorManager {
   }
 
   /**
-   * Enhanced formatting
-   */
-  formatCode() {
-    if (!this.editor) return;
-    
-    const text = this.getContent();
-    const lines = text.split('\n');
-    let indentLevel = 0;
-    const formatted = lines.map(line => {
-      const trimmed = line.trim();
-      if (trimmed.endsWith('{') || trimmed.endsWith(':')) {
-        const result = '  '.repeat(indentLevel) + trimmed;
-        indentLevel++;
-        return result;
-      } else if (trimmed.startsWith('}')) {
-        indentLevel = Math.max(0, indentLevel - 1);
-        return '  '.repeat(indentLevel) + trimmed;
-      } else {
-        return '  '.repeat(indentLevel) + trimmed;
-      }
-    }).join('\n');
-    
-    this.setContent(formatted);
-    
-    return formatted;
-  }
-
-  /**
    * Toggle word wrap
    */
   toggleWordWrap() {

@@ -60,13 +60,17 @@ This installs all Node.js dependencies including Electron and Monaco Editor.
 The CTrace binary must be present before you can run analyses. Place it at:
 
 ```
-bin/ctrace          # Linux / macOS
-bin/ctrace          # Windows (the binary itself runs inside WSL)
+bin/ctrace                  # Linux
+bin/ctrace                  # Windows (the binary itself runs inside WSL)
+bin/ctrace-darwin-arm64     # macOS, Apple Silicon
+bin/ctrace-darwin-x64       # macOS, Intel
 ```
 
 The `bin/` directory is at the root of the repository (same level as `package.json`). Create it if it doesn't exist.
 
 If the binary is missing, the application will still launch, but the **Run Analysis** button will return an error.
+
+> **macOS users:** the `ctrace` shipped in the release artifacts is a Linux ELF and cannot run on macOS. The app detects this and tells you so instead of failing with an opaque spawn error. Supply a native Mach-O build either by naming it `ctrace-darwin-<arch>` next to the bundled one, or by selecting it from **File → Backend Settings**. Everything else — editor, explorer, search, terminal, assistant — works without it.
 
 ### Running in Development
 
@@ -83,7 +87,15 @@ This automatically rebuilds the renderer bundle (`src/renderer/bundle.js`) befor
 | Current platform | `npm run dist` | `dist/` |
 | Linux (AppImage) | `npm run dist:linux` | `dist/*.AppImage` |
 | Windows (NSIS installer) | `npm run dist:win` | `dist/*.exe` |
-| macOS (DMG) | `npm run dist:mac` | `dist/*.dmg` |
+| macOS (DMG + ZIP) | `npm run dist:mac` | `dist/*.dmg`, `dist/*.zip` |
+
+macOS builds are **unsigned and un-notarized** (signing requires a paid Apple Developer account). Gatekeeper blocks the first launch, so open the app once with right-click → **Open**, or clear the quarantine attribute:
+
+```bash
+xattr -cr /Applications/CtraceGUI.app
+```
+
+CI builds macOS twice — `macos-latest` for arm64 and `macos-13` for x64 — because `node-pty` and `node-llama-cpp` are native modules and each architecture is compiled on a runner of that architecture. To sign later, restore an Apple certificate step in `.github/workflows/release.yml` and set `identity`, `hardenedRuntime` and `notarize` in the `mac` block of `package.json` (`build/entitlements.mac.plist` is kept for that purpose).
 
 ### Running Tests
 
