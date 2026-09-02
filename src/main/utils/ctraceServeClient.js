@@ -175,28 +175,101 @@ async function waitForCapturedJson(predicate, { sinceTs, timeoutMs = 30000, poll
   return null;
 }
 
-function resolveBinaryPath() {
-  const binaryName = 'ctrace';
+/**
+ * Binary file names to look for, most specific first. macOS needs a native
+ * Mach-O build: the `ctrace` shipped in extraResources is a Linux ELF, so an
+ * arch-suffixed name is preferred there and the plain name is only a fallback.
+ * @returns {string[]}
+ */
+function binaryNameCandidates() {
+  if (os.platform() === 'darwin') {
+    return [`ctrace-darwin-${process.arch}`, 'ctrace-darwin', 'ctrace'];
+  }
+  return ['ctrace'];
+}
 
-  // Prefer an updated, user-managed binary if present.
+/**
+ * Directories that may hold the binary, in priority order: the user-managed
+ * copy first (that is where the backend updater writes), then the packaged
+ * resources, then the development checkout.
+ * @returns {string[]}
+ */
+function binaryDirCandidates() {
+  const dirs = [];
+
   try {
     const electronModule = require('electron');
     const electronApp = electronModule && electronModule.app;
     if (electronApp && typeof electronApp.getPath === 'function') {
-      const managedPath = path.join(electronApp.getPath('userData'), 'bin', binaryName);
-      if (fsSync.existsSync(managedPath)) {
-        return managedPath;
-      }
+      dirs.push(path.join(electronApp.getPath('userData'), 'bin'));
     }
   } catch (_) {
     // Ignore; fallback to packaged/development binary path.
   }
 
   if (process.resourcesPath) {
-    return path.join(process.resourcesPath, 'bin', binaryName);
+    dirs.push(path.join(process.resourcesPath, 'bin'));
   }
 
-  return path.join(__dirname, '../../../bin', binaryName);
+  dirs.push(path.join(__dirname, '../../../bin'));
+
+  return dirs;
+}
+
+function resolveBinaryPath() {
+  const dirs = binaryDirCandidates();
+  const names = binaryNameCandidates();
+
+  for (const dir of dirs) {
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (fsSync.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  // Nothing exists yet: return the packaged path with the default name so the
+  // caller's "not found" message points at the location we actually expect.
+  return path.join(dirs[dirs.length - 1], 'ctrace');
+}
+
+/**
+ * Check that a binary matches the executable format of the host OS. Only macOS
+ * is checked, because that is the platform where a Linux ELF can end up
+ * bundled: running it there fails with an opaque "cannot execute binary file".
+ *
+ * @param {string} binPath
+ * @returns {{ ok: boolean, error?: string }}
+ */
+function checkBinaryFormat(binPath) {
+  if (os.platform() !== 'darwin') return { ok: true };
+
+  let header;
+  try {
+    const fd = fsSync.openSync(binPath, 'r');
+    try {
+      header = Buffer.alloc(4);
+      fsSync.readSync(fd, header, 0, 4, 0);
+    } finally {
+      fsSync.closeSync(fd);
+    }
+  } catch (e) {
+    return { ok: false, error: `Cannot read the ctrace binary at ${binPath}: ${e.message}` };
+  }
+
+  // 0x7f 'E' 'L' 'F' — a Linux binary, which macOS cannot load.
+  if (header[0] === 0x7f && header[1] === 0x45 && header[2] === 0x4c && header[3] === 0x46) {
+    return {
+      ok: false,
+      error:
+        'The bundled ctrace binary is a Linux executable and cannot run on macOS. ' +
+        'Build or download a macOS (Mach-O) ctrace, then select it from File > Backend Settings, ' +
+        `or place it next to the bundled one as "ctrace-darwin-${process.arch}".`
+    };
+  }
+
+  return { ok: true };
 }
 
 function toWslPath(winPath) {
@@ -304,6 +377,11 @@ async function ensureServerRunning(options = {}) {
       await fs.access(binPath);
     } catch (e) {
       throw new Error(`ctrace binary not found at: ${binPath}`);
+    }
+
+    const format = checkBinaryFormat(binPath);
+    if (!format.ok) {
+      throw new Error(format.error);
     }
 
     const host = DEFAULT_HOST;
@@ -454,6 +532,7 @@ module.exports = {
   callApi,
   shutdownServer,
   resolveBinaryPath,
+  checkBinaryFormat,
   getCapturedSince,
   waitForCapturedJson
 };

@@ -60,13 +60,17 @@ This installs all Node.js dependencies including Electron and Monaco Editor.
 The CTrace binary must be present before you can run analyses. Place it at:
 
 ```
-bin/ctrace          # Linux / macOS
-bin/ctrace          # Windows (the binary itself runs inside WSL)
+bin/ctrace                  # Linux
+bin/ctrace                  # Windows (the binary itself runs inside WSL)
+bin/ctrace-darwin-arm64     # macOS, Apple Silicon
+bin/ctrace-darwin-x64       # macOS, Intel
 ```
 
 The `bin/` directory is at the root of the repository (same level as `package.json`). Create it if it doesn't exist.
 
 If the binary is missing, the application will still launch, but the **Run Analysis** button will return an error.
+
+> **macOS users:** the `ctrace` shipped in the release artifacts is a Linux ELF and cannot run on macOS. The app detects this and tells you so instead of failing with an opaque spawn error. Supply a native Mach-O build either by naming it `ctrace-darwin-<arch>` next to the bundled one, or by selecting it from **File → Backend Settings**. Everything else — editor, explorer, search, terminal, assistant — works without it.
 
 ### Running in Development
 
@@ -83,7 +87,36 @@ This automatically rebuilds the renderer bundle (`src/renderer/bundle.js`) befor
 | Current platform | `npm run dist` | `dist/` |
 | Linux (AppImage) | `npm run dist:linux` | `dist/*.AppImage` |
 | Windows (NSIS installer) | `npm run dist:win` | `dist/*.exe` |
-| macOS (DMG) | `npm run dist:mac` | `dist/*.dmg` |
+| macOS (DMG + ZIP) | `npm run dist:mac` | `dist/*.dmg`, `dist/*.zip` |
+
+macOS builds are **unsigned and un-notarized** (signing requires a paid Apple Developer account). Gatekeeper blocks the first launch, so open the app once with right-click → **Open**, or clear the quarantine attribute:
+
+```bash
+xattr -cr /Applications/CtraceGUI.app
+```
+
+CI builds macOS twice — `macos-latest` for arm64 and `macos-13` for x64 — because `node-pty` and `node-llama-cpp` are native modules and each architecture is compiled on a runner of that architecture. To sign later, restore an Apple certificate step in `.github/workflows/release.yml` and set `identity`, `hardenedRuntime` and `notarize` in the `mac` block of `package.json` (`build/entitlements.mac.plist` is kept for that purpose).
+
+### Releases and versioning
+
+Versions are semver, and the git tag is always `v<package.json version>`:
+
+| Channel | Version shape | Update manifest | Example |
+|---|---|---|---|
+| stable (`main` in the app) | `X.Y.Z` | `latest*.yml` | `5.1.0` |
+| beta | `X.Y.Z-beta.N` | `beta*.yml` | `5.2.0-beta.1` |
+
+`-beta.N` is the **only** accepted prerelease form. electron-builder names the update manifest after the prerelease identifier, so a version like `5.0.1-a` produces an `a.yml` that neither channel reads — the release becomes invisible to the updater. `scripts/release.sh` and the release workflow both reject it, and `tests/version.test.js` pins the rule.
+
+Cut a release from `master` with a clean tree:
+
+```bash
+./scripts/release.sh minor          # 5.1.0 -> 5.2.0
+./scripts/release.sh 5.2.0-beta.1   # beta channel
+./scripts/release.sh prerelease     # 5.2.0-beta.1 -> 5.2.0-beta.2
+```
+
+The script bumps `package.json`, tags, and pushes. **Only the tag triggers a build**: pushes to `master` and pull requests run the test suite and nothing else, so merging a PR never republishes a release. CI verifies the tag matches `package.json` before publishing, and marks the GitHub release as a prerelease when the version carries `-beta.N`.
 
 ### Running Tests
 

@@ -4,7 +4,7 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 
-const { callApi, ensureServerRunning, shutdownServer, resolveBinaryPath, getCapturedSince, waitForCapturedJson } = require('../utils/ctraceServeClient');
+const { callApi, ensureServerRunning, shutdownServer, resolveBinaryPath, checkBinaryFormat, getCapturedSince, waitForCapturedJson } = require('../utils/ctraceServeClient');
 const { loadBackendSettings } = require('./backendSettingsHandlers');
 
 const DEBUG_BACKEND_REQUESTS = process.env.CTRACE_GUI_DEBUG_BACKEND === '1' || process.env.NODE_ENV === 'development';
@@ -600,6 +600,13 @@ function setupCtraceHandlers() {
       await fs.access(resolveBinaryPath());
     } catch (e) {
       return { success: false, error: `ctrace binary not found: ${e.message}` };
+    }
+
+    // On macOS the bundled binary may be a Linux ELF; say so instead of letting
+    // the spawn fail with "cannot execute binary file".
+    const format = checkBinaryFormat(resolveBinaryPath());
+    if (!format.ok) {
+      return { success: false, error: format.error };
     }
 
     // The server is run through WSL on Windows.
