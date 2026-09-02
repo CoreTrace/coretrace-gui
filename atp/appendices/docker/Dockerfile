@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Version under test. Override with --build-arg to test another release.
-ARG CTRACE_GUI_VERSION=5.0.2
+ARG CTRACE_GUI_VERSION=5.1.0
 
 RUN curl -fL --retry 3 -o /tmp/CtraceGUI.AppImage \
       "https://github.com/CoreTrace/coretrace-gui/releases/download/v${CTRACE_GUI_VERSION}/CtraceGUI-${CTRACE_GUI_VERSION}.AppImage" \

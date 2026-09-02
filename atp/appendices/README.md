@@ -2,12 +2,12 @@
 
 Everything a tester needs to run the test plan without help from the team.
 No compilation is required: the tests run against the **published binaries** of
-release **v5.0.2**.
+release **v5.1.0**.
 
 ```
 appendices/
 ├── README.md            ← this file
-├── docker/              ← reproducible Linux environment (also used on macOS)
+├── docker/              ← reproducible Linux environment (also used on Intel Macs)
 │   ├── Dockerfile
 │   ├── entrypoint.sh
 │   ├── build.sh
@@ -28,9 +28,12 @@ appendices/
 
 | Item | Link |
 |---|---|
-| Release under test (v5.0.2) | https://github.com/CoreTrace/coretrace-gui/releases/tag/v5.0.2 |
-| Linux AppImage | https://github.com/CoreTrace/coretrace-gui/releases/download/v5.0.2/CtraceGUI-5.0.2.AppImage |
-| Windows installer | https://github.com/CoreTrace/coretrace-gui/releases/download/v5.0.2/CtraceGUI-Setup-5.0.2.exe |
+| Release under test (v5.1.0) | https://github.com/CoreTrace/coretrace-gui/releases/tag/v5.1.0 |
+| Linux AppImage | https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-5.1.0.AppImage |
+| Windows installer | https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-Setup-5.1.0.exe |
+| macOS, Apple Silicon (DMG) | https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-5.1.0-arm64.dmg |
+| macOS, Apple Silicon (ZIP) | https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-5.1.0-arm64-mac.zip |
+| macOS, Intel | not published in v5.1.0 — use the Docker setup |
 | Source code | https://github.com/CoreTrace/coretrace-gui |
 | API documentation | https://coretrace.github.io/coretrace-gui/ |
 
@@ -42,7 +45,7 @@ only thing you need locally is a browser.
 
 ```sh
 cd appendices/docker
-./build.sh            # ~5 min, downloads the 506 MB AppImage once
+./build.sh            # ~5 min, downloads the AppImage once
 ./run.sh              # mounts ../datasets at /home/tester/workspace
 ```
 
@@ -55,19 +58,52 @@ Stop the container with `Ctrl+C` in the terminal running `run.sh`.
 ## Setup B — Linux, native AppImage
 
 ```sh
-wget https://github.com/CoreTrace/coretrace-gui/releases/download/v5.0.2/CtraceGUI-5.0.2.AppImage
-chmod +x CtraceGUI-5.0.2.AppImage
-./CtraceGUI-5.0.2.AppImage
+wget https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-5.1.0.AppImage
+chmod +x CtraceGUI-5.1.0.AppImage
+./CtraceGUI-5.1.0.AppImage
 ```
 
 If your distribution has no FUSE 2 runtime, run
-`./CtraceGUI-5.0.2.AppImage --appimage-extract` and start `squashfs-root/AppRun`
+`./CtraceGUI-5.1.0.AppImage --appimage-extract` and start `squashfs-root/AppRun`
 instead.
 
-## Setup C — macOS
+## Setup C — macOS, Apple Silicon (native)
 
-There is **no macOS build published for v5.0.2**, so macOS testing goes through
-the same Docker environment as Linux:
+Download
+[CtraceGUI-5.1.0-arm64.dmg](https://github.com/CoreTrace/coretrace-gui/releases/download/v5.1.0/CtraceGUI-5.1.0-arm64.dmg),
+open it, and drag **CtraceGUI** to Applications.
+
+The build is **unsigned** — signing needs a paid Apple Developer account — so
+macOS quarantines it and refuses the first launch. That refusal is expected and
+is part of scenario **F3**; it is not a defect. Get past it one of two ways,
+depending on what macOS tells you:
+
+- *"cannot be opened because the developer cannot be verified"* →
+  **right-click** (or Control-click) the app in Applications and choose
+  **Open**, then click **Open** in the dialog. Double-clicking will not work:
+  only the Open menu item offers the override.
+- *"is damaged and can't be opened"* → that dialog has no Open button, so clear
+  the quarantine flag instead:
+
+  ```sh
+  xattr -cr /Applications/CtraceGUI.app
+  ```
+
+Either way, macOS remembers the decision and every later launch is a normal
+double-click.
+
+> On Ventura and later the app may instead appear under **System Settings →
+> Privacy & Security**; click **Open Anyway** there and authenticate.
+
+**Analysis does not run on macOS.** The bundled `ctrace` is a Linux binary, so
+**Run Analysis** reports that explicitly (scenario **F54**) instead of failing
+silently. Everything else — editor, explorer, search, terminal, assistant,
+session restore — works. Run the analysis scenarios **F28 to F38** on Linux.
+
+## Setup D — macOS, Intel
+
+v5.1.0 publishes no x64 artifact, so Intel Macs go through the Docker
+environment (scenario **F3b**):
 
 ```sh
 cd appendices/docker
@@ -75,24 +111,16 @@ cd appendices/docker
 ./run.sh
 ```
 
-then open <http://localhost:6080/vnc.html>.
-
-- **Intel Macs** run the image natively.
-- **Apple Silicon Macs** run it under `linux/amd64` emulation (the scripts pass
-  `--platform linux/amd64` automatically). Everything works, but expect the app
-  to start slowly and to feel sluggish. Allocate at least 6 GB of RAM to Docker
-  Desktop (Settings → Resources) and enable **Use Rosetta for x86/amd64
-  emulation**.
-
-Scenario **F03** in the test plan covers this path explicitly.
+then open <http://localhost:6080/vnc.html>. Allocate at least 6 GB of RAM to
+Docker Desktop (Settings → Resources).
 
 ## Reporting an anomaly
 
 Fill the **Feedback** column of the test plan with, in this order:
 
 1. `PASS` or `FAIL`.
-2. Setup used (`Docker/Linux`, `Native/Linux`, `Docker/macOS-Intel`,
-   `Docker/macOS-AppleSilicon`).
+2. Setup used (`Docker/Linux`, `Native/Linux`, `Native/macOS-AppleSilicon`,
+   `Docker/macOS-Intel`).
 3. For a `FAIL`: what you observed instead of the expected result, and the
    severity — **blocking** (the feature is unusable or the app crashes),
    **major** (wrong result produced), **minor** (cosmetic or wording).
