@@ -18,7 +18,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libxshmfence1 libnss3 libnspr4 libxss1 libxtst6 libnotify4 \
       libasound2t64 libsecret-1-0 libglib2.0-0t64 \
-      fonts-dejavu-core xdg-utils \
+      fonts-dejavu-core xdg-utils gnupg wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# clang 20 is a hard runtime requirement of the analyser: it compiles the source
+# under test to LLVM IR before analysing it, and needs a resource directory
+# matching the LLVM it links (libclang-cpp.so.20.1). Ubuntu 24.04 only ships
+# clang 18, which fails with "'stddef.h' file not found".
+#
+# Without it the analyser does not error out — it reports "0 diagnostics" for
+# every input, so a tester would mark the clean-file scenario as passing while
+# nothing is actually being analysed. That silence is why this is installed
+# here rather than left to the tester.
+RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+      | gpg --dearmor -o /usr/share/keyrings/llvm.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" \
+      > /etc/apt/sources.list.d/llvm20.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends clang-20 \
+    && ln -sf /usr/bin/clang-20 /usr/bin/clang \
+    && ln -sf /usr/bin/clang++-20 /usr/bin/clang++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Version under test. Override with --build-arg to test another release.
