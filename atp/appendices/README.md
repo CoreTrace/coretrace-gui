@@ -49,11 +49,28 @@ cd appendices/docker
 ./run.sh              # mounts ../datasets at /home/tester/workspace
 ```
 
-Then open <http://localhost:6080/vnc.html> and click **Connect**. The CoreTrace
-GUI window fills the noVNC canvas. Inside the app, the test data set is at
-`/home/tester/workspace`.
+Then open <http://localhost:6080/>. The page connects on its own — there is no
+Connect button to find, and the CoreTrace GUI window fills the canvas. Inside
+the app, the test data set is at `/home/tester/workspace`.
 
 Stop the container with `Ctrl+C` in the terminal running `run.sh`.
+
+### If the browser shows nothing
+
+The container prints a lot at startup — xkbcomp keysym warnings, a D-Bus
+connection error, `Xlib: extension "DPMS" missing`. All three are normal in a
+headless container and none of them stops the application. Judge the container
+by these instead:
+
+```sh
+docker exec coretrace-gui-atp xwininfo -root -tree -display :99 | grep "CTrace GUI"
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:6080/
+```
+
+The first must list a `1200x800` window, the second must print `200`. If both
+hold, the application is running and the problem is the browser view: open
+<http://localhost:6080/vnc_lite.html>, or hard-reload the page (Ctrl+Shift+R) in
+case an older non-connecting version of it was cached.
 
 ## Setup B — Linux, native AppImage
 
@@ -139,7 +156,7 @@ cd appendices/docker
 ./run.sh
 ```
 
-then open <http://localhost:6080/vnc.html>. Allocate at least 6 GB of RAM to
+then open <http://localhost:6080/>. Allocate at least 6 GB of RAM to
 Docker Desktop (Settings → Resources).
 
 ## Reporting an anomaly
