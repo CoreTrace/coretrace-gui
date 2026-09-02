@@ -37,7 +37,7 @@ Addressed on the `feat/macos` branch:
 
 1. **No macOS artifact.** ~~The `macos-latest` job is commented out.~~ The
    release matrix now builds an unsigned `.dmg` + `.zip` on `macos-latest`
-   (arm64) and `macos-13` (x64). Once a tag ships them, `F3` switches from
+   (arm64) and `macos-13` (x64), landing in v5.1.0. Once that tag ships, `F3` switches from
    Docker to the native build and its steps must be rewritten (first launch:
    right-click → Open, or `xattr -cr`).
 2. **Ctrl-only shortcuts.** ~~`e.metaKey` was never tested.~~ The keydown
