@@ -19,7 +19,13 @@ websockify --web=/usr/share/novnc 6080 localhost:5900 &
 
 echo "CoreTrace GUI is starting. Open http://localhost:6080/vnc.html in a browser."
 
+# AppRun resolves the app as "$APPDIR/ctrace-gui" and only detects APPDIR when it
+# runs from a mounted AppImage. This one is extracted, so set it explicitly —
+# otherwise AppRun looks for "/ctrace-gui" and exits 127. Going through AppRun
+# rather than the binary keeps the LD_LIBRARY_PATH and XDG setup it performs.
+export APPDIR=/opt/ctrace-gui
+
 # --no-sandbox is required because the extracted AppImage has no setuid helper.
-exec /opt/ctrace-gui/AppRun --no-sandbox --disable-gpu "$@"
+exec "$APPDIR/AppRun" --no-sandbox --disable-gpu "$@"
 
 kill "$XVFB_PID"
