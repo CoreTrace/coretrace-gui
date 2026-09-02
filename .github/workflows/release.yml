@@ -51,9 +51,11 @@ jobs:
         #
         # macOS ships two jobs rather than one universal build: node-pty and
         # node-llama-cpp are native modules, so each architecture is compiled on
-        # a runner of that architecture (macos-latest is arm64, macos-13 x64).
+        # a runner of that architecture. macos-latest is Apple Silicon;
+        # macos-15-intel is the x64 runner that replaced the retired macos-13
+        # (a macos-13 job sits queued forever instead of failing).
         # The builds are unsigned — see the note below.
-        os: [windows-2022, ubuntu-24.04, macos-latest, macos-13]
+        os: [windows-2022, ubuntu-24.04, macos-latest, macos-15-intel]
 
     steps:
       - name: Checkout code
