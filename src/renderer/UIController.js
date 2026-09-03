@@ -743,7 +743,13 @@ class UIController {
         e.stopPropagation();
         e.preventDefault();
         const editor = this.editorManager.getMonacoInstance();
-        if (editor) editor.getAction('editor.action.gotoLine').run();
+        // gotoLine goes through Monaco's Quick Input service, which throws
+        // "needs a focused editor" if the editor isn't focused — unlike
+        // actions.find, which works either way.
+        if (editor) {
+          editor.focus();
+          editor.getAction('editor.action.gotoLine').run();
+        }
       }
 
       if (e.ctrlKey && e.key === 'Tab') {
@@ -899,7 +905,13 @@ class UIController {
     };
     window.openMonacoGoToLine = () => {
       const editor = this.editorManager.getMonacoInstance();
-      if (editor) editor.getAction('editor.action.gotoLine').run();
+      // Clicking a menu item blurs the editor first, and gotoLine's Quick
+      // Input service throws "needs a focused editor" if it isn't focused —
+      // so re-focus before running it.
+      if (editor) {
+        editor.focus();
+        editor.getAction('editor.action.gotoLine').run();
+      }
     };
 
     // UI navigation
