@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use floem::keyboard::{Key, Modifiers};
 use floem::prelude::*;
+use floem::reactive::{untrack, Scope};
 use floem::views::editor::command::CommandExecuted;
 use floem::views::editor::keypress::default_key_handler;
 use floem::views::editor::keypress::key::KeyInput;
@@ -68,7 +69,7 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
         notify_open(client, &path, &content);
     }
     let lsp_diagnostics = lsp_client.map(|c| c.diagnostics_for(&file_uri(&path))).unwrap_or_default();
-    let styling = TreeSitterStyling::with_diagnostics(&path, &content, &diagnostics, &lsp_diagnostics);
+    let styling = TreeSitterStyling::new(Scope::current(), &path, &content, &diagnostics, &lsp_diagnostics);
     let save_path = path.clone();
     let visible_path = path.clone();
 
@@ -110,6 +111,30 @@ fn single_editor(path: PathBuf, state: AppState) -> impl IntoView {
             .gutter_current_color(theme::GUTTER_CURRENT_BG)
             .gutter_left_padding(14.0)
             .gutter_right_padding(14.0)
+    });
+
+    // Keep highlighting in step with the document. `cache_rev` bumps on
+    // every edit; `diagnostics.result` changes when an analysis lands.
+    // Watching both here is what replaced the old "close and reopen the
+    // tab when results arrive" remount -- markers now appear in place,
+    // and the editor keeps its scroll position and caret.
+    let doc = editor.doc();
+    let highlight_path = path.clone();
+    floem::reactive::create_effect(move |_| {
+        let _ = doc.cache_rev().get();
+        let _ = state.diagnostics.result.get();
+        // The body reads the document and writes the styling snapshot.
+        // Untracked so that reading the text can never subscribe this
+        // effect to something it also drives.
+        untrack(|| {
+            let text = doc.text().to_string();
+            let diagnostics = state.diagnostics.diagnostics_for(&highlight_path);
+            let lsp = state
+                .lsp_client()
+                .map(|c| c.diagnostics_for(&file_uri(&highlight_path)))
+                .unwrap_or_default();
+            styling.refresh(&highlight_path, &text, &diagnostics, &lsp);
+        });
     });
 
     // Register this tab's editor so panels can drive its caret, then

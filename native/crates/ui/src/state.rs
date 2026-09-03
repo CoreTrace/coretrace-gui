@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use floem::ext_event::create_signal_from_channel;
-use floem::reactive::untrack;
 use floem::reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
 
 use coretrace_core::{search_in_files, SearchMatch};
@@ -113,28 +112,12 @@ impl AppState {
             lsp_found,
         };
 
-        // An editor computes its syntax/diagnostic styling once, when
-        // it mounts. Analysis is now asynchronous, so results arrive
-        // after the editor is already on screen -- without this the
-        // markers only ever showed up on the *next* run. Remounting the
-        // analyzed file when results land rebuilds its styling with
-        // them.
-        //
-        // The body must run untracked. `close_tab`/`open_file` *read*
-        // `open_tabs` as well as writing it, and a tracked read inside
-        // an effect that also writes that signal makes the effect
-        // retrigger itself -- which overflowed the stack and killed the
-        // process the first time this shipped.
-        cx.create_effect(move |_| {
-            let _ = state.diagnostics.result.get();
-            untrack(|| {
-                let Some(path) = state.diagnostics.last_run_file.get_untracked() else { return };
-                if state.open_tabs.with(|tabs| tabs.iter().any(|t| t.path == path)) {
-                    state.close_tab(&path);
-                    state.open_file(path);
-                }
-            });
-        });
+        // Diagnostic markers used to require remounting the analyzed
+        // tab when results landed, because an editor computed its
+        // styling once at mount. That remount is gone: the editor now
+        // watches the result signal directly (see views/editor.rs), so
+        // markers appear in place without discarding the caret, the
+        // scroll position, or unsaved edits.
 
         // Persist whenever the workspace/tabs change -- continuous
         // rather than only on a clean exit, so a crash doesn't lose the
