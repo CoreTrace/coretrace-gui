@@ -585,7 +585,10 @@ class FileOperationsManager {
     }
     
     if (workspaceFolder) {
-      workspaceFolder.style.display = 'block';
+      // Must match sidebar.css's `#workspace-folder { display: flex; ... }` —
+      // 'block' would override the flex column layout that stretches
+      // .file-tree's empty space to fill the rest of the panel.
+      workspaceFolder.style.display = 'flex';
     }
     
     if (noWorkspace) {

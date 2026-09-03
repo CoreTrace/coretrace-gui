@@ -24,7 +24,9 @@ class ActivityBar {
     const sidebar = document.getElementById('sidebar');
     
     if (sidebarTitle) sidebarTitle.textContent = 'Explorer';
-    if (explorerView) explorerView.style.display = 'block';
+    // Must be 'flex', not 'block' — #explorer-view is a flex column in CSS
+    // (see sidebar.css) that stretches #workspace-folder to fill the panel.
+    if (explorerView) explorerView.style.display = 'flex';
     if (searchView) searchView.style.display = 'none';
     if (sidebar && sidebar.style.display === 'none') {
       sidebar.style.display = 'flex';
