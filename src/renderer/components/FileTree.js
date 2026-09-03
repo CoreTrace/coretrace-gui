@@ -142,10 +142,6 @@ class FileTree {
           label: 'Close Folder',
           action: () => this.ui.fileOpsManager.closeWorkspace()
         });
-        menuItems.push({
-          label: 'Close Folder',
-          action: () => this.ui.fileOpsManager.closeWorkspace()
-        });
       } else if (itemType === 'directory') {
         // Folder menu
         menuItems.push({
