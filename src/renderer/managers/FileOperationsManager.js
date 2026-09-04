@@ -542,7 +542,7 @@ class FileOperationsManager {
           if (tabElement) {
             const tabLabel = tabElement.querySelector('.tab-label');
             if (tabLabel) {
-              tabLabel.innerHTML = currentTab.fileName; // Remove warning indicator
+              tabLabel.textContent = currentTab.fileName; // Remove warning indicator
             }
           }
           
@@ -810,14 +810,14 @@ class FileOperationsManager {
           itemElement.setAttribute('data-expanded', 'false');
           itemElement.innerHTML = `
             ${guides}<span class="twisty"></span>
-            <span class="name">${item.name}</span>
+            <span class="name">${escapeHtml(item.name)}</span>
             <span class="git-badge"></span>
           `;
         } else {
           const fileIcon = this.getFileIcon(item.name);
           itemElement.innerHTML = `
             ${guides}<span class="icon">${fileIcon}</span>
-            <span class="name">${item.name}</span>
+            <span class="name">${escapeHtml(item.name)}</span>
             <span class="git-badge"></span>
           `;
         }

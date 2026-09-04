@@ -10,6 +10,27 @@ const { resolveBinaryPath } = require('./ctraceServeClient');
 const CORETRACE_REPO_API_LATEST = 'https://api.github.com/repos/CoreTrace/coretrace/releases/latest';
 const REQUEST_TIMEOUT_MS = 30000;
 
+// Release metadata and assets are only ever fetched from GitHub. Redirects
+// (asset downloads bounce to *.githubusercontent.com) are checked against the
+// same list so a poisoned Location header cannot send us elsewhere.
+const ALLOWED_HOSTS = ['github.com', 'api.github.com'];
+const ALLOWED_HOST_SUFFIXES = ['.githubusercontent.com'];
+const MAX_JSON_BYTES = 5 * 1024 * 1024;
+const MAX_TEXT_BYTES = 64 * 1024;
+const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
+
+function assertAllowedUrl(url) {
+  const parsed = new URL(String(url));
+  const host = parsed.hostname.toLowerCase();
+  const allowed = parsed.protocol === 'https:' && (
+    ALLOWED_HOSTS.includes(host) || ALLOWED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))
+  );
+  if (!allowed) {
+    throw new Error(`Refusing to fetch backend update from untrusted URL: ${parsed.origin}`);
+  }
+  return parsed;
+}
+
 function getUserDataPath() {
   if (!app || typeof app.getPath !== 'function') return null;
   try {
@@ -59,8 +80,14 @@ async function sha256File(filePath) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-function requestUrl(url, { method = 'GET', headers = {}, timeoutMs = REQUEST_TIMEOUT_MS, maxRedirects = 5 } = {}) {
+function requestUrl(url, { method = 'GET', headers = {}, timeoutMs = REQUEST_TIMEOUT_MS, maxRedirects = 5, maxBytes = MAX_JSON_BYTES } = {}) {
   return new Promise((resolve, reject) => {
+    try {
+      assertAllowedUrl(url);
+    } catch (error) {
+      reject(error);
+      return;
+    }
     const appVersion = app && typeof app.getVersion === 'function' ? app.getVersion() : '0.0.0';
     const req = https.request(url, {
       method,
@@ -75,14 +102,22 @@ function requestUrl(url, { method = 'GET', headers = {}, timeoutMs = REQUEST_TIM
 
       if (statusCode >= 300 && statusCode < 400 && location && maxRedirects > 0) {
         res.resume();
-        requestUrl(location, { method, headers, timeoutMs, maxRedirects: maxRedirects - 1 })
+        requestUrl(new URL(location, url).toString(), { method, headers, timeoutMs, maxRedirects: maxRedirects - 1, maxBytes })
           .then(resolve)
           .catch(reject);
         return;
       }
 
       const chunks = [];
-      res.on('data', (c) => chunks.push(c));
+      let received = 0;
+      res.on('data', (c) => {
+        received += c.length;
+        if (received > maxBytes) {
+          req.destroy(new Error(`Response from ${url} exceeded ${maxBytes} bytes`));
+          return;
+        }
+        chunks.push(c);
+      });
       res.on('end', () => {
         resolve({
           statusCode,
@@ -101,7 +136,7 @@ function requestUrl(url, { method = 'GET', headers = {}, timeoutMs = REQUEST_TIM
 }
 
 async function fetchJson(url) {
-  const res = await requestUrl(url, { headers: { Accept: 'application/vnd.github+json' } });
+  const res = await requestUrl(url, { headers: { Accept: 'application/vnd.github+json' }, maxBytes: MAX_JSON_BYTES });
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const body = res.body ? res.body.toString('utf8') : '';
     throw new Error(`HTTP ${res.statusCode} fetching JSON from ${url}: ${body.slice(0, 200)}`);
@@ -110,7 +145,7 @@ async function fetchJson(url) {
 }
 
 async function fetchText(url) {
-  const res = await requestUrl(url, { headers: { Accept: 'text/plain,*/*' } });
+  const res = await requestUrl(url, { headers: { Accept: 'text/plain,*/*' }, maxBytes: MAX_TEXT_BYTES });
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const body = res.body ? res.body.toString('utf8') : '';
     throw new Error(`HTTP ${res.statusCode} fetching text from ${url}: ${body.slice(0, 200)}`);
@@ -119,7 +154,7 @@ async function fetchText(url) {
 }
 
 async function downloadToFile(url, targetPath) {
-  const res = await requestUrl(url, { headers: { Accept: 'application/octet-stream,*/*' } });
+  const res = await requestUrl(url, { headers: { Accept: 'application/octet-stream,*/*' }, maxBytes: MAX_ARCHIVE_BYTES });
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const body = res.body ? res.body.toString('utf8') : '';
     throw new Error(`HTTP ${res.statusCode} downloading ${url}: ${body.slice(0, 200)}`);

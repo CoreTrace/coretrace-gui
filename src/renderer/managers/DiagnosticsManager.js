@@ -317,7 +317,7 @@ class DiagnosticsManager {
       const presentation = this.getDiagnosticPresentation(diag);
       
       return `
-        <div class="diagnostic-item" data-diag-id="${this.escapeHtml(diag.id)}" onclick="window.diagnosticsManager.jumpToDiagnostic('${this.escapeHtml(diag.id)}')">
+        <div class="diagnostic-item" data-diag-id="${this.escapeHtml(diag.id)}">
           <div class="diagnostic-item-header">
             <div class="diagnostic-severity-icon diagnostic-severity-icon-${String(diag.severity || '').toLowerCase()}" style="background: ${severityColor};">
               ${icon}
@@ -365,7 +365,7 @@ class DiagnosticsManager {
   renderFilterDropdown() {
     return `
       <div class="severity-filter">
-        <select id="severity-filter-select" onchange="window.diagnosticsManager.changeSeverityFilter(this.value)">
+        <select id="severity-filter-select">
           <option value="ALL" ${this.currentSeverityFilter === 'ALL' ? 'selected' : ''}>All issues</option>
           <option value="ERROR" ${this.currentSeverityFilter === 'ERROR' ? 'selected' : ''}>Errors</option>
           <option value="WARNING" ${this.currentSeverityFilter === 'WARNING' ? 'selected' : ''}>Warnings</option>
@@ -617,6 +617,23 @@ class DiagnosticsManager {
     const diagnosticsHtml = this.renderDiagnostics();
     
     resultsArea.innerHTML = metadataHtml + diagnosticsHtml;
+    this.bindRenderedControls(resultsArea);
+  }
+
+  /**
+   * Wire up the freshly rendered diagnostics list. Listeners are attached here
+   * rather than through inline handlers so diagnostic ids never reach the DOM
+   * as JavaScript source.
+   * @param {HTMLElement} resultsArea
+   */
+  bindRenderedControls(resultsArea) {
+    resultsArea.querySelectorAll('.diagnostic-item[data-diag-id]').forEach((item) => {
+      item.addEventListener('click', () => this.jumpToDiagnostic(item.dataset.diagId));
+    });
+    const filterSelect = resultsArea.querySelector('#severity-filter-select');
+    if (filterSelect) {
+      filterSelect.addEventListener('change', () => this.changeSeverityFilter(filterSelect.value));
+    }
   }
 
   /**
@@ -667,10 +684,7 @@ class DiagnosticsManager {
    * @returns {string} Escaped HTML
    */
   escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return window.escapeHtml(text);
   }
 
   /**

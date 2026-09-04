@@ -8,6 +8,7 @@ const isDev = process.argv.includes('--dev');
 const outfile = path.join(rootDir, 'src', 'renderer', 'bundle.js');
 
 const inputFiles = [
+  'src/renderer/utils/escapeHtml.js',
   'src/renderer/utils/fileTypeUtils.js',
   'src/renderer/utils/syntaxHighlighter.js',
   'src/renderer/managers/NotificationManager.js',

@@ -39,24 +39,26 @@ function updateFileTypeStatus(filename) {
  */
 function getFileIcon(filename) {
   const ext = filename.split('.').pop().toLowerCase();
+  // Icons ship with the app (assets/icons/devicon, MIT) so the file tree works
+  // offline and the page can keep a strict img-src policy.
   const iconMap = {
-    js: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg',
-    ts: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg',
-    html: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg',
-    css: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg',
-    py: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg',
-    cpp: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
-    c: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
-    cc: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
-    cxx: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg',
-    h: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/c/c-original.svg',
-    java: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg',
-    php: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-original.svg',
-    go: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original.svg',
-    rs: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/rust/rust-plain.svg',
-    md: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/markdown/markdown-original.svg',
-    json: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/json/json-original.svg',
-    sh: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg'
+    js: '../assets/icons/devicon/javascript-original.svg',
+    ts: '../assets/icons/devicon/typescript-original.svg',
+    html: '../assets/icons/devicon/html5-original.svg',
+    css: '../assets/icons/devicon/css3-original.svg',
+    py: '../assets/icons/devicon/python-original.svg',
+    cpp: '../assets/icons/devicon/cplusplus-original.svg',
+    c: '../assets/icons/devicon/c-original.svg',
+    cc: '../assets/icons/devicon/cplusplus-original.svg',
+    cxx: '../assets/icons/devicon/cplusplus-original.svg',
+    h: '../assets/icons/devicon/c-original.svg',
+    java: '../assets/icons/devicon/java-original.svg',
+    php: '../assets/icons/devicon/php-original.svg',
+    go: '../assets/icons/devicon/go-original.svg',
+    rs: '../assets/icons/devicon/rust-plain.svg',
+    md: '../assets/icons/devicon/markdown-original.svg',
+    json: '../assets/icons/devicon/json-original.svg',
+    sh: '../assets/icons/devicon/bash-original.svg'
   };
   const fallbackIconMap = {
     js: '🟨',
@@ -83,7 +85,7 @@ function getFileIcon(filename) {
 
   if (iconMap[ext]) {
     const safeExt = ext.replace(/[^a-z0-9]/gi, '');
-    return `<img src="${iconMap[ext]}" alt="${safeExt} icon" class="file-icon-svg" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='${fallbackIconMap[ext] || '📄'}'">`;
+    return `<img src="${iconMap[ext]}" alt="${safeExt} icon" class="file-icon-svg" loading="lazy">`;
   }
 
   return fallbackIconMap[ext] || '📄';

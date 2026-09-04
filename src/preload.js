@@ -1,46 +1,34 @@
-const { contextBridge, ipcRenderer, clipboard } = require('electron');
-const path = require('path');
-const fs = require('fs/promises');
-
-let appInfoPromise = null;
-let syntaxConfigPromise = null;
+/**
+ * Preload script: the only bridge between the sandboxed renderer and the
+ * main process. It runs with `sandbox: true`, so it has no Node.js modules;
+ * every capability it exposes is a narrow, allow-listed IPC call.
+ */
+const { contextBridge, ipcRenderer } = require('electron');
 
 function getAdditionalArgumentValue(prefix) {
   const arg = process.argv.find((entry) => typeof entry === 'string' && entry.startsWith(prefix));
   return arg ? arg.slice(prefix.length) : null;
 }
 
+const monacoBasePath = getAdditionalArgumentValue('--ctrace-monaco-base-path=') || '';
+
+let appInfoPromise = null;
+let syntaxConfigPromise = null;
+
 function loadAppInfo() {
   if (!appInfoPromise) {
-    appInfoPromise = fs.readFile(path.join(__dirname, '..', 'package.json'), 'utf-8')
-      .then((raw) => JSON.parse(raw))
-      .then((packageJson) => ({
-        name: packageJson.productName || packageJson.name || 'CTraceGUI',
-        version: packageJson.version || '0.0.0',
-      }))
-      .catch((error) => {
-        console.warn('Failed to load package.json in preload:', error);
-        return { name: 'CTraceGUI', version: '0.0.0' };
-      });
+    appInfoPromise = ipcRenderer.invoke('app-get-info')
+      .catch(() => ({ name: 'CTraceGUI', version: '0.0.0' }));
   }
-
   return appInfoPromise;
 }
 
 function loadSyntaxConfig() {
   if (!syntaxConfigPromise) {
-    syntaxConfigPromise = fs.readFile(path.join(__dirname, 'renderer', 'utils', 'syntax-config.json'), 'utf-8')
-      .then((raw) => JSON.parse(raw))
-      .catch((error) => {
-        console.warn('Failed to load syntax-config.json in preload:', error);
-        return {};
-      });
+    syntaxConfigPromise = ipcRenderer.invoke('app-get-syntax-config').catch(() => ({}));
   }
-
   return syntaxConfigPromise;
 }
-
-const monacoBasePath = path.join(__dirname, '..', 'node_modules', 'monaco-editor', 'min', 'vs').replace(/\\/g, '/');
 
 // Whitelisted IPC channels
 const INVOKE_CHANNELS = [
@@ -98,6 +86,8 @@ const INVOKE_CHANNELS = [
   'terminal-get-completions',
   'terminal-get-initial-cwd',
   'terminal-send-input',
+  'app-get-info',
+  'app-get-syntax-config',
 ];
 
 const SEND_CHANNELS = [
@@ -110,6 +100,7 @@ const SEND_CHANNELS = [
   'install-wsl-distro',
   'show-wsl-setup',
   'assistant-config-updated',
+  'clipboard-write-text',
 ];
 
 const RECEIVE_CHANNELS = [
@@ -157,7 +148,7 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   clipboard: {
-    writeText: (text) => clipboard.writeText(text),
+    writeText: (text) => ipcRenderer.send('clipboard-write-text', String(text)),
   },
 
   platform: process.platform,
