@@ -24,6 +24,19 @@ impl From<std::io::Error> for SpawnError {
 struct SidecarHandle {
     child: Child,
     port: u16,
+    token: String,
+}
+
+/// Environment variable through which the sidecar receives the shared secret
+/// every client must present before any other request is honoured. The
+/// listener is loopback-only, but loopback is reachable by every local
+/// process (and by a browser tab via fetch), so a secret is still required.
+pub const TOKEN_ENV: &str = "CORETRACE_HOST_TOKEN";
+
+fn generate_token() -> Result<String, SpawnError> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|e| SpawnError::Io(std::io::Error::other(e.to_string())))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Spawns `node <entry_script>` and blocks until its `READY <port>`
@@ -32,8 +45,10 @@ struct SidecarHandle {
 /// remaining stdout to this process's stdout on a background thread so
 /// its pipe never fills up and blocks the child.
 fn spawn_sidecar(entry_script: &Path) -> Result<SidecarHandle, SpawnError> {
+    let token = generate_token()?;
     let mut child = Command::new("node")
         .arg(entry_script)
+        .env(TOKEN_ENV, &token)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()?;
@@ -62,17 +77,18 @@ fn spawn_sidecar(entry_script: &Path) -> Result<SidecarHandle, SpawnError> {
         }
     });
 
-    Ok(SidecarHandle { child, port })
+    Ok(SidecarHandle { child, port, token })
 }
 
 /// Keeps the extension-host sidecar running, respawning it (with
 /// exponential backoff) if it crashes. `port()` always reflects the
 /// current instance -- callers should re-fetch it before reconnecting
 /// after a respawn rather than caching it.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct SidecarInfo {
     port: Option<u16>,
     pid: Option<u32>,
+    token: Option<String>,
 }
 
 pub struct SidecarSupervisor {
@@ -98,6 +114,12 @@ impl SidecarSupervisor {
     pub fn pid(&self) -> Option<u32> {
         self.info.lock().unwrap().pid
     }
+
+    /// The secret the current sidecar instance expects on every connection.
+    /// Like `port()`, it changes on respawn.
+    pub fn token(&self) -> Option<String> {
+        self.info.lock().unwrap().token.clone()
+    }
 }
 
 fn supervise_loop(entry_script: PathBuf, info_slot: Arc<Mutex<SidecarInfo>>) {
@@ -108,8 +130,11 @@ fn supervise_loop(entry_script: PathBuf, info_slot: Arc<Mutex<SidecarInfo>>) {
         *info_slot.lock().unwrap() = SidecarInfo::default();
         match spawn_sidecar(&entry_script) {
             Ok(mut handle) => {
-                *info_slot.lock().unwrap() =
-                    SidecarInfo { port: Some(handle.port), pid: Some(handle.child.id()) };
+                *info_slot.lock().unwrap() = SidecarInfo {
+                    port: Some(handle.port),
+                    pid: Some(handle.child.id()),
+                    token: Some(handle.token.clone()),
+                };
                 backoff = Duration::from_millis(200);
                 let _ = handle.child.wait(); // blocks until the sidecar exits or crashes
                 eprintln!("[sidecar] process exited, respawning");

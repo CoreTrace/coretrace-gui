@@ -9,7 +9,7 @@ use coretrace_ipc::ExtensionHostClient;
 const ITERATIONS: usize = 500;
 
 fn main() {
-    let mut client = ExtensionHostClient::connect(7331).expect("connect to sidecar");
+    let mut client = ExtensionHostClient::connect(7331, &dev_token()).expect("connect to sidecar");
 
     // Warm up the connection/OS buffers before measuring.
     for _ in 0..20 {
@@ -36,4 +36,10 @@ fn main() {
     println!("  p50: {p50:?}");
     println!("  p99: {p99:?}");
     println!("  max: {max:?}");
+}
+
+/// Manual dev runs start the sidecar by hand (`PORT=7331 node src/index.js`);
+/// it prints `TOKEN <hex>` at startup, pass that back via CORETRACE_HOST_TOKEN.
+fn dev_token() -> String {
+    std::env::var(coretrace_ipc::TOKEN_ENV).unwrap_or_default()
 }
