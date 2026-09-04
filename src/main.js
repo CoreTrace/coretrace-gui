@@ -430,19 +430,23 @@ function showManualInstallationInstructions() {
   });
 }
 
+const WSL_DISTRIBUTION = 'Ubuntu';
+
 /**
- * Install a specific WSL distribution
+ * Install the supported WSL distribution through an elevated prompt.
+ *
+ * The distribution name is a constant, never renderer input: the command below
+ * runs with administrator rights, so nothing from the UI may be spliced into it.
  */
-async function installWSLDistribution(distroName) {
+async function installWSLDistribution() {
+  const distroName = WSL_DISTRIBUTION;
   try {
     console.log(`Installing WSL distribution: ${distroName}`);
-    
+
     const child = spawn('powershell', [
+      '-NoProfile',
       '-Command',
-      'Start-Process',
-      'powershell',
-      '-ArgumentList', `"wsl --install ${distroName}"`,
-      '-Verb', 'RunAs'
+      `Start-Process -FilePath wsl -ArgumentList '--install','${distroName}' -Verb RunAs`
     ], { stdio: 'ignore', windowsHide: true });
     
     child.on('error', (err) => {
@@ -595,10 +599,11 @@ function setupWindowControls(window) {
     }
   });
   
-  // Handle WSL distribution installation request
-  ipcMain.on('install-wsl-distro', async (event, distroName) => {
+  // Handle WSL distribution installation request (always installs the
+  // supported distribution; the renderer cannot choose what runs elevated)
+  ipcMain.on('install-wsl-distro', async () => {
     if (os.platform() === 'win32') {
-      await installWSLDistribution(distroName || 'Ubuntu');
+      await installWSLDistribution();
     }
   });
   

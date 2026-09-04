@@ -179,7 +179,7 @@ class WSLManager {
     const installUbuntuBtn = document.getElementById('install-ubuntu');
     if (installUbuntuBtn) {
       installUbuntuBtn.onclick = () => {
-        window.api.send('install-wsl-distro', 'Ubuntu');
+        window.api.send('install-wsl-distro');
         close();
         this.ui.notificationManager.showInfo('Ubuntu installation started. Please follow the setup instructions.');
       };
