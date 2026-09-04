@@ -38,7 +38,7 @@ class NotificationManager {
       <div class="ctrace-notification" style="position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: ${colors[type]}; color: white; padding: 10px 14px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: fadeIn 0.3s ease; max-width: 360px; font-size: 13px; text-align: center; display: inline-flex; align-items: center; gap: 8px;">
         ${showSpinner ? '<span class="ctrace-spinner" aria-hidden="true" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.45); border-top-color: rgba(255,255,255,1); border-radius: 50%; display: inline-block; animation: ctraceSpin 0.8s linear infinite;"></span>' : ''}
         <span aria-hidden="true">${icons[type]}</span>
-        <span class="ctrace-notification-message">${message}</span>
+        <span class="ctrace-notification-message">${escapeHtml(message)}</span>
         <button class="ctrace-notification-close" type="button" aria-label="Dismiss" style="margin-left: 6px; background: transparent; border: none; color: rgba(255,255,255,0.9); cursor: pointer; font-size: 16px; line-height: 12px; padding: 2px 4px; border-radius: 4px;">×</button>
       </div>
       <style>

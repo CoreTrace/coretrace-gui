@@ -144,10 +144,11 @@ class TabManager {
       `<span class="tab-warning" title="${fileInfo.encodingWarning ? 'Encoding Warning' : ''}${fileInfo.isPartial ? 'File Partially Loaded' : ''}">⚠️</span>` : '';
     
     tabElement.innerHTML = `
-      <div class="tab-label">${fileName}${warningIndicator}</div>
-      <div class="tab-close" onclick="window.tabManager.closeTab(event, '${tabId}')">×</div>
+      <div class="tab-label">${escapeHtml(fileName)}${warningIndicator}</div>
+      <div class="tab-close">×</div>
     `;
-    
+
+    tabElement.querySelector('.tab-close').addEventListener('click', (e) => this.closeTab(e, tabId));
     tabElement.addEventListener('click', (e) => {
       if (!e.target.classList.contains('tab-close')) {
         this.switchToTab(tabId);

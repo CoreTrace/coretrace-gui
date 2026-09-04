@@ -10,6 +10,7 @@
  */
 
 // Utilities (no dependencies on other app modules)
+require('./utils/escapeHtml');
 require('./utils/fileTypeUtils');
 require('./utils/syntaxHighlighter');
 

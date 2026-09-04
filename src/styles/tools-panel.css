@@ -68,3 +68,13 @@
   color: var(--text-primary);
   transform: translateY(-1px);
 }
+
+/* Assistant header / context buttons (hover states, replaces inline handlers) */
+.assistant-hover-btn:hover {
+  color: #c9d1d9 !important;
+}
+
+.assistant-ctx-btn:hover {
+  color: #8b949e !important;
+  border-color: #555 !important;
+}

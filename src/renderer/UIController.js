@@ -831,7 +831,33 @@ class UIController {
     document.querySelectorAll('.dropdown-item').forEach(item => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        // hideAllMenus will be called by the onclick handler in HTML
+        // hideAllMenus is handled by the data-close-menus action attribute
+      });
+    });
+  }
+
+  /**
+   * Wire static markup to the global UI functions. index.html declares intent
+   * with data-action / data-resize attributes instead of inline handlers so the
+   * page can run under a strict Content-Security-Policy (no inline script).
+   */
+  bindDeclarativeActions() {
+    document.querySelectorAll('[data-action]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const fn = window[el.dataset.action];
+        if (typeof fn !== 'function') {
+          console.warn('[UIController] Unknown data-action:', el.dataset.action);
+          return;
+        }
+        fn(el.dataset.arg);
+        if ('closeMenus' in el.dataset) this.hideAllMenus();
+      });
+    });
+
+    document.querySelectorAll('[data-resize]').forEach((el) => {
+      el.addEventListener('mousedown', (e) => {
+        const fn = window[el.dataset.resize];
+        if (typeof fn === 'function') fn(e);
       });
     });
   }
@@ -940,6 +966,8 @@ class UIController {
     // Diagnostics manager reference for global access
     window.diagnosticsManager = this.diagnosticsManager;
     window.searchManager = this.searchManager;
+
+    this.bindDeclarativeActions();
   }
 
   async openUpdateSettingsModal() {

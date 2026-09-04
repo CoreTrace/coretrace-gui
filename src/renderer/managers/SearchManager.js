@@ -16,6 +16,29 @@ class SearchManager {
     this.setupSearchWidget();
     this.setupGoToLineDialog();
     this.setupSidebarSearch();
+    this.setupResultsDelegation();
+  }
+
+  /**
+   * Single delegated click handler for the results list. Result rows carry
+   * their target in data attributes instead of inline onclick handlers, so no
+   * file path ever ends up inside a JavaScript string in the DOM.
+   */
+  setupResultsDelegation() {
+    const searchResults = document.getElementById('search-results');
+    if (!searchResults) return;
+    searchResults.addEventListener('click', (e) => {
+      const target = e.target.closest('[data-toggle-target], [data-result-path]');
+      if (!target || !searchResults.contains(target)) return;
+
+      if (target.dataset.toggleTarget) {
+        this.toggleSearchGroup(target, target.dataset.toggleTarget);
+        return;
+      }
+
+      e.stopPropagation();
+      this.openSearchResult(target.dataset.resultPath, Number(target.dataset.resultLine));
+    });
   }
 
   /**
@@ -353,17 +376,17 @@ class SearchManager {
       const fileResults = groupedResults[file];
       const fileName = file.split(/[/\\]/).pop();
       const relativePath = file.replace(this.currentWorkspacePath, '').replace(/^[/\\]/, '');
-      const escapedPath = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const pathAttr = this.escapeHtml(file);
       const matchesId = `sr-matches-${fileIndex}`;
       // Collapse groups with more than one match; single matches stay visible
       const collapsed = fileResults.length > 1;
 
       html += '<div class="search-result-item">';
       html += '<div class="search-result-header">';
-      html += `<button class="search-result-toggle" type="button" aria-expanded="${!collapsed}" aria-controls="${matchesId}" onclick="window.searchManager.toggleSearchGroup(this, '${matchesId}')">`;
+      html += `<button class="search-result-toggle" type="button" aria-expanded="${!collapsed}" aria-controls="${matchesId}" data-toggle-target="${matchesId}">`;
       html += `<span class="search-result-toggle-icon">${collapsed ? '▶' : '▼'}</span>`;
       html += '</button>';
-      html += `<button class="search-result-file" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${fileResults[0].line})">${this.escapeHtml(fileName)}</button>`;
+      html += `<button class="search-result-file" type="button" data-result-path="${pathAttr}" data-result-line="${Number(fileResults[0].line) || 1}">${this.escapeHtml(fileName)}</button>`;
       html += `<span class="search-result-count">${fileResults.length}</span>`;
       html += '</div>';
       html += `<div class="search-result-line">${this.escapeHtml(relativePath)}</div>`;
@@ -375,7 +398,7 @@ class SearchManager {
           (match) => `<span class="search-highlight">${match}</span>`
         );
 
-        html += `<button class="search-result-content" type="button" onclick="window.searchManager.openSearchResult('${escapedPath}', ${result.line}); event.stopPropagation();">`;
+        html += `<button class="search-result-content" type="button" data-result-path="${pathAttr}" data-result-line="${Number(result.line) || 1}">`;
         html += `<span class="search-result-line-number">Line ${result.line}</span>`;
         html += `<span class="search-result-snippet">${highlightedContent}</span>`;
         html += '</button>';
@@ -415,13 +438,7 @@ class SearchManager {
   }
 
   escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return window.escapeHtml(text);
   }
 
   /**

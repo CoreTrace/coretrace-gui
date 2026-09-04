@@ -516,7 +516,7 @@ class TerminalManager {
     dd.style.cssText = `bottom:${window.innerHeight - rect.top + 4}px; left:${rect.left}px;`;
 
     dd.innerHTML = this.shells.map(s => `
-      <div class="terminal-shell-option ${s.id === this.currentShellId ? 'current' : ''}" data-id="${s.id}" data-path="${s.path || ''}">
+      <div class="terminal-shell-option ${s.id === this.currentShellId ? 'current' : ''}" data-id="${this._escHtml(s.id)}" data-path="${this._escHtml(s.path || '')}">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
           <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5z"/>
           <path d="M8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
