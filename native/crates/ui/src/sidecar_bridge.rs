@@ -22,7 +22,8 @@ pub fn language_id_for(path: &Path) -> &'static str {
 }
 
 fn connect(sidecar: SidecarHandle) -> Option<ExtensionHostClient> {
-    ExtensionHostClient::connect(sidecar.get()?.port()?).ok()
+    let supervisor = sidecar.get()?;
+    ExtensionHostClient::connect(supervisor.port()?, &supervisor.token()?).ok()
 }
 
 /// Pushes a tab's content into the sidecar's document state. Called

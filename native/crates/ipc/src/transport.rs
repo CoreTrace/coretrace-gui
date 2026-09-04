@@ -12,10 +12,23 @@ pub struct Transport {
 }
 
 impl Transport {
-    pub fn connect(port: u16) -> std::io::Result<Self> {
+    /// Connects and immediately authenticates with the sidecar's shared
+    /// secret (see `supervisor::TOKEN_ENV`). The server drops the socket
+    /// on a bad token, so a failed handshake surfaces as an error here
+    /// rather than on the first real request.
+    pub fn connect(port: u16, token: &str) -> std::io::Result<Self> {
         let stream = TcpStream::connect(("127.0.0.1", port))?;
         let reader = BufReader::new(stream.try_clone()?);
-        Ok(Self { reader, writer: stream })
+        let mut transport = Self { reader, writer: stream };
+        transport.send(&serde_json::json!({ "type": "auth", "token": token }))?;
+        let reply: serde_json::Value = transport.recv()?;
+        if reply.get("type").and_then(|t| t.as_str()) != Some("auth_ok") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "extension host rejected the auth token",
+            ));
+        }
+        Ok(transport)
     }
 
     pub fn send<T: serde::Serialize>(&mut self, message: &T) -> std::io::Result<()> {
