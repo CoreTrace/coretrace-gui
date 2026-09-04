@@ -797,14 +797,14 @@ class VisualyzerManager {
     if (node.type) {
       const typeDiv = document.createElement('div');
       typeDiv.className = 'tooltip-field';
-      typeDiv.innerHTML = `<span class="tooltip-label">Type:</span> <span class="tooltip-value">${node.type}</span>`;
+      typeDiv.innerHTML = `<span class="tooltip-label">Type:</span> <span class="tooltip-value">${escapeHtml(node.type)}</span>`;
       tooltip.appendChild(typeDiv);
     }
     
     if (node.address) {
       const addrDiv = document.createElement('div');
       addrDiv.className = 'tooltip-field';
-      addrDiv.innerHTML = `<span class="tooltip-label">Address:</span> <span class="tooltip-value">${node.address}</span>`;
+      addrDiv.innerHTML = `<span class="tooltip-label">Address:</span> <span class="tooltip-value">${escapeHtml(node.address)}</span>`;
       tooltip.appendChild(addrDiv);
     }
     

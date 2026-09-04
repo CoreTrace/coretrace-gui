@@ -322,10 +322,11 @@ class StateManager {
             `<span class="tab-warning" title="${tabData.fileInfo.encodingWarning ? 'Encoding Warning' : ''}${tabData.fileInfo.isPartial ? 'File Partially Loaded' : ''}">⚠️</span>` : '';
           
           tabElement.innerHTML = `
-            <div class="tab-label">${tabData.fileName}${warningIndicator}</div>
-            <div class="tab-close" onclick="window.tabManager.closeTab(event, '${restoredTabId}')">×</div>
+            <div class="tab-label">${escapeHtml(tabData.fileName)}${warningIndicator}</div>
+            <div class="tab-close">×</div>
           `;
-          
+
+          tabElement.querySelector('.tab-close').addEventListener('click', (e) => this.tabManager.closeTab(e, restoredTabId));
           tabElement.addEventListener('click', (e) => {
             if (!e.target.classList.contains('tab-close')) {
               this.tabManager.switchToTab(restoredTabId);
@@ -372,7 +373,12 @@ class StateManager {
       if (state.workspacePath) {
         console.log('[StateManager] Restoring workspace:', state.workspacePath);
         try {
-          // Use IPC to open the workspace
+          // Re-arm the main-process watcher first: file access is validated
+          // against the watched root, so it must exist before the tree loads.
+          const watch = await window.api.invoke('watch-workspace', state.workspacePath);
+          if (!watch || !watch.success) {
+            throw new Error((watch && watch.error) || 'Workspace could not be watched');
+          }
           const result = await window.api.invoke('get-file-tree', state.workspacePath);
           if (result.success && window.uiController && window.uiController.fileOpsManager) {
             const folderName = state.workspacePath.split(/[\/\\]/).pop();

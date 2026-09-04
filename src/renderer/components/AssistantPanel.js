@@ -143,10 +143,10 @@ class AssistantPanel {
     content.innerHTML = `
       <div style="display:flex; flex-direction:column; height:100%;">
         <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:space-between">
-          <div style="font-size:13px; color:#c9d1d9">Assistant — ${displayName}</div>
+          <div style="font-size:13px; color:#c9d1d9">Assistant — ${escapeHtml(displayName)}</div>
           <div style="display:flex; gap:8px; align-items:center">
-            <button id="assistant-new-chat" style="padding:6px 8px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer; font-size:14px; line-height:1;" title="New conversation" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">+</button>
-            <button id="assistant-history" style="padding:5px 7px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer; display:flex; align-items:center;" title="Past conversations" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">
+            <button id="assistant-new-chat" class="assistant-hover-btn" style="padding:6px 8px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer; font-size:14px; line-height:1;" title="New conversation">+</button>
+            <button id="assistant-history" class="assistant-hover-btn" style="padding:5px 7px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:6px; cursor:pointer; display:flex; align-items:center;" title="Past conversations">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/></svg>
             </button>
             <button id="assistant-settings" style="padding:6px 8px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer; font-size:12px">Settings</button>
@@ -161,12 +161,12 @@ class AssistantPanel {
             <button id="context-clear" style="margin-left:8px; padding:2px 6px; background:transparent; border:1px solid #30363d; color:#8b949e; border-radius:3px; cursor:pointer; font-size:10px;">✕</button>
           </div>
           <div style="display:flex; gap:6px; margin-bottom:6px;">
-            <button id="ctx-file" style="padding:3px 8px; background:transparent; border:1px solid #30363d; color:#555; border-radius:4px; cursor:pointer; font-size:11px; transition:color 0.15s, border-color 0.15s;" title="Use current file as context" onmouseover="this.style.color='#8b949e';this.style.borderColor='#555'" onmouseout="this.style.color='#555';this.style.borderColor='#30363d'">📄 Current file</button>
-            <button id="ctx-analysis" style="padding:3px 8px; background:transparent; border:1px solid #30363d; color:#555; border-radius:4px; cursor:pointer; font-size:11px; transition:color 0.15s, border-color 0.15s;" title="Use analysis results as context" onmouseover="this.style.color='#8b949e';this.style.borderColor='#555'" onmouseout="this.style.color='#555';this.style.borderColor='#30363d'">⚙️ Analysis</button>
+            <button id="ctx-file" class="assistant-ctx-btn" style="padding:3px 8px; background:transparent; border:1px solid #30363d; color:#555; border-radius:4px; cursor:pointer; font-size:11px; transition:color 0.15s, border-color 0.15s;" title="Use current file as context">📄 Current file</button>
+            <button id="ctx-analysis" class="assistant-ctx-btn" style="padding:3px 8px; background:transparent; border:1px solid #30363d; color:#555; border-radius:4px; cursor:pointer; font-size:11px; transition:color 0.15s, border-color 0.15s;" title="Use analysis results as context">⚙️ Analysis</button>
           </div>
           <div style="display:flex; gap:8px; align-items:flex-end">
             <textarea id="assistant-input" placeholder="Ask the assistant..." style="flex:1; min-height:44px; max-height:120px; resize:none; padding:8px; border-radius:6px; border:1px solid #2b3036; background:#0d1117; color:#fff"></textarea>
-            <button id="assistant-send" style="padding:10px; background:transparent; color:#8b949e; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" title="Send message (Enter)" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#8b949e'">
+            <button id="assistant-send" class="assistant-hover-btn" style="padding:10px; background:transparent; color:#8b949e; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color 0.2s;" title="Send message (Enter)">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="currentColor"/>
               </svg>
@@ -835,11 +835,11 @@ class AssistantPanel {
       if (raw) {
         try {
           const legacy = JSON.parse(raw);
-          await window.api.invoke('assistant-config-save', legacy);
+          const saved = await window.api.invoke('assistant-config-save', legacy);
+          if (!saved.success) throw new Error(saved.error || 'save failed');
           localStorage.removeItem('assistantConfig');
-          this._cachedConfig = legacy;
           console.log('[AssistantPanel] Migrated assistant config from localStorage to secure storage');
-          return this._cachedConfig;
+          return this.loadAssistantConfig();
         } catch (migErr) {
           console.warn('[AssistantPanel] Migration from localStorage failed:', migErr);
         }
@@ -863,7 +863,8 @@ class AssistantPanel {
     try {
       const result = await window.api.invoke('assistant-config-save', cfg);
       if (!result.success) throw new Error(result.error || 'Unknown error');
-      this._cachedConfig = cfg;
+      // Re-read from storage so the cache never holds the key, only hasApiKey.
+      await this.loadAssistantConfig();
       this.ui.notificationManager.showSuccess('Assistant settings saved');
     } catch (err) {
       console.error('[AssistantPanel] Failed to save assistant config:', err);
@@ -999,7 +1000,7 @@ class AssistantPanel {
           const inp = document.getElementById('external-model-input');
           if (!sel || !inp) return;
           sel.innerHTML = models.map(m =>
-            `<option value="${m.id}"${m.id === savedModel ? ' selected' : ''}>${m.id}</option>`
+            `<option value="${escapeHtml(m.id)}"${m.id === savedModel ? ' selected' : ''}>${escapeHtml(m.id)}</option>`
           ).join('');
           sel.style.display = 'block';
           inp.style.display = 'none';
@@ -1063,8 +1064,8 @@ class AssistantPanel {
           if (providerSelect && existingConfig.externalProvider) {
             providerSelect.value = existingConfig.externalProvider;
           }
-          if (apiKeyInput && existingConfig.apiKey) {
-            apiKeyInput.value = existingConfig.apiKey;
+          if (apiKeyInput && existingConfig.hasApiKey) {
+            apiKeyInput.placeholder = 'Saved key on file — leave blank to keep it';
           }
           if (modelInput && existingConfig.model) {
             modelInput.value = existingConfig.model;
@@ -1073,13 +1074,13 @@ class AssistantPanel {
             systemInput.value = existingConfig.systemPrompt;
           }
 
-          // If a saved API key exists, fetch models immediately
-          if (existingConfig.apiKey) {
+          // If a saved API key exists, fetch models immediately (the key itself stays in the main process)
+          if (existingConfig.hasApiKey) {
             const providerId = toProviderId(existingConfig.externalProvider || 'ChatGPT5');
             const statusEl = document.getElementById('model-fetch-status');
             if (statusEl) statusEl.textContent = 'Fetching models…';
             try {
-              const result = await window.api.invoke('assistant-list-models', { providerId, apiKey: existingConfig.apiKey });
+              const result = await window.api.invoke('assistant-list-models', { providerId, useStoredKey: true });
               if (result.success && result.models.length > 0) {
                 populateModelSelect(result.models, existingConfig.model);
                 if (statusEl) statusEl.textContent = `${result.models.length} models loaded`;
@@ -1243,7 +1244,8 @@ class AssistantPanel {
           if (!cfg.model) cfg.model = 'gpt-4';
         }
 
-        if (!cfg.apiKey) {
+        const hasStoredKey = Boolean((this.ui.getAssistantConfig() || {}).hasApiKey);
+        if (!cfg.apiKey && !hasStoredKey) {
           this.ui.notificationManager.showError('Please enter an API key for the external provider');
           return;
         }

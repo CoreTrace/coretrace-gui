@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CTrace GUI</title>
@@ -33,59 +34,8 @@
   </style>
   
   <!-- Monaco Editor Loader -->
-  <script>
-    const monacoBasePath = window.api.getMonacoBasePath();
+  <script src="renderer/monaco-loader.js"></script>
 
-    // monaco.contribution.js has an intermittent AMD module-ordering race on
-    // file:// protocol: its factory is invoked before a circular dependency is
-    // fully initialised, causing an uncaught TypeError.
-    // Fix: reload the page immediately when the error is detected.
-    // On the reloaded page Monaco's files are already in the OS/Chromium cache
-    // so they load in a consistent order and the race does not recur.
-    // sessionStorage prevents an infinite reload loop.
-    window.addEventListener('error', function (e) {
-      if (e.filename && e.filename.includes('monaco.contribution') &&
-          !sessionStorage.getItem('_monacoReloaded')) {
-        sessionStorage.setItem('_monacoReloaded', '1');
-        window.location.reload();
-      }
-    });
-
-    function loadMonacoEditor() {
-      const loaderScript = document.createElement('script');
-      loaderScript.src = monacoBasePath + '/loader.js';
-      loaderScript.onload = () => {
-        require.config({ paths: { 'vs': monacoBasePath } });
-
-        // Empty blob worker: avoids importScripts('file://') from null origin
-        // and avoids the uncaught Worker error event from a file:// URL.
-        window.MonacoEnvironment = {
-          getWorker: function () {
-            return new Worker(URL.createObjectURL(new Blob([''], { type: 'application/javascript' })));
-          }
-        };
-
-        require(['vs/editor/editor.main'], function () {
-          // Successful load — clear the reload guard so future sessions can
-          // still auto-reload if the race hits again.
-          sessionStorage.removeItem('_monacoReloaded');
-          window.monaco = monaco;
-          console.log('Monaco Editor loaded successfully');
-          window.dispatchEvent(new Event('monaco-loaded'));
-        });
-      };
-      document.head.appendChild(loaderScript);
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      if (typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(loadMonacoEditor);
-      } else {
-        setTimeout(loadMonacoEditor, 0);
-      }
-    });
-  </script>
-  
   <script src="renderer/bundle.js" defer></script>
   
 </head>
@@ -130,12 +80,12 @@
       <div class="main-content-area app-surface">
         <!-- Activity Bar (Left) -->
       <div class="activity-bar">
-      <div class="activity-item active" id="explorer-activity" title="Explorer" onclick="showExplorer()">
+      <div class="activity-item active" id="explorer-activity" title="Explorer" data-action="showExplorer">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M14.5 3h-13a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z"/>
         </svg>
       </div>
-      <div class="activity-item" id="search-activity" title="Search" onclick="showSearch()">
+      <div class="activity-item" id="search-activity" title="Search" data-action="showSearch">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
         </svg>
@@ -144,7 +94,7 @@
       <!-- Spacer pushes terminal icon to the bottom -->
       <div style="flex: 1;"></div>
 
-      <div class="activity-item" id="terminal-activity" title="Terminal (Ctrl+J)" onclick="toggleTerminalPanel()">
+      <div class="activity-item" id="terminal-activity" title="Terminal (Ctrl+J)" data-action="toggleTerminalPanel">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
           <path d="M6 9a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 6 9zM3.854 4.146a.5.5 0 1 0-.708.708L4.793 6.5 3.146 8.146a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708l-2-2z"/>
           <path d="M2 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2H2zm12 1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h12z"/>
@@ -154,7 +104,7 @@
 
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
-      <div class="resizer resizer-right" onmousedown="initSidebarResize(event)"></div>
+      <div class="resizer resizer-right" data-resize="initSidebarResize"></div>
       <div class="sidebar-header">
         <div style="display: flex; align-items: center; gap: 8px;">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
@@ -181,7 +131,7 @@
             <div id="file-tree" class="file-tree"></div>
           </div>
           <div id="no-workspace">
-            <button type="button" class="open-folder-btn" onclick="openWorkspace()">Open Folder</button>
+            <button type="button" class="open-folder-btn" data-action="openWorkspace">Open Folder</button>
           </div>
         </div>
         <div id="search-view" style="display: none;">
@@ -199,105 +149,105 @@
       <div class="main app-surface">
       <!-- Menu Bar -->
       <div class="menubar">
-        <div class="menu-item" id="file-menu" onclick="toggleMenu('file-menu')">
+        <div class="menu-item" id="file-menu" data-action="toggleMenu" data-arg="file-menu">
           File
           <div class="dropdown-menu" id="file-dropdown">
-            <div class="dropdown-item" onclick="createNewFile(); hideAllMenus();">
+            <div class="dropdown-item" data-action="createNewFile" data-close-menus>
               <span>New File</span>
               <span class="shortcut">Ctrl+N</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="openFile(); hideAllMenus();">
+            <div class="dropdown-item" data-action="openFile" data-close-menus>
               <span>Open File...</span>
               <span class="shortcut">Ctrl+O</span>
             </div>
-            <div class="dropdown-item" onclick="openWorkspace(); hideAllMenus();">
+            <div class="dropdown-item" data-action="openWorkspace" data-close-menus>
               <span>Open Folder...</span>
               <span class="shortcut">Ctrl+Shift+O</span>
             </div>
-            <div class="dropdown-item" onclick="closeWorkspace(); hideAllMenus();">
+            <div class="dropdown-item" data-action="closeWorkspace" data-close-menus>
               <span>Close Folder</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="saveFile(); hideAllMenus();">
+            <div class="dropdown-item" data-action="saveFile" data-close-menus>
               <span>Save</span>
               <span class="shortcut">Ctrl+S</span>
             </div>
-            <div class="dropdown-item" onclick="autoSave(); hideAllMenus();">
+            <div class="dropdown-item" data-action="autoSave" data-close-menus>
               <span>Auto Save</span>
             </div>
-            <div class="dropdown-item" onclick="openUpdateSettings(); hideAllMenus();">
+            <div class="dropdown-item" data-action="openUpdateSettings" data-close-menus>
               <span>Update Settings...</span>
             </div>
-            <div class="dropdown-item" onclick="openBackendSettings(); hideAllMenus();">
+            <div class="dropdown-item" data-action="openBackendSettings" data-close-menus>
               <span>Backend Settings...</span>
             </div>
-            <div class="dropdown-item" onclick="saveAsFile(); hideAllMenus();">
+            <div class="dropdown-item" data-action="saveAsFile" data-close-menus>
               <span>Save As...</span>
               <span class="shortcut">Ctrl+Shift+S</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="closeCurrentTab(); hideAllMenus();">
+            <div class="dropdown-item" data-action="closeCurrentTab" data-close-menus>
               <span>Close File</span>
               <span class="shortcut">Ctrl+W</span>
             </div>
           </div>
         </div>
         
-        <div class="menu-item" id="edit-menu" onclick="toggleMenu('edit-menu')">
+        <div class="menu-item" id="edit-menu" data-action="toggleMenu" data-arg="edit-menu">
           Edit
           <div class="dropdown-menu" id="edit-dropdown">
-            <div class="dropdown-item" onclick="openMonacoFind(); hideAllMenus();">
+            <div class="dropdown-item" data-action="openMonacoFind" data-close-menus>
               <span>Find</span>
               <span class="shortcut">Ctrl+F</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="toggleWordWrap(); hideAllMenus();">
+            <div class="dropdown-item" data-action="toggleWordWrap" data-close-menus>
               <span>Toggle Word Wrap</span>
               <span class="shortcut">Alt+Z</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="openMonacoGoToLine(); hideAllMenus();">
+            <div class="dropdown-item" data-action="openMonacoGoToLine" data-close-menus>
               <span>Go to Line...</span>
               <span class="shortcut">Ctrl+G</span>
             </div>
           </div>
         </div>
         
-        <div class="menu-item" id="view-menu" onclick="toggleMenu('view-menu')">
+        <div class="menu-item" id="view-menu" data-action="toggleMenu" data-arg="view-menu">
           View
           <div class="dropdown-menu" id="view-dropdown">
-            <div class="dropdown-item" onclick="showExplorer(); hideAllMenus();">
+            <div class="dropdown-item" data-action="showExplorer" data-close-menus>
               <span>Explorer</span>
               <span class="shortcut">Ctrl+Shift+E</span>
             </div>
-            <div class="dropdown-item" onclick="showSearch(); hideAllMenus();">
+            <div class="dropdown-item" data-action="showSearch" data-close-menus>
               <span>Search</span>
               <span class="shortcut">Ctrl+Shift+F</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="toggleVisualEffects(); hideAllMenus();">
+            <div class="dropdown-item" data-action="toggleVisualEffects" data-close-menus>
               <span>Visual Effects</span>
               <span class="shortcut" id="visual-effects-state">On</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="toggleSidebar(); hideAllMenus();">
+            <div class="dropdown-item" data-action="toggleSidebar" data-close-menus>
               <span>Toggle Sidebar</span>
               <span class="shortcut">Ctrl+B</span>
             </div>
             <div class="dropdown-separator"></div>
-            <div class="dropdown-item" onclick="toggleTerminalPanel(); hideAllMenus();">
+            <div class="dropdown-item" data-action="toggleTerminalPanel" data-close-menus>
               <span>Terminal</span>
               <span class="shortcut">Ctrl+J</span>
             </div>
           </div>
         </div>
         
-        <div class="menu-item" onclick="openCtracePanel(); hideAllMenus();">
+        <div class="menu-item" data-action="openCtracePanel" data-close-menus>
           Ctrace Tools
         </div>
 
-        <div class="menu-item" onclick="openAssistantPanel(); hideAllMenus();">
+        <div class="menu-item" data-action="openAssistantPanel" data-close-menus>
           Assistant
         </div>
         
@@ -321,13 +271,13 @@
                 <h1>Welcome to CTraceGUI</h1>
                 <p>Import a file to start analysis!</p>
                 <div class="welcome-actions">
-                  <button class="welcome-action" onclick="createNewFile()">
+                  <button class="welcome-action" data-action="createNewFile">
                     📝 New File
                   </button>
-                  <button class="welcome-action" onclick="openFile()">
+                  <button class="welcome-action" data-action="openFile">
                     📄 Open File
                   </button>
-                  <button class="welcome-action" onclick="openWorkspace()">
+                  <button class="welcome-action" data-action="openWorkspace">
                     📁 Open Folder
                   </button>
                 </div>
@@ -371,7 +321,7 @@
 
           <div class="terminal-header-actions">
             <!-- Shell selector -->
-            <button class="terminal-shell-btn" id="terminal-shell-btn" title="Select shell / New terminal" onclick="terminalToggleShellDropdown()">
+            <button class="terminal-shell-btn" id="terminal-shell-btn" title="Select shell / New terminal" data-action="terminalToggleShellDropdown">
               <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M1.5 5.5A.5.5 0 0 1 2 5h4a.5.5 0 0 1 0 1H3.707l3.147 3.146a.5.5 0 1 1-.708.708L3 6.707V9a.5.5 0 0 1-1 0V5.5z"/>
                 <path d="M8 5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H8.5A.5.5 0 0 1 8 5zm1 3a.5.5 0 0 1 .5-.5H13a.5.5 0 0 1 0 1H9.5A.5.5 0 0 1 9 8zm-1 3a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 8 11z"/>
@@ -385,21 +335,21 @@
             <div class="terminal-divider"></div>
 
             <!-- New terminal -->
-            <button class="terminal-action-btn" title="New Terminal" onclick="terminalNew()">
+            <button class="terminal-action-btn" title="New Terminal" data-action="terminalNew">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
               </svg>
             </button>
 
             <!-- Kill current process -->
-            <button class="terminal-action-btn" title="Kill Terminal (Ctrl+C)" onclick="terminalKill()">
+            <button class="terminal-action-btn" title="Kill Terminal (Ctrl+C)" data-action="terminalKill">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
               </svg>
             </button>
 
             <!-- Close panel -->
-            <button class="terminal-action-btn" title="Close Terminal Panel" onclick="toggleTerminalPanel()">
+            <button class="terminal-action-btn" title="Close Terminal Panel" data-action="toggleTerminalPanel">
               <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
               </svg>
@@ -429,10 +379,10 @@
 
       <!-- Ctrace Tools Panel (Right Side) -->
       <div class="tools-panel app-surface" id="toolsPanel">
-      <div class="resizer resizer-left" onmousedown="initToolsPanelResize(event)"></div>
+      <div class="resizer resizer-left" data-resize="initToolsPanelResize"></div>
       <div class="tools-panel-header">
         <span>Ctrace Tools</span>
-        <button class="close-btn" onclick="hideToolsPanel()" title="Close Panel">×</button>
+        <button class="close-btn" data-action="hideToolsPanel" title="Close Panel">×</button>
       </div>
       <div class="tools-panel-content">
         <!-- CTrace Configuration Section -->
@@ -457,13 +407,13 @@
           </div>
           
           <div class="ctrace-btn-row">
-            <button class="ctrace-run-btn" onclick="runCTrace()">
+            <button class="ctrace-run-btn" data-action="runCTrace">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M3 2.5A.5.5 0 0 1 3.5 2h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM3 6a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9A.5.5 0 0 1 3 6zm0 3.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/>
               </svg>
               Run Analysis
             </button>
-            <button class="ctrace-clear-btn" onclick="clearCTraceOutput()" title="Clear results">
+            <button class="ctrace-clear-btn" data-action="clearCTraceOutput" title="Clear results">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528M8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5"/>
               </svg>

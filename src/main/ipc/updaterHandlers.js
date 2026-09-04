@@ -93,6 +93,9 @@ function applyUpdaterChannel(channel) {
   const normalized = normalizeChannel(channel);
   autoUpdater.allowPrerelease = normalized === 'beta';
   autoUpdater.channel = toUpdaterChannel(normalized);
+  // electron-updater flips allowDowngrade on whenever a channel is assigned;
+  // an older build must never be installed over a newer one.
+  autoUpdater.allowDowngrade = false;
   return normalized;
 }
 
@@ -190,7 +193,9 @@ async function setupAutoUpdater(mainWindow) {
   const activeChannel = applyUpdaterChannel(settings.channel);
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Builds are not code-signed yet, so an update is only installed when the
+  // user explicitly chooses "restart to apply" (updater-install-update).
+  autoUpdater.autoInstallOnAppQuit = false;
 
   logUpdaterInfo('Auto updater initialized', {
     activeChannel,

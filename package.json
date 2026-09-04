@@ -39,16 +39,16 @@
   "license": "Apache-2.0",
   "dependencies": {
     "chokidar": "^5.0.0",
-    "electron-updater": "^6.8.3",
+    "electron-updater": "^6.8.9",
     "ignore": "^7.0.5",
     "monaco-editor": "^0.52.2",
     "node-llama-cpp": "^3.18.1",
     "node-pty": "^1.1.0",
-    "tar": "^7.5.12",
+    "tar": "^7.5.22",
     "uuid": "^14.0.0"
   },
   "devDependencies": {
-    "electron": "^41.4.0",
+    "electron": "^41.10.7",
     "electron-builder": "^26.8.1",
     "electron-reload": "^2.0.0-alpha.1",
     "esbuild": "^0.28.0",

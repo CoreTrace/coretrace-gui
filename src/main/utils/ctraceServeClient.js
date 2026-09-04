@@ -39,6 +39,11 @@ const captured = {
 
 let parseBuffer = '';
 
+// Upper bound for buffered, not-yet-parsed backend output. Anything beyond it
+// is discarded from the front so a chatty or broken backend cannot grow memory
+// without limit.
+const PARSE_BUFFER_MAX_CHARS = 4 * 1024 * 1024;
+
 function trimCaptured(maxAgeMs = 5 * 60 * 1000) {
   const cutoff = Date.now() - maxAgeMs;
   captured.json = captured.json.filter(m => m.ts >= cutoff);
@@ -146,6 +151,9 @@ function captureChunk(chunk, stream) {
 
   // Feed JSON extractor.
   parseBuffer += text;
+  if (parseBuffer.length > PARSE_BUFFER_MAX_CHARS) {
+    parseBuffer = parseBuffer.slice(parseBuffer.length - PARSE_BUFFER_MAX_CHARS);
+  }
   const msgs = tryExtractJsonMessagesFromBuffer();
   for (const m of msgs) {
     captured.json.push({ ts: Date.now(), json: m });

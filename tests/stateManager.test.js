@@ -9,6 +9,8 @@ test('restoreState syncs restored workspace into SearchManager', async () => {
     }
   };
 
+  const watchWorkspaceCalls = [];
+
   const fileOpsManager = {
     currentWorkspacePath: null,
     updateWorkspaceUICalls: [],
@@ -30,6 +32,12 @@ test('restoreState syncs restored workspace into SearchManager', async () => {
               workspacePath: '/tmp/demo-workspace'
             }
           };
+        }
+
+        if (channel === 'watch-workspace') {
+          assert.deepStrictEqual(args, ['/tmp/demo-workspace']);
+          watchWorkspaceCalls.push(args[0]);
+          return { success: true };
         }
 
         if (channel === 'get-file-tree') {
@@ -74,6 +82,7 @@ test('restoreState syncs restored workspace into SearchManager', async () => {
     }
   ]);
   assert.deepStrictEqual(searchManager.setWorkspacePathCalls, ['/tmp/demo-workspace']);
+  assert.deepStrictEqual(watchWorkspaceCalls, ['/tmp/demo-workspace']);
 
   delete require.cache[require.resolve('../src/renderer/managers/StateManager')];
   delete global.window;
