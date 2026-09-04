@@ -373,7 +373,12 @@ class StateManager {
       if (state.workspacePath) {
         console.log('[StateManager] Restoring workspace:', state.workspacePath);
         try {
-          // Use IPC to open the workspace
+          // Re-arm the main-process watcher first: file access is validated
+          // against the watched root, so it must exist before the tree loads.
+          const watch = await window.api.invoke('watch-workspace', state.workspacePath);
+          if (!watch || !watch.success) {
+            throw new Error((watch && watch.error) || 'Workspace could not be watched');
+          }
           const result = await window.api.invoke('get-file-tree', state.workspacePath);
           if (result.success && window.uiController && window.uiController.fileOpsManager) {
             const folderName = state.workspacePath.split(/[\/\\]/).pop();

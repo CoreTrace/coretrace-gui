@@ -20,8 +20,14 @@ const chokidar = require('chokidar');
 const ignore = require('ignore');
 const { detectFileEncoding, buildFileTree, searchInDirectory, FILE_SIZE_LIMIT, LARGE_FILE_THRESHOLD, validatePathInWorkspace } = require('../utils/fileUtils');
 const { formatFileError } = require('../utils/errorUtils');
+const { trustWorkspaceRoot, trustFile, isTrustedWorkspaceRoot, isTrustedFile, isSamePath } = require('../utils/workspaceTrust');
 
 const FILE_TREE_MAX_DEPTH = 3;
+
+// A checked-out repository can point core.fsmonitor at an arbitrary program in
+// its own .git/config; running git status would then execute it. Disable it for
+// every git invocation on a workspace we did not author.
+const GIT_SAFE_CONFIG = ['-c', 'core.fsmonitor=false'];
 
 /**
  * File watcher instance for monitoring workspace changes
@@ -40,16 +46,19 @@ let currentWatchPath = null;
 let workspaceLoadingSeq = 0;
 
 /**
- * Validates that targetPath is inside the current workspace root (currentWatchPath).
+ * Validates that the renderer may act on targetPath.
+ * A path is allowed when it was handed out by a native dialog (or restored
+ * from the saved session) or when it lies inside the current workspace root.
  * Returns an error response object when validation fails, or null when the path is safe.
- * When no workspace is open the check is skipped (returns null) so that standalone
- * file editing—where paths originate from native OS dialogs—continues to work.
  *
  * @param {string} targetPath
  * @returns {{ success: false, error: string }|null}
  */
 function requireInWorkspace(targetPath) {
-  if (!currentWatchPath) return null; // no workspace open – skip validation
+  if (isTrustedFile(targetPath)) return null;
+  if (!currentWatchPath) {
+    return { success: false, error: 'Access denied: path was not opened through the application' };
+  }
   const { valid } = validatePathInWorkspace(targetPath, currentWatchPath);
   if (!valid) {
     return { success: false, error: 'Access denied: path is outside the current workspace' };
@@ -94,6 +103,7 @@ function setupFileHandlers(mainWindow) {
     
     if (!result.canceled && result.filePaths.length > 0) {
       const folderPath = result.filePaths[0];
+      trustWorkspaceRoot(folderPath);
       const requestId = ++workspaceLoadingSeq;
       try {
         try {
@@ -237,7 +247,7 @@ function setupFileHandlers(mainWindow) {
       // turned into absolute paths matching the file-tree item paths.
       let repoRoot;
       try {
-        const { stdout } = await execFileP('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { timeout: 8000 });
+        const { stdout } = await execFileP('git', [...GIT_SAFE_CONFIG, '-C', cwd, 'rev-parse', '--show-toplevel'], { timeout: 8000 });
         repoRoot = stdout.trim();
       } catch {
         return { success: true, repo: false, files: {} };
@@ -246,7 +256,7 @@ function setupFileHandlers(mainWindow) {
 
       const { stdout } = await execFileP(
         'git',
-        ['-c', 'core.quotepath=false', '-C', cwd, 'status', '--porcelain=v1', '--ignored=no', '-z'],
+        [...GIT_SAFE_CONFIG, '-c', 'core.quotepath=false', '-C', cwd, 'status', '--porcelain=v1', '--ignored=no', '-z'],
         { timeout: 15000, maxBuffer: 16 * 1024 * 1024 }
       );
 
@@ -274,11 +284,20 @@ function setupFileHandlers(mainWindow) {
     }
   });
 
-  // Start watching a workspace (renderer may request this after opening)
+  // Start watching a workspace (renderer may request this after opening or on
+  // session restore). Only roots issued by a folder dialog or the saved session
+  // are accepted, so the renderer cannot re-point the workspace at will.
   ipcMain.handle('watch-workspace', async (event, folderPath) => {
     try {
       if (!folderPath) {
         return { success: false, error: 'No folder path provided' };
+      }
+      if (!isTrustedWorkspaceRoot(folderPath)) {
+        return { success: false, error: 'Access denied: folder was not opened through the application' };
+      }
+      const stats = await fs.stat(folderPath);
+      if (!stats.isDirectory()) {
+        return { success: false, error: 'Workspace path is not a directory' };
       }
       startWatchingWorkspace(folderPath, mainWindow, FILE_TREE_MAX_DEPTH);
       return { success: true };
@@ -299,6 +318,7 @@ function setupFileHandlers(mainWindow) {
     
     if (!result.canceled && result.filePaths.length > 0) {
       const filePath = result.filePaths[0];
+      trustFile(filePath);
       try {
         const fileInfo = await detectFileEncoding(filePath);
 
@@ -368,6 +388,7 @@ function setupFileHandlers(mainWindow) {
     });
 
     if (!result.canceled && result.filePaths.length > 0) {
+      trustFile(result.filePaths[0]);
       return { success: true, filePath: result.filePaths[0] };
     }
 
@@ -400,6 +421,7 @@ function setupFileHandlers(mainWindow) {
     });
     
     if (!result.canceled) {
+      trustFile(result.filePath);
       try {
         await fs.writeFile(result.filePath, content, 'utf8');
         return {
@@ -497,6 +519,9 @@ function setupFileHandlers(mainWindow) {
     if (!currentWatchPath) return { success: false, error: 'Access denied: no workspace is currently open' };
     const violation = requireInWorkspace(targetPath);
     if (violation) return violation;
+    if (isSamePath(targetPath, currentWatchPath)) {
+      return { success: false, error: 'Refusing to delete the workspace root' };
+    }
     try {
       if (!targetPath) return { success: false, error: 'No target path provided' };
 
