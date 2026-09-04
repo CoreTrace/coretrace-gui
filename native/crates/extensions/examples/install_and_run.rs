@@ -36,7 +36,8 @@ fn main() {
     let supervisor = SidecarSupervisor::start(entry_script);
     let port = wait_for("sidecar start", Duration::from_secs(10), || supervisor.port());
 
-    let mut client = ExtensionHostClient::connect(port).expect("connect to sidecar");
+    let token = supervisor.token().expect("token available");
+    let mut client = ExtensionHostClient::connect(port, &token).expect("connect to sidecar");
     client.set_document_text("hello world", None, None).expect("set document text");
     client.invoke_command("extension.changeCase.camel", vec![]).expect("invoke real command");
     let HostResponse::DocumentText { text } = client.get_document_text().expect("read document text") else {

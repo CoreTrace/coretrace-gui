@@ -7,8 +7,8 @@ pub struct ExtensionHostClient {
 }
 
 impl ExtensionHostClient {
-    pub fn connect(port: u16) -> std::io::Result<Self> {
-        Ok(Self { transport: Transport::connect(port)? })
+    pub fn connect(port: u16, token: &str) -> std::io::Result<Self> {
+        Ok(Self { transport: Transport::connect(port, token)? })
     }
 
     pub fn ping(&mut self) -> std::io::Result<HostResponse> {

@@ -6,14 +6,22 @@ export function encodeMessage(message) {
   return `${JSON.stringify(message)}\n`;
 }
 
-export function decodeLines(buffer, onMessage) {
+export function decodeLines(buffer, onMessage, onInvalid = () => {}) {
   let start = 0;
   for (let i = 0; i < buffer.length; i += 1) {
     if (buffer[i] === 0x0a) {
       const line = buffer.slice(start, i).toString('utf8').trim();
       start = i + 1;
       if (line.length > 0) {
-        onMessage(JSON.parse(line));
+        let message;
+        try {
+          message = JSON.parse(line);
+        } catch (err) {
+          // A malformed line from a peer must not take the whole host down.
+          onInvalid(err);
+          continue;
+        }
+        onMessage(message);
       }
     }
   }
