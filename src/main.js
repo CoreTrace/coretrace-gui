@@ -58,6 +58,9 @@ const { setupUpdaterHandlers, setupAutoUpdater } = require('./main/ipc/updaterHa
 const { setupTerminalHandlers, cleanupTerminals } = require('./main/ipc/terminalHandlers');
 const { setupBackendSettingsHandlers } = require('./main/ipc/backendSettingsHandlers');
 const { setupSecureStorageHandlers } = require('./main/ipc/secureStorageHandlers');
+const { setupAppInfoHandlers } = require('./main/ipc/appInfoHandlers');
+
+const MONACO_BASE_PATH = path.join(__dirname, '..', 'node_modules', 'monaco-editor', 'min', 'vs').replace(/\\/g, '/');
 
 /**
  * Creates and configures the main application window.
@@ -94,10 +97,12 @@ function createWindow () {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
-      additionalArguments: [`--ctrace-hardware-acceleration=${hardwareAccelerationEnabled ? 'on' : 'off'}`],
-      webSecurity: false          // For loading local fonts
+      additionalArguments: [
+        `--ctrace-hardware-acceleration=${hardwareAccelerationEnabled ? 'on' : 'off'}`,
+        `--ctrace-monaco-base-path=${MONACO_BASE_PATH}`
+      ]
     }
   });
 
@@ -115,8 +120,10 @@ function createWindow () {
   });
 
   // Re-register DevTools shortcuts that were removed by Menu.setApplicationMenu(null).
+  // DevTools stay reachable in development; packaged builds need CTRACE_DEVTOOLS=1.
+  const devToolsAllowed = !app.isPackaged || process.env.CTRACE_DEVTOOLS === '1';
   win.webContents.on('before-input-event', (_event, input) => {
-    if (input.type !== 'keyDown') return;
+    if (!devToolsAllowed || input.type !== 'keyDown') return;
     const isF12 = input.key === 'F12';
     const isCtrlShiftI = (input.control || input.meta) && input.shift && input.key === 'I';
     if (isF12 || isCtrlShiftI) {
@@ -144,6 +151,37 @@ function createWindow () {
 }
 
 
+
+/**
+ * Locks a renderer down to the bundled UI: it must never navigate away from
+ * index.html, open new windows, or embed <webview> tags. The renderer holds a
+ * privileged IPC bridge, so any foreign document loaded into it would inherit
+ * that bridge.
+ *
+ * @param {Electron.WebContents} contents
+ */
+function hardenWebContents(contents) {
+  contents.on('will-navigate', (event, url) => {
+    console.warn('[Security] Blocked navigation to', url);
+    event.preventDefault();
+  });
+  contents.on('will-redirect', (event, url) => {
+    console.warn('[Security] Blocked redirect to', url);
+    event.preventDefault();
+  });
+  contents.on('will-attach-webview', (event) => {
+    console.warn('[Security] Blocked <webview> attachment');
+    event.preventDefault();
+  });
+  contents.setWindowOpenHandler(({ url }) => {
+    console.warn('[Security] Blocked window.open to', url);
+    return { action: 'deny' };
+  });
+}
+
+app.on('web-contents-created', (_event, contents) => {
+  hardenWebContents(contents);
+});
 
 /**
  * Detects if WSL (Windows Subsystem for Linux) is available on Windows.
@@ -698,6 +736,7 @@ app.whenReady().then(async () => {
   setupTerminalHandlers(mainWindow);
   setupBackendSettingsHandlers(mainWindow);
   setupSecureStorageHandlers();
+  setupAppInfoHandlers();
   setupWindowControls(mainWindow);
   mainWindow.once('ready-to-show', () => {
     schedulePostStartupTasks(mainWindow);
