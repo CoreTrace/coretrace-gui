@@ -33,7 +33,7 @@ class CTraceRunner {
         <div class="ctrace-error">
           <div class="error-icon">⚠️</div>
           <div class="error-text">File not found on disk</div>
-          <div class="error-subtext">${currentFilePath}</div>
+          <div class="error-subtext">${escapeHtml(currentFilePath)}</div>
           <div class="error-help">The file was moved or deleted. Open its new location to analyze it.</div>
         </div>
       `;
@@ -109,7 +109,7 @@ class CTraceRunner {
             <div class="ctrace-error">
               <div class="error-icon">⚠️</div>
               <div class="error-text">WSL Setup Required</div>
-              <div class="error-details">${clean}</div>
+              <div class="error-details">${escapeHtml(clean)}</div>
               <div class="error-help">
                 <strong>Quick Setup:</strong><br>
                 1. Open PowerShell as Administrator<br>
@@ -125,7 +125,7 @@ class CTraceRunner {
             <div class="ctrace-error">
               <div class="error-icon">❌</div>
               <div class="error-text">CTrace Error</div>
-              <pre class="error-details">${clean}</pre>
+              <pre class="error-details">${escapeHtml(clean)}</pre>
             </div>
           `;
           ui.notificationManager.showError('Failed to run CTrace');
@@ -136,7 +136,7 @@ class CTraceRunner {
         <div class="ctrace-error">
           <div class="error-icon">❌</div>
           <div class="error-text">Exception</div>
-          <pre class="error-details">${err.message}</pre>
+          <pre class="error-details">${escapeHtml(err.message)}</pre>
         </div>
       `;
       ui.notificationManager.showError('Error invoking CTrace');

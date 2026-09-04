@@ -322,10 +322,11 @@ class StateManager {
             `<span class="tab-warning" title="${tabData.fileInfo.encodingWarning ? 'Encoding Warning' : ''}${tabData.fileInfo.isPartial ? 'File Partially Loaded' : ''}">⚠️</span>` : '';
           
           tabElement.innerHTML = `
-            <div class="tab-label">${tabData.fileName}${warningIndicator}</div>
-            <div class="tab-close" onclick="window.tabManager.closeTab(event, '${restoredTabId}')">×</div>
+            <div class="tab-label">${escapeHtml(tabData.fileName)}${warningIndicator}</div>
+            <div class="tab-close">×</div>
           `;
-          
+
+          tabElement.querySelector('.tab-close').addEventListener('click', (e) => this.tabManager.closeTab(e, restoredTabId));
           tabElement.addEventListener('click', (e) => {
             if (!e.target.classList.contains('tab-close')) {
               this.tabManager.switchToTab(restoredTabId);

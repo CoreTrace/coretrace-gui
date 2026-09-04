@@ -24,10 +24,11 @@ test('updateFileTypeStatus writes to DOM element when present', () => {
 });
 
 test('getFileIcon returns emoji and formatFileSize formats numbers', () => {
-  // Known extensions return an <img> tag with emoji onerror fallback
+  // Known extensions return an <img> tag pointing at a bundled SVG, with no
+  // inline event handler (the page runs under a strict CSP)
   const jsIcon = getFileIcon('file.js');
-  assert.ok(jsIcon.includes('javascript-original.svg'), 'js icon should reference SVG');
-  assert.ok(jsIcon.includes("this.outerHTML='🟨'"), 'js icon should have emoji fallback');
+  assert.ok(jsIcon.includes('../assets/icons/devicon/javascript-original.svg'), 'js icon should reference the bundled SVG');
+  assert.ok(!/\son[a-z]+=/.test(jsIcon), 'js icon must not carry inline event handlers');
   // Unknown extensions return the emoji directly
   assert.strictEqual(getFileIcon('unknown.xyz'), '📄');
   assert.strictEqual(formatFileSize(0), '0 Bytes');
