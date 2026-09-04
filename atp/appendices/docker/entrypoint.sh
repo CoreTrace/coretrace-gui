@@ -25,6 +25,11 @@ echo "CoreTrace GUI is starting. Open http://localhost:6080/ in a browser (it co
 # rather than the binary keeps the LD_LIBRARY_PATH and XDG setup it performs.
 export APPDIR=/opt/ctrace-gui
 
+# The app only disables hardware acceleration via CTRACE_DISABLE_GPU (see
+# src/main.js) — the --disable-gpu Chromium flag alone doesn't stop it from
+# initializing the GPU process, which aborts (SIGTRAP) with no /dev/dri here.
+export CTRACE_DISABLE_GPU=1
+
 # --no-sandbox is required because the extracted AppImage has no setuid helper.
 exec "$APPDIR/AppRun" --no-sandbox --disable-gpu "$@"
 
