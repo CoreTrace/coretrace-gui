@@ -835,11 +835,11 @@ class AssistantPanel {
       if (raw) {
         try {
           const legacy = JSON.parse(raw);
-          await window.api.invoke('assistant-config-save', legacy);
+          const saved = await window.api.invoke('assistant-config-save', legacy);
+          if (!saved.success) throw new Error(saved.error || 'save failed');
           localStorage.removeItem('assistantConfig');
-          this._cachedConfig = legacy;
           console.log('[AssistantPanel] Migrated assistant config from localStorage to secure storage');
-          return this._cachedConfig;
+          return this.loadAssistantConfig();
         } catch (migErr) {
           console.warn('[AssistantPanel] Migration from localStorage failed:', migErr);
         }
@@ -863,7 +863,8 @@ class AssistantPanel {
     try {
       const result = await window.api.invoke('assistant-config-save', cfg);
       if (!result.success) throw new Error(result.error || 'Unknown error');
-      this._cachedConfig = cfg;
+      // Re-read from storage so the cache never holds the key, only hasApiKey.
+      await this.loadAssistantConfig();
       this.ui.notificationManager.showSuccess('Assistant settings saved');
     } catch (err) {
       console.error('[AssistantPanel] Failed to save assistant config:', err);
@@ -1063,8 +1064,8 @@ class AssistantPanel {
           if (providerSelect && existingConfig.externalProvider) {
             providerSelect.value = existingConfig.externalProvider;
           }
-          if (apiKeyInput && existingConfig.apiKey) {
-            apiKeyInput.value = existingConfig.apiKey;
+          if (apiKeyInput && existingConfig.hasApiKey) {
+            apiKeyInput.placeholder = 'Saved key on file — leave blank to keep it';
           }
           if (modelInput && existingConfig.model) {
             modelInput.value = existingConfig.model;
@@ -1073,13 +1074,13 @@ class AssistantPanel {
             systemInput.value = existingConfig.systemPrompt;
           }
 
-          // If a saved API key exists, fetch models immediately
-          if (existingConfig.apiKey) {
+          // If a saved API key exists, fetch models immediately (the key itself stays in the main process)
+          if (existingConfig.hasApiKey) {
             const providerId = toProviderId(existingConfig.externalProvider || 'ChatGPT5');
             const statusEl = document.getElementById('model-fetch-status');
             if (statusEl) statusEl.textContent = 'Fetching models…';
             try {
-              const result = await window.api.invoke('assistant-list-models', { providerId, apiKey: existingConfig.apiKey });
+              const result = await window.api.invoke('assistant-list-models', { providerId, useStoredKey: true });
               if (result.success && result.models.length > 0) {
                 populateModelSelect(result.models, existingConfig.model);
                 if (statusEl) statusEl.textContent = `${result.models.length} models loaded`;
@@ -1243,7 +1244,8 @@ class AssistantPanel {
           if (!cfg.model) cfg.model = 'gpt-4';
         }
 
-        if (!cfg.apiKey) {
+        const hasStoredKey = Boolean((this.ui.getAssistantConfig() || {}).hasApiKey);
+        if (!cfg.apiKey && !hasStoredKey) {
           this.ui.notificationManager.showError('Please enter an API key for the external provider');
           return;
         }
