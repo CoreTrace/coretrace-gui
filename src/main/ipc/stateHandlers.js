@@ -11,6 +11,7 @@
 const { ipcMain, app } = require('electron');
 const fs = require('fs').promises;
 const path = require('path');
+const { trustWorkspaceRoot, trustFile, isTrustedWorkspaceRoot, isTrustedFile } = require('../utils/workspaceTrust');
 
 /**
  * Get the path to the state file in the user's data directory
@@ -41,6 +42,57 @@ function getBackupStatePath() {
  * 
  * @function setupStateHandlers
  */
+/**
+ * Strip any workspace or tab path the renderer did not legitimately obtain
+ * from this process. The renderer only ever sees paths that came from a native
+ * dialog or lie inside an opened workspace, so anything else is dropped rather
+ * than persisted and trusted again on the next launch.
+ * @param {Object} state
+ * @returns {Object}
+ */
+function sanitizeStateForSave(state) {
+  if (!state || typeof state !== 'object') return state;
+  const clean = { ...state };
+
+  if (clean.workspacePath && !isTrustedWorkspaceRoot(clean.workspacePath)) {
+    console.warn('[StateHandlers] Dropping untrusted workspace path from saved state');
+    clean.workspacePath = null;
+  }
+
+  if (Array.isArray(clean.tabs)) {
+    clean.tabs = clean.tabs.map((tab) => {
+      if (!tab || !tab.filePath) return tab;
+      if (isTrustedFile(tab.filePath) || isInsideTrustedWorkspace(tab.filePath, clean.workspacePath)) {
+        return tab;
+      }
+      console.warn('[StateHandlers] Dropping untrusted tab path from saved state');
+      return { ...tab, filePath: null };
+    });
+  }
+
+  return clean;
+}
+
+function isInsideTrustedWorkspace(filePath, workspacePath) {
+  if (!workspacePath || !isTrustedWorkspaceRoot(workspacePath)) return false;
+  const relative = path.relative(path.resolve(workspacePath), path.resolve(filePath));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * Paths restored from the saved session were validated when they were saved,
+ * so they may be used again by the renderer for this launch.
+ * @param {Object} state
+ */
+function trustRestoredPaths(state) {
+  if (state.workspacePath) trustWorkspaceRoot(state.workspacePath);
+  if (Array.isArray(state.tabs)) {
+    state.tabs.forEach((tab) => {
+      if (tab && tab.filePath) trustFile(tab.filePath);
+    });
+  }
+}
+
 function setupStateHandlers() {
   /**
    * Save application state to disk
@@ -61,7 +113,7 @@ function setupStateHandlers() {
       }
       
       // Save new state
-      const stateJson = JSON.stringify(state, null, 2);
+      const stateJson = JSON.stringify(sanitizeStateForSave(state), null, 2);
       await fs.writeFile(statePath, stateJson, 'utf8');
       
       // console.log('[StateHandlers] State saved successfully:', {
@@ -132,6 +184,7 @@ function setupStateHandlers() {
     }
     
     if (state) {
+      trustRestoredPaths(state);
       return { success: true, state: state };
     } else {
       return { success: false, error: 'No valid state found' };

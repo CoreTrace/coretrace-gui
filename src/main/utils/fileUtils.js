@@ -213,6 +213,15 @@ async function buildFileTree(dirPath, loadChildren = true) {
 }
 
 /**
+ * Escape a string so it matches itself inside a RegExp.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Search in files within directory
  * @param {string} dirPath - Directory path to search
  * @param {string} searchTerm - Search term
@@ -221,7 +230,9 @@ async function buildFileTree(dirPath, loadChildren = true) {
  */
 async function searchInDirectory(dirPath, searchTerm, maxResults = 100) {
   const results = [];
-  const searchRegex = new RegExp(searchTerm, 'gi');
+  // The term is matched literally: a crafted pattern must not be able to stall
+  // the main process (catastrophic backtracking) or throw on bad syntax.
+  const searchRegex = new RegExp(escapeRegExp(String(searchTerm || '')), 'gi');
   
   async function searchRecursively(currentPath, depth = 0) {
     if (depth > 5 || results.length >= maxResults) return;
