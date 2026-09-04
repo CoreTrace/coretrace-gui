@@ -12,6 +12,9 @@ const { ipcMain } = require('electron');
 const https = require('https');
 const http = require('http');
 const providerRegistry = require('../external_llm/ProviderRegistry');
+const { loadStoredApiKey } = require('./secureStorageHandlers');
+const { validateEndpoint } = require('../external_llm/endpointPolicy');
+const { isTrustedFile } = require('../utils/workspaceTrust');
 
 // Local GGUF state
 let localLLM = null;
@@ -32,13 +35,16 @@ function setupAssistantHandlers(mainWindow) {
    * Input: { provider, message, config }
    * config contains: provider-specific configuration
    */
-  ipcMain.handle('assistant-chat', async (event, { provider, message, history, config }) => {
+  ipcMain.handle('assistant-chat', async (event, { provider, message, history, config: rendererConfig }) => {
     // Abort any existing in-flight request
     if (currentAbortController) {
       currentAbortController.abort();
     }
     currentAbortController = new AbortController();
     const { signal } = currentAbortController;
+
+    // The renderer never holds the API key; it is read from encrypted storage here.
+    const config = { ...(rendererConfig || {}), apiKey: await loadStoredApiKey().catch(() => null) };
 
     // Wrap the real request in a race against an abort promise
     const abortPromise = new Promise((resolve) => {
@@ -121,7 +127,8 @@ function setupAssistantHandlers(mainWindow) {
    * Input: { providerId: 'openai'|'deepseek', apiKey: string }
    * Returns: { success, models: [{ id, owned_by }] }
    */
-  ipcMain.handle('assistant-list-models', async (_event, { providerId, apiKey }) => {
+  ipcMain.handle('assistant-list-models', async (_event, { providerId, apiKey: typedKey, useStoredKey }) => {
+    const apiKey = useStoredKey ? await loadStoredApiKey() : typedKey;
     if (!apiKey) return { success: false, error: 'API key is required' };
 
     const endpointMap = {
@@ -293,6 +300,11 @@ async function handleModularProvider(message, history, config) {
       };
     }
     
+    const endpointCheck = validateEndpoint(provider.endpoint, Boolean(config.apiKey));
+    if (!endpointCheck.valid) {
+      return { success: false, error: endpointCheck.error };
+    }
+
     // Send chat message with conversation history
     return await provider.chat(message, {
       systemPrompt: config.systemPrompt,
@@ -320,6 +332,9 @@ async function handleLocalChat(message, history, config, abortSignal) {
 
   if (!modelPath) {
     return { success: false, error: 'Local model path is required' };
+  }
+  if (!isTrustedFile(modelPath)) {
+    return { success: false, error: 'Choose the model file through the file picker' };
   }
 
   try {
