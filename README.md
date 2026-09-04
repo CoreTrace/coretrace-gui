@@ -80,6 +80,14 @@ npm start
 
 This automatically rebuilds the renderer bundle (`src/renderer/bundle.js`) before launching Electron. You must rerun `npm start` (or `npm run build:renderer`) any time you edit files under `src/renderer/`.
 
+### Security notes
+
+- The renderer runs sandboxed (`sandbox: true`, `contextIsolation: true`) behind a strict Content-Security-Policy: no inline script, no remote scripts, and no navigation away from `index.html`. New UI code must attach listeners with `addEventListener` (or the `data-action` attributes in `index.html`) and pass every external string (file names, tool output, error messages) through `escapeHtml()` before inserting it as HTML.
+- DevTools shortcuts (F12, Ctrl/Cmd+Shift+I) are only active in development. Set `CTRACE_DEVTOOLS=1` to enable them in a packaged build.
+- File-system IPC only accepts paths that came from a native dialog, the restored session, or the currently opened workspace.
+- The assistant API key is encrypted with the OS credential store and never leaves the main process; keyed requests only go to `https:` endpoints (or `http://localhost`).
+- App updates download automatically but are only installed after the user chooses "restart to apply". Builds are not code-signed yet, so keep it that way until signing is in place.
+
 ### Building for Distribution
 
 | Platform | Command | Output |
