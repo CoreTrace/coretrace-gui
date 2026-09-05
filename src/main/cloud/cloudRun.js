@@ -53,7 +53,6 @@ class CloudRun {
             tools,
             allowPartial: Boolean(allowPartial),
             confirm: confirm !== false,
-            skipEstimate: false,
             failOn: failOn || 'any',
             tempDir: this.cloud.tempDir(),
             timeoutMs: 30 * 60 * 1000,
