@@ -1,0 +1,22 @@
+/* "Run in cloud" panel inside the tools panel */
+.cloud-panel { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.cloud-status { font-size: 12px; color: var(--text-secondary, #9da5b4); }
+.cloud-status.cloud-offline { color: #ffa500; }
+.cloud-identity { font-size: 12px; color: var(--text-secondary, #9da5b4); }
+.cloud-identity a, .cloud-upgrade { color: #58a6ff; text-decoration: none; margin-left: 6px; }
+.cloud-card { border: 1px solid var(--border-color, #2b2f36); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.cloud-tools { display: flex; flex-direction: column; gap: 4px; }
+.cloud-tool { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cloud-tool-disabled { opacity: 0.55; }
+.cloud-tool-disabled input { cursor: not-allowed; }
+.cloud-version { color: var(--text-secondary, #9da5b4); font-size: 11px; }
+.cloud-row { display: flex; justify-content: space-between; font-size: 12px; }
+.cloud-total { font-weight: 600; border-top: 1px solid var(--border-color, #2b2f36); padding-top: 4px; }
+.cloud-rejected { color: var(--text-secondary, #9da5b4); }
+.cloud-run-running span:last-child { color: #ffa500; }
+.cloud-run-completed span:last-child { color: #7ee787; }
+.cloud-run-failed span:last-child { color: #ff6b6b; }
+.cloud-hint, .cloud-line { font-size: 11px; color: var(--text-secondary, #9da5b4); }
+.cloud-code { font-size: 14px; letter-spacing: 1px; }
+.cloud-error { color: #ff6b6b; font-size: 12px; }
+.cloud-summary { border-color: #58a6ff55; }

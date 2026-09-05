@@ -32,9 +32,12 @@ function validateBackendSettings(settings, current) {
   if (!settings || typeof settings !== 'object') {
     return { valid: false, error: 'Invalid settings payload' };
   }
+  const cloudCheck = settings.cloud === undefined ? { valid: true, cloud: current && current.cloud } : validateCloudSettings(settings.cloud);
+  if (!cloudCheck.valid) return cloudCheck;
+  const cloud = cloudCheck.cloud;
   const directBinaryPath = settings.directBinaryPath;
   if (directBinaryPath === undefined || directBinaryPath === null || directBinaryPath === '') {
-    return { valid: true, settings: { directBinaryPath: '' } };
+    return { valid: true, settings: { directBinaryPath: '', ...(cloud ? { cloud } : {}) } };
   }
   if (typeof directBinaryPath !== 'string' || !path.isAbsolute(directBinaryPath)) {
     return { valid: false, error: 'Binary path must be an absolute path' };
@@ -43,7 +46,34 @@ function validateBackendSettings(settings, current) {
   if (!unchanged && !isTrustedFile(directBinaryPath)) {
     return { valid: false, error: 'Choose the binary with the Browse button' };
   }
-  return { valid: true, settings: { directBinaryPath } };
+  return { valid: true, settings: { directBinaryPath, ...(cloud ? { cloud } : {}) } };
+}
+
+/**
+ * Cloud client settings: platform address (https, or http for a local dev stack),
+ * optional private CA file, organisation slug and the upgrade link.
+ */
+function validateCloudSettings(cloud) {
+  if (cloud === undefined || cloud === null) return { valid: true, cloud: undefined };
+  if (typeof cloud !== 'object') return { valid: false, error: 'Invalid cloud settings' };
+  const out = {};
+  if (cloud.baseUrl) {
+    if (typeof cloud.baseUrl !== 'string' || !/^https?:\/\/[^\s/?#]+/.test(cloud.baseUrl)) return { valid: false, error: 'Cloud platform address must be an absolute URL' };
+    out.baseUrl = cloud.baseUrl.replace(/\/+$/, '');
+  }
+  if (cloud.caFile) {
+    if (typeof cloud.caFile !== 'string' || !path.isAbsolute(cloud.caFile)) return { valid: false, error: 'CA file must be an absolute path' };
+    out.caFile = cloud.caFile;
+  }
+  if (cloud.org) {
+    if (typeof cloud.org !== 'string' || !/^[a-z0-9-]{1,40}$/.test(cloud.org)) return { valid: false, error: 'Organisation must be a slug' };
+    out.org = cloud.org;
+  }
+  if (cloud.upgradeUrl) {
+    if (typeof cloud.upgradeUrl !== 'string' || !/^https:\/\//.test(cloud.upgradeUrl)) return { valid: false, error: 'Upgrade link must be https' };
+    out.upgradeUrl = cloud.upgradeUrl;
+  }
+  return { valid: true, cloud: out };
 }
 
 function setupBackendSettingsHandlers(mainWindow) {

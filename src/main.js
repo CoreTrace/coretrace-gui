@@ -59,6 +59,7 @@ const { setupTerminalHandlers, cleanupTerminals } = require('./main/ipc/terminal
 const { setupBackendSettingsHandlers } = require('./main/ipc/backendSettingsHandlers');
 const { setupSecureStorageHandlers } = require('./main/ipc/secureStorageHandlers');
 const { setupAppInfoHandlers } = require('./main/ipc/appInfoHandlers');
+const { setupCloudHandlers } = require('./main/ipc/cloudHandlers');
 
 const MONACO_BASE_PATH = path.join(__dirname, '..', 'node_modules', 'monaco-editor', 'min', 'vs').replace(/\\/g, '/');
 
@@ -742,6 +743,7 @@ app.whenReady().then(async () => {
   setupBackendSettingsHandlers(mainWindow);
   setupSecureStorageHandlers();
   setupAppInfoHandlers();
+  setupCloudHandlers(mainWindow);
   setupWindowControls(mainWindow);
   mainWindow.once('ready-to-show', () => {
     schedulePostStartupTasks(mainWindow);

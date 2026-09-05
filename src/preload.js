@@ -88,6 +88,17 @@ const INVOKE_CHANNELS = [
   'terminal-send-input',
   'app-get-info',
   'app-get-syntax-config',
+  'cloud-status',
+  'cloud-login-start',
+  'cloud-login-cancel',
+  'cloud-logout',
+  'cloud-tools',
+  'cloud-limits',
+  'cloud-run-start',
+  'cloud-run-confirm',
+  'cloud-run-cancel',
+  'cloud-open-upgrade',
+  'cloud-open-url',
 ];
 
 const SEND_CHANNELS = [
@@ -113,6 +124,7 @@ const RECEIVE_CHANNELS = [
   'app-before-quit',
   'terminal-data',
   'terminal-command-done',
+  'cloud-run-event',
 ];
 
 contextBridge.exposeInMainWorld('api', {

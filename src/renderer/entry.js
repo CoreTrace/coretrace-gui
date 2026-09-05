@@ -28,12 +28,14 @@ require('./managers/WSLManager');
 require('./managers/UpdaterManager');
 require('./managers/ResizeManager');
 require('./managers/CTraceRunner');
+require('./managers/CloudRunManager');
 
 // Components (depend on managers)
 require('./components/ActivityBar');
 require('./components/FileTree');
 require('./components/EditorPanel');
 require('./components/AssistantPanel');
+require('./components/CloudPanel');
 
 // Top-level controller — must be last
 require('./UIController');

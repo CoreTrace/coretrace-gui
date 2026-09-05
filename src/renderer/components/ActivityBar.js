@@ -58,6 +58,11 @@ class ActivityBar {
     setTimeout(() => searchInput && searchInput.focus(), 100);
   }
 
+  showCloud() {
+    this.ui.setActiveActivity('cloud-activity');
+    this.ui.openCloudPanel();
+  }
+
 /**
    * Sidebar toggle
    */
