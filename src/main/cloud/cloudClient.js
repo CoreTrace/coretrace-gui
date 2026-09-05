@@ -87,18 +87,17 @@ class CloudClient {
     const credential = await this.resolveCredential();
     if (!credential) return null;
     const logger = this.logger(core);
-    return {
-      core,
-      config,
-      credential,
-      api: core.createApiClient({
-        baseUrl: config.baseUrl,
-        userAgent: `coretrace-gui/${GUI_VERSION}`,
-        caFile: config.caFile,
-        logger,
-        token: () => core.bearerOf(credential),
-      }),
-    };
+    const api = core.createApiClient({
+      baseUrl: config.baseUrl,
+      userAgent: `coretrace-gui/${GUI_VERSION}`,
+      caFile: config.caFile,
+      logger,
+      token: () => core.bearerOf(credential),
+    });
+    // User sessions scope organisation calls with X-Org; resolve the membership once.
+    const me = await core.fetchMe(api);
+    api.setOrg(core.selectOrg(me, config.org).slug);
+    return { core, config, credential, api, me };
   }
 
   async status(online) {
