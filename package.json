@@ -45,7 +45,8 @@
     "node-llama-cpp": "^3.18.1",
     "node-pty": "^1.1.0",
     "tar": "^7.5.22",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.0",
+    "@coretrace/cli-core": "file:../coretrace-cli/packages/cli-core"
   },
   "devDependencies": {
     "electron": "^41.10.7",

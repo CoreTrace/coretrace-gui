@@ -117,6 +117,7 @@ class UIController {
     this.wslManager = new WSLManager(this);
     this.updaterManager = new UpdaterManager(this.notificationManager);
     this.ctraceRunner = new CTraceRunner(this);
+    this.cloudRunManager = new CloudRunManager({ diagnosticsManager: this.diagnosticsManager });
 
     this.activeMenu = null;
     this.fileTreeContextMenu = null;
@@ -130,6 +131,7 @@ class UIController {
     this.fileTree = new FileTree(this);
     this.editorPanel = new EditorPanel(this);
     this.assistantPanel = new AssistantPanel(this);
+    this.cloudPanel = new CloudPanel(this);
 
 
     this.init();
@@ -947,6 +949,7 @@ class UIController {
     window.hideToolsPanel = () => this.hideToolsPanel();
     window.openCtracePanel = () => this.openCtracePanel();
     window.openAssistantPanel = () => this.openAssistantPanel();
+    window.openCloudPanel = () => this.openCloudPanel();
 
     // Terminal panel
     window.toggleTerminalPanel = () => {
@@ -1057,6 +1060,10 @@ class UIController {
   
   openCtracePanel() {
     return this.assistantPanel.openCtracePanel();
+  }
+
+  openCloudPanel() {
+    return this.cloudPanel.open();
   }
 
   

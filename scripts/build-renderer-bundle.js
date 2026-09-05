@@ -25,10 +25,12 @@ const inputFiles = [
   'src/renderer/managers/UpdaterManager.js',
   'src/renderer/managers/ResizeManager.js',
   'src/renderer/managers/CTraceRunner.js',
+  'src/renderer/managers/CloudRunManager.js',
   'src/renderer/components/ActivityBar.js',
   'src/renderer/components/FileTree.js',
   'src/renderer/components/EditorPanel.js',
   'src/renderer/components/AssistantPanel.js',
+  'src/renderer/components/CloudPanel.js',
   'src/renderer/UIController.js',
 ];
 

@@ -189,11 +189,15 @@ class UpdaterManager {
 
   async openBackendSettingsModal() {
     let currentPath = '';
+    let currentCloud = {};
 
     try {
       const result = await window.api.invoke('backend-get-settings');
       if (result && result.success && result.settings && result.settings.directBinaryPath) {
         currentPath = result.settings.directBinaryPath;
+      }
+      if (result && result.success && result.settings && result.settings.cloud) {
+        currentCloud = result.settings.cloud;
       }
     } catch (err) {
       console.warn('Failed to load backend settings:', err);
@@ -237,6 +241,19 @@ class UpdaterManager {
         </button>
       </div>
       <div id="bs-mode-hint" style="font-size:11px; color:#8b949e; margin-bottom:16px;"></div>
+      <h3 style="margin:8px 0 8px 0; font-size:15px;">CoreTrace Cloud</h3>
+      <div style="font-size:12px; color:#8b949e; margin-bottom:12px; line-height:1.5;">
+        Platform used by "Run in cloud". Leave the defaults unless your organisation runs a private deployment.
+      </div>
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Platform address</label>
+      <input id="bs-cloud-base" type="text" placeholder="https://api.coretrace.dev"
+        style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:10px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; font-size:12px;" />
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Organisation (slug, optional when you belong to one)</label>
+      <input id="bs-cloud-org" type="text" placeholder="acme"
+        style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:10px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; font-size:12px;" />
+      <label style="display:block; font-size:12px; margin-bottom:6px; color:#c9d1d9;">Private certificate authority (PEM path, optional)</label>
+      <input id="bs-cloud-ca" type="text" placeholder="C:\\certs\\coretrace-ca.pem"
+        style="width:100%; box-sizing:border-box; padding:8px; margin-bottom:16px; background:#161b22; color:#f0f6fc; border:1px solid #30363d; border-radius:6px; font-size:12px;" />
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button id="bs-clear" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Clear (use WSL mode)</button>
         <button id="bs-close" style="padding:8px 12px; background:#21262d; border:1px solid #30363d; color:#f0f6fc; border-radius:6px; cursor:pointer;">Cancel</button>
@@ -262,6 +279,20 @@ class UpdaterManager {
 
     pathInput.value = currentPath;
     updateHint(currentPath);
+    const cloudBase = dialog.querySelector('#bs-cloud-base');
+    const cloudOrg = dialog.querySelector('#bs-cloud-org');
+    const cloudCa = dialog.querySelector('#bs-cloud-ca');
+    cloudBase.value = currentCloud.baseUrl || '';
+    cloudOrg.value = currentCloud.org || '';
+    cloudCa.value = currentCloud.caFile || '';
+    const cloudSettings = () => {
+      const cloud = {};
+      if (cloudBase.value.trim()) cloud.baseUrl = cloudBase.value.trim();
+      if (cloudOrg.value.trim()) cloud.org = cloudOrg.value.trim();
+      if (cloudCa.value.trim()) cloud.caFile = cloudCa.value.trim();
+      if (currentCloud.upgradeUrl) cloud.upgradeUrl = currentCloud.upgradeUrl;
+      return cloud;
+    };
     pathInput.oninput = () => updateHint(pathInput.value);
 
     const closeModal = () => { if (modal.parentNode) modal.parentNode.removeChild(modal); };
@@ -297,7 +328,7 @@ class UpdaterManager {
     dialog.querySelector('#bs-save').onclick = async () => {
       const val = pathInput.value.trim();
       try {
-        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val });
+        const result = await window.api.invoke('backend-save-settings', { directBinaryPath: val, cloud: cloudSettings() });
         if (result && result.success) {
           this.notificationManager.showSuccess(val ? 'Direct binary mode enabled.' : 'Backend reset to WSL server mode.');
           closeModal();

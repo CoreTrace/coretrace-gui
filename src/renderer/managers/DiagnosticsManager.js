@@ -112,6 +112,58 @@ class DiagnosticsManager {
   }
 
   /**
+   * Add findings of one cloud tool run (canonical report from the platform),
+   * attributed to `meta.source` (cloud:<tool>) and the job. Existing local or
+   * cloud diagnostics are kept; metadata switches to the cloud run.
+   * @param {Array} findings [{ruleId, level, message, path, line, column, endLine, endColumn}]
+   * @param {{tool: string, jobId: string, source: string}} meta
+   */
+  addCloudFindings(findings, meta) {
+    const levelToSeverity = (level) => {
+      const l = String(level || '').toLowerCase();
+      if (l === 'error') return 'ERROR';
+      if (l === 'warning') return 'WARNING';
+      return 'INFO';
+    };
+    const existing = Array.isArray(this.currentDiagnostics) ? this.currentDiagnostics : [];
+    const added = (findings || []).map((f, idx) => ({
+      id: `${meta.source}:${idx + 1}:${f.ruleId || 'unknown'}`,
+      ruleId: String(f.ruleId || 'unknown'),
+      severity: levelToSeverity(f.level),
+      source: meta.source,
+      jobId: meta.jobId || null,
+      details: { message: f.message || '' },
+      location: {
+        file: f.path || '',
+        startLine: f.line || 1,
+        startColumn: f.column || 1,
+        endLine: f.endLine || f.line || 1,
+        endColumn: f.endColumn || f.column || 1,
+        function: 'global'
+      },
+      code: f.ruleId || '',
+      help: ''
+    }));
+    this.currentDiagnostics = existing.concat(added);
+    const tools = this.currentMetadata && this.currentMetadata.tool === 'cloud' ? (this.currentMetadata.tools || []) : [];
+    if (!tools.includes(meta.tool)) tools.push(meta.tool);
+    this.currentMetadata = { tool: 'cloud', tools, jobId: meta.jobId || null, mode: 'cloud', inputFile: null, analysisTimeMs: -1 };
+    this.currentFunctions = this.currentFunctions || [];
+    return added.length;
+  }
+
+  /**
+   * Remove diagnostics whose source starts with the prefix (cloud runs), keeping the rest.
+   * @param {string} prefix
+   */
+  clearSource(prefix) {
+    if (!Array.isArray(this.currentDiagnostics)) return;
+    this.currentDiagnostics = this.currentDiagnostics.filter((d) => !(typeof d.source === 'string' && d.source.startsWith(prefix)));
+    if (this.currentMetadata && this.currentMetadata.tool === 'cloud') this.currentMetadata = null;
+    if (this.currentDiagnostics.length === 0) this.currentDiagnostics = this.currentDiagnostics;
+  }
+
+  /**
    * Group diagnostics by Rule ID and then by Function
    * @param {Array} diagnostics - Array of diagnostics
    * @returns {Object} Grouped diagnostics structure
