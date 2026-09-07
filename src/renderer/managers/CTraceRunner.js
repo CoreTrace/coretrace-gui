@@ -28,6 +28,13 @@ class CTraceRunner {
       return;
     }
 
+    // The missing-file flag is normally only refreshed on tab switch, so a
+    // file deleted while its tab stays focused would go undetected here.
+    // Re-check against disk right now so a same-tab deletion is still caught.
+    if (ui.tabManager.activeTabId) {
+      await ui.tabManager.refreshFileMissingState(ui.tabManager.activeTabId, currentFilePath);
+    }
+
     if (ui.tabManager.activeTabId && ui.tabManager.isTabFileMissing(ui.tabManager.activeTabId)) {
       resultsArea.innerHTML = `
         <div class="ctrace-error">
