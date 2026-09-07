@@ -958,12 +958,13 @@ class UIController {
     };
     window.terminalNew = () => this.terminalManager.createTerminal();
     window.terminalKill = () => {
+      // Interrupt-only, same as Ctrl+C — it never closes the terminal.
+      // Ctrl+D (or the tab's close button) is the only way to do that.
       const id = this.terminalManager.activeId;
-      if (id !== null) {
-        const term = this.terminalManager.terminals.get(id);
-        if (term && term.running) {
-          window.api.invoke('terminal-kill-current', id).catch(() => {});
-        }
+      if (id === null) return;
+      const term = this.terminalManager.terminals.get(id);
+      if (term && term.running) {
+        window.api.invoke('terminal-kill-current', id).catch(() => {});
       }
     };
     window.terminalToggleShellDropdown = () => this.terminalManager.toggleShellDropdown();
