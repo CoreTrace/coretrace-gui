@@ -106,6 +106,8 @@ function isLikelyExecutionFailureLine(line) {
     /unknown tool/i,
     /failed to run/i,
     /tool execution failed/i,
+    /unsupported input file type/i,
+    /failed to analyze/i,
     /\bexception\b/i,
     /\btraceback\b/i
   ];
@@ -191,6 +193,14 @@ function describeToolExecutionFailure(message, toolName) {
       kind: 'tool-unavailable',
       summary: `${normalizedTool} was requested but is not available in this backend.`,
       suggestion: `Check the requested tool name and confirm that ${normalizedTool} is installed and enabled.`
+    };
+  }
+
+  if (/unsupported input file type/i.test(msg) || /failed to analyze/i.test(msg)) {
+    return {
+      kind: 'unsupported-input',
+      summary: `${normalizedTool} does not support this file's type and could not analyze it.`,
+      suggestion: `Choose a source file type ${normalizedTool} supports, or remove it from the tools invoked for this file.`
     };
   }
 
