@@ -54,10 +54,21 @@ export function Settings({
         <h2>Compte CoreTrace</h2>
         <div className="setting-row">
           <div>
-            <strong>{cloud.me?.principal.name || "Non connecté"}</strong>
+            {/* The platform names only API keys, so a signed-in human has no
+                principal name; the e-mail is the identity to show. */}
+            <strong>
+              {cloud.me
+                ? cloud.me.principal.name ||
+                  cloud.me.email ||
+                  "Compte connecté"
+                : "Non connecté"}
+            </strong>
             <p className="muted">
-              {cloud.me?.email ||
-                "Connectez-vous pour retrouver vos organisations."}
+              {cloud.me
+                ? cloud.me.orgs.length > 0
+                  ? cloud.me.orgs.map((o) => o.slug).join(", ")
+                  : "Aucune organisation"
+                : "Connectez-vous pour retrouver vos organisations."}
             </p>
           </div>
           {cloud.me ? (
