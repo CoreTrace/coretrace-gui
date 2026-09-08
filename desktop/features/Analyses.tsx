@@ -496,13 +496,20 @@ export function Analyses({
               <div className="section-heading">
                 <h2>Dernière analyse locale</h2>
                 <span
-                  className={`badge ${local.cancelled ? "cancelled" : local.exitCode === 0 ? "clean" : "failed"}`}
+                  className={`badge ${local.cancelled ? "cancelled" : local.warnings?.length ? "warning" : local.exitCode === 0 ? "clean" : "failed"}`}
                 >
                   {local.cancelled
                     ? "Annulée"
-                    : `Code de sortie ${local.exitCode ?? "inconnu"}`}
+                    : local.warnings?.length
+                      ? "Analyse incomplète"
+                      : `Code de sortie ${local.exitCode ?? "inconnu"}`}
                 </span>
               </div>
+              {local.warnings?.map((warning) => (
+                <p className="notice" role="alert" key={warning}>
+                  {warning}
+                </p>
+              ))}
               {local.report && !localReport.error ? (
                 <Findings findings={localReport.findings} open={openFinding} />
               ) : (
@@ -516,7 +523,7 @@ export function Analyses({
                   {localReport.error}
                 </p>
               )}
-              <details>
+              <details open={!!local.warnings?.length}>
                 <summary>Sortie de ctrace</summary>
                 <pre>
                   {local.stdout}

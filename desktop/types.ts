@@ -24,6 +24,7 @@ export interface Document {
   revision: string;
 }
 export interface LocalResult {
+  warnings?: string[];
   exitCode: number | null;
   stdout: string;
   stderr: string;

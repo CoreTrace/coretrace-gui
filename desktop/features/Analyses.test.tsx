@@ -11,6 +11,7 @@ import { Analyses, Findings } from "./Analyses";
 import { ConfirmProvider } from "../components/Dialog";
 import { desktop } from "../bridge";
 import type { CloudModel } from "../useCloud";
+import type { LocalResult } from "../types";
 vi.mock("../bridge", () => ({
   desktop: { analyseCloud: vi.fn() },
   errorMessage: (e: unknown) => String(e),
@@ -43,7 +44,7 @@ const cloud = {
   jobs: [],
   refresh: vi.fn(),
 } as unknown as CloudModel;
-function form() {
+function form(local: LocalResult | null = null) {
   const select = vi.fn();
   const notify = vi.fn();
   render(
@@ -57,7 +58,7 @@ function form() {
         clearDraft={vi.fn()}
         notify={notify}
         openFinding={vi.fn()}
-        local={null}
+        local={local}
         localRunning={false}
         openWorkspace={vi.fn()}
       />
@@ -65,6 +66,21 @@ function form() {
   );
   return { select, notify };
 }
+it("shows incomplete execution even when ctrace exits successfully", () => {
+  form({
+    exitCode: 0,
+    stdout: "Failed to create process",
+    stderr: "",
+    report: null,
+    cancelled: false,
+    warnings: ["Outil indisponible"],
+  });
+  expect(screen.getByText("Analyse incomplète")).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toContain("Outil indisponible");
+  expect(
+    screen.getByText("Sortie de ctrace").parentElement?.hasAttribute("open"),
+  ).toBe(true);
+});
 it("does not submit a paid cloud run when confirmation is dismissed", async () => {
   form();
   const user = userEvent.setup();

@@ -16,6 +16,8 @@ pub fn run() {
             workspace::save_file,
             github::clone_repository,
             analysis::choose_analyser,
+            analysis::analysis_options,
+            analysis::choose_analysis_file,
             analysis::analyse_local,
             analysis::cancel_local,
             cloud::cloud_status,
