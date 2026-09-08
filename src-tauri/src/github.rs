@@ -1,0 +1,104 @@
+use crate::workspace::{activate, Workspace, WorkspaceState};
+use std::time::Duration;
+use tauri_plugin_dialog::DialogExt;
+use tokio::process::Command;
+
+pub fn repository_url(value: &str) -> Result<(String, String), String> {
+    let value = value.trim().trim_end_matches('/').trim_end_matches(".git");
+    let name = value.strip_prefix("https://github.com/").unwrap_or(value);
+    let parts: Vec<_> = name.split('/').collect();
+    if parts.len() != 2
+        || parts.iter().any(|p| {
+            p.is_empty()
+                || p.starts_with('.')
+                || p.starts_with('-')
+                || !p
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+        })
+    {
+        return Err("Use owner/repository or https://github.com/owner/repository".into());
+    }
+    Ok((format!("https://github.com/{name}.git"), parts[1].into()))
+}
+#[tauri::command]
+pub async fn clone_repository(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, WorkspaceState>,
+    repository: String,
+) -> Result<Option<Workspace>, String> {
+    let (url, name) = repository_url(&repository)?;
+    let Some(parent) = app
+        .dialog()
+        .file()
+        .set_title("Choose where to clone the repository")
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let parent = parent
+        .into_path()
+        .map_err(|e| e.to_string())?
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let destination = parent.join(name);
+    if destination.exists() {
+        return Err(
+            "Destination already exists. Open it as a folder or choose another location.".into(),
+        );
+    }
+    let mut command = Command::new("git");
+    command
+        .args([
+            "-c",
+            "core.hooksPath=",
+            "-c",
+            "protocol.file.allow=never",
+            "clone",
+            "--",
+            &url,
+        ])
+        .arg(&destination)
+        .current_dir(&parent)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "never")
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let output = tokio::time::timeout(Duration::from_secs(300), command.output())
+        .await
+        .map_err(|_| {
+            "Clone timed out. An incomplete folder may remain; inspect it before retrying."
+        })?
+        .map_err(|e| format!("Git is required: {e}"))?;
+    if !output.status.success() {
+        return Err(format!("Git clone failed. For private repositories, sign in with Git Credential Manager or gh auth setup-git first. {}", String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok(Some(activate(&state, destination)?))
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn accepts_only_github_repository_names() {
+        assert_eq!(
+            repository_url("https://github.com/CoreTrace/coretrace-gui.git")
+                .unwrap()
+                .0,
+            "https://github.com/CoreTrace/coretrace-gui.git"
+        );
+        for bad in [
+            "--upload-pack=sh",
+            "https://evil.test/a/b",
+            "a/../b",
+            "a/b?token=x",
+            "a/-b",
+            "a/b\n",
+        ] {
+            if bad.ends_with('\n') {
+                continue;
+            }
+            assert!(repository_url(bad).is_err());
+        }
+    }
+}
