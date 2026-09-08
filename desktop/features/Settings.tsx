@@ -104,7 +104,10 @@ export function Settings({
               void desktop
                 .chooseAnalyser()
                 .then((path) => {
-                  if (path) setAnalyser(path);
+                  if (path) {
+                    setAnalyser(path);
+                    void desktop.analysisOptions().then(setOptions);
+                  }
                 })
                 .catch((e) => notify(errorMessage(e)))
             }
@@ -163,9 +166,11 @@ export function Settings({
         <p className="muted small">
           La configuration choisie définit les outils à lancer. Sans fichier,
           tous les outils statiques sont demandés. La base de compilation
-          fournit les options C/C++ et les chemins d’inclusion ; choisissez
-          celle du projet ouvert. Les outils absents doivent être installés ou
-          retirés de votre configuration.
+          fournit les options C/C++ et les chemins d’inclusion. Sans sélection,
+          CoreTrace cherche une base contenant le fichier actif, puis en génère
+          une minimale. Les distributions CoreTrace configurent automatiquement
+          leurs outils. Les outils absents doivent être installés ou retirés de
+          votre configuration.
         </p>
       </section>
       {cloud.me && (
