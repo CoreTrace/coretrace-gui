@@ -3,10 +3,34 @@
   "productName": "CoreTrace",
   "version": "6.0.0-beta.1",
   "identifier": "fr.coretrace.desktop",
-  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://127.0.0.1:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
-  "app": {
-    "windows": [{ "label": "main", "title": "CoreTrace", "width": 1440, "height": 940, "minWidth": 880, "minHeight": 600 }],
-    "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost; worker-src 'self' blob:" }
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
-  "bundle": { "active": true, "targets": "all", "icon": ["../assets/ctrace.png", "../assets/ctrace.ico", "../assets/ctrace.icns"] }
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "CoreTrace",
+        "width": 1440,
+        "height": 940,
+        "minWidth": 880,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost; worker-src 'self' blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "../assets/ctrace.png",
+      "../assets/ctrace.ico",
+      "../assets/ctrace.icns"
+    ]
+  }
 }

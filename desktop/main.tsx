@@ -1,3 +1,9 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-createRoot(document.getElementById('root')!).render(<React.StrictMode><main>CoreTrace Desktop</main></React.StrictMode>);
+import { createRoot } from "react-dom/client";
+import App from "./App";
+import { ConfirmProvider } from "./components/Dialog";
+import "./styles.css";
+createRoot(document.getElementById("root")!).render(
+  <ConfirmProvider>
+    <App />
+  </ConfirmProvider>,
+);

@@ -1,0 +1,236 @@
+import {
+  ArrowRight,
+  Building2,
+  FolderOpen,
+  GitBranch,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import type { CloudModel } from "../useCloud";
+import type { Job, Page, Workspace } from "../types";
+import { billed, date, number, outcome, usage } from "../model";
+
+export function JobRows({
+  jobs,
+  select,
+}: {
+  jobs: Job[];
+  select: (job: Job) => void;
+}) {
+  if (!jobs.length)
+    return (
+      <div className="empty">
+        <ShieldCheck size={26} />
+        <p>Aucune analyse à afficher.</p>
+        <span className="muted small">
+          Vos prochains résultats apparaîtront ici.
+        </span>
+      </div>
+    );
+  return (
+    <div className="job-rows">
+      {jobs.map((job) => (
+        <button className="job-row" key={job.id} onClick={() => select(job)}>
+          <div className="job-symbol">
+            <GitBranch size={17} />
+          </div>
+          <div className="grow">
+            <strong>{job.source?.repo_full_name ?? "Sources importées"}</strong>
+            <span className="muted small">
+              {job.source?.ref ??
+                job.source?.commit_sha?.slice(0, 8) ??
+                "Analyse cloud"}{" "}
+              · {date(job.created_at)}
+            </span>
+          </div>
+          <span className={`badge ${job.conclusion ?? job.status}`}>
+            {outcome(job)}
+          </span>
+          <span className="cost">{number(billed(job))} CTU</span>
+          <ArrowRight size={15} />
+        </button>
+      ))}
+    </div>
+  );
+}
+export function Dashboard({
+  cloud,
+  organisation,
+  workspace,
+  navigate,
+  openFolder,
+  clone,
+  login,
+  selectJob,
+}: {
+  cloud: CloudModel;
+  organisation: boolean;
+  workspace: Workspace | null;
+  navigate: (page: Page) => void;
+  openFolder: () => void;
+  clone: () => void;
+  login: () => void;
+  selectJob: (job: Job) => void;
+}) {
+  const summary = cloud.limits ? usage(cloud.limits) : null;
+  const allowance = summary?.allowance;
+  const fraction =
+    allowance && summary
+      ? Math.min(100, (summary.remaining / allowance) * 100)
+      : 0;
+  const member = cloud.me?.orgs.find((o) => o.slug === cloud.org);
+  return (
+    <div className="page dashboard">
+      <div className="eyebrow">
+        <span className="status-dot" />
+        {organisation ? "ESPACE ORGANISATION" : "VOTRE ESPACE DE TRAVAIL"}
+      </div>
+      <div className="hero">
+        <div>
+          <h1>
+            {organisation
+              ? cloud.org || "Votre organisation"
+              : `Bonjour${cloud.me?.principal.name ? `, ${cloud.me.principal.name}` : ""}.`}
+            <br />
+            {!organisation && <span>Que souhaitez-vous analyser ?</span>}
+          </h1>
+          <p>
+            {organisation
+              ? "L’activité, les ressources et les résultats de votre équipe."
+              : "Ouvrez votre code. Lancez une analyse. Comprenez chaque résultat."}
+          </p>
+        </div>
+        <div className="hero-mark">
+          <ShieldCheck size={52} strokeWidth={1.2} />
+        </div>
+      </div>
+      {!cloud.me && (
+        <div className="connection-banner">
+          <div>
+            <strong>Retrouvez votre espace CoreTrace</strong>
+            <p>
+              Connectez-vous pour accéder aux organisations, aux quotas et aux
+              analyses cloud.
+            </p>
+          </div>
+          <button onClick={login}>
+            Se connecter <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
+      <div className="action-grid">
+        <button className="action-card" onClick={openFolder}>
+          <span className="action-icon mint">
+            <FolderOpen size={23} />
+          </span>
+          <strong>Ouvrir un dossier</strong>
+          <span>Travaillez sur votre code local dans l’IDE intégré.</span>
+          <ArrowRight size={18} />
+        </button>
+        <button className="action-card" onClick={clone}>
+          <span className="action-icon lilac">
+            <GitBranch size={23} />
+          </span>
+          <strong>Charger un dépôt GitHub</strong>
+          <span>Clonez un dépôt et commencez à explorer.</span>
+          <ArrowRight size={18} />
+        </button>
+        <button className="action-card" onClick={() => navigate("analyses")}>
+          <span className="action-icon peach">
+            <Sparkles size={23} />
+          </span>
+          <strong>Lancer une analyse</strong>
+          <span>Retrouvez les outils et les résultats de CoreTrace.</span>
+          <ArrowRight size={18} />
+        </button>
+      </div>
+      {cloud.me && (
+        <>
+          <div className="section-heading">
+            <h2>
+              {organisation
+                ? "Ressources de l’organisation"
+                : "Votre organisation"}
+            </h2>
+            <button
+              className="text-button"
+              onClick={() =>
+                navigate(organisation ? "settings" : "organisation")
+              }
+            >
+              {cloud.org || "Choisir une organisation"} <ArrowRight size={14} />
+            </button>
+          </div>
+          <div className="metrics">
+            <article>
+              <span className="muted">CTU disponibles</span>
+              <strong>{summary ? number(summary.remaining) : "—"}</strong>
+              <div className="meter" aria-label="Quota restant">
+                <span style={{ width: `${fraction}%` }} />
+              </div>
+              <span className="small muted">
+                {allowance != null
+                  ? `sur ${number(allowance)} CTU pour cette période`
+                  : "Allocation de période non communiquée"}
+              </span>
+            </article>
+            <article>
+              <span className="muted">Consommation de la période</span>
+              <strong>
+                {summary?.used != null ? number(summary.used) : "—"}{" "}
+                <small>CTU</small>
+              </strong>
+              <span className="small muted">
+                {cloud.limits
+                  ? `Renouvellement le ${new Date(cloud.limits.period_ends_at).toLocaleDateString("fr-FR")}`
+                  : "Connexion à la plateforme nécessaire"}
+              </span>
+            </article>
+            <article>
+              <span className="muted">Plan actuel</span>
+              <strong className="plan-name">{cloud.limits?.plan ?? "—"}</strong>
+              <span className="small muted">
+                <Building2 size={13} />{" "}
+                {member
+                  ? `${member.role} · ${member.access_state}`
+                  : "Aucune organisation sélectionnée"}
+              </span>
+            </article>
+          </div>
+          {summary &&
+            allowance != null &&
+            summary.remaining < allowance / 10 && (
+              <div className="notice">
+                Votre quota est presque épuisé. Consultez les limites de votre
+                organisation avant de relancer une analyse.
+              </div>
+            )}
+        </>
+      )}
+      {workspace && (
+        <button className="resume-card" onClick={() => navigate("workspace")}>
+          <FolderOpen size={20} />
+          <div className="grow">
+            <strong>Reprendre {workspace.name}</strong>
+            <span className="muted small">{workspace.path}</span>
+          </div>
+          <ArrowRight size={18} />
+        </button>
+      )}
+      <div className="section-heading">
+        <div>
+          <h2>Analyses récentes</h2>
+          <p className="muted small">
+            {cloud.me
+              ? "Les derniers résultats de l’organisation sélectionnée."
+              : "Connectez-vous pour retrouver votre historique."}
+          </p>
+        </div>
+        <button className="text-button" onClick={() => navigate("analyses")}>
+          Tout voir <ArrowRight size={14} />
+        </button>
+      </div>
+      <JobRows jobs={cloud.jobs.slice(0, 10)} select={selectJob} />
+    </div>
+  );
+}
