@@ -18,8 +18,78 @@ use tokio::{
 #[derive(Default)]
 pub struct AnalysisState {
     executable: Mutex<Option<PathBuf>>,
+    options: Mutex<AnalysisOptions>,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
     running: AtomicBool,
+}
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalysisOptions {
+    config: Option<PathBuf>,
+    compile_commands: Option<PathBuf>,
+}
+
+// Keep canonical paths for filesystem authorization; normalize only at the CLI boundary.
+fn tool_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let value = path.to_string_lossy();
+        let value = if let Some(unc) = value.strip_prefix(r"\\?\UNC\") {
+            format!("//{unc}")
+        } else {
+            value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
+        };
+        PathBuf::from(value.replace('\\', "/"))
+    }
+    #[cfg(not(windows))]
+    path.to_owned()
+}
+
+#[tauri::command]
+pub fn analysis_options(state: tauri::State<'_, AnalysisState>) -> Result<AnalysisOptions, String> {
+    Ok(state.options.lock().map_err(|e| e.to_string())?.clone())
+}
+
+#[tauri::command]
+pub async fn choose_analysis_file(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AnalysisState>,
+    kind: String,
+    clear: bool,
+) -> Result<AnalysisOptions, String> {
+    let title = match kind.as_str() {
+        "config" => "Select the ctrace tool configuration",
+        "compileCommands" => "Select compile_commands.json for this project",
+        _ => return Err("Unknown analysis setting".into()),
+    };
+    let path = if clear {
+        None
+    } else {
+        let Some(file) = app
+            .dialog()
+            .file()
+            .set_title(title)
+            .add_filter("JSON", &["json"])
+            .blocking_pick_file()
+        else {
+            return analysis_options(state);
+        };
+        let path = file
+            .into_path()
+            .map_err(|e| e.to_string())?
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        if !path.is_file() {
+            return Err("Choose a JSON file".into());
+        }
+        Some(path)
+    };
+    let mut options = state.options.lock().map_err(|e| e.to_string())?;
+    match kind.as_str() {
+        "config" => options.config = path,
+        _ => options.compile_commands = path,
+    }
+    Ok(options.clone())
 }
 struct Running<'a>(&'a AnalysisState);
 impl Drop for Running<'_> {
@@ -38,6 +108,56 @@ pub struct ResultView {
     stderr: String,
     report: Option<String>,
     cancelled: bool,
+    warnings: Vec<String>,
+}
+
+fn execution_warnings(stdout: &str, stderr: &str, has_report: bool) -> Vec<String> {
+    let output = format!("{stdout}\n{stderr}").to_lowercase();
+    let mut warnings = Vec::new();
+    if [
+        "failed to create process",
+        "can't open file",
+        "could not find or open any of the paths",
+        "failed to analyze:",
+        "compilation failed:",
+        "model load error:",
+        "model ignored:",
+    ]
+    .iter()
+    .any(|message| output.contains(message))
+    {
+        warnings.push("Un ou plusieurs outils n’ont pas pu terminer l’analyse. Vérifiez leur installation, la configuration et les chemins d’inclusion dans la sortie de ctrace.".into());
+    }
+    if !has_report {
+        warnings.push("Aucun rapport structuré n’a été produit. L’absence de diagnostics ne confirme pas la réussite de l’analyse.".into());
+    }
+    warnings
+}
+
+// Some ctrace tools emit SARIF to their captured output instead of --report-file.
+fn sarif_from_output(stdout: &str, stderr: &str) -> Option<String> {
+    let mut runs = Vec::new();
+    for mut remaining in [stdout, stderr] {
+        while !remaining.is_empty() {
+            let line_end = remaining.find('\n').map_or(remaining.len(), |i| i + 1);
+            let candidate = remaining.trim_start();
+            if candidate.starts_with('{') {
+                let mut stream =
+                    serde_json::Deserializer::from_str(candidate).into_iter::<serde_json::Value>();
+                if let Some(Ok(value)) = stream.next() {
+                    if value["version"] == "2.1.0" {
+                        if let Some(report_runs) = value["runs"].as_array() {
+                            runs.extend(report_runs.iter().cloned());
+                        }
+                    }
+                    remaining = &candidate[stream.byte_offset()..];
+                    continue;
+                }
+            }
+            remaining = &remaining[line_end..];
+        }
+    }
+    (!runs.is_empty()).then(|| serde_json::json!({"version":"2.1.0", "runs":runs}).to_string())
 }
 
 #[tauri::command]
@@ -61,7 +181,7 @@ pub async fn choose_analyser(
     if !path.is_file() {
         return Err("Choose an installed ctrace executable".into());
     }
-    let display = path.display().to_string();
+    let display = tool_path(&path).display().to_string();
     *state.executable.lock().map_err(|e| e.to_string())? = Some(path);
     Ok(Some(display))
 }
@@ -114,7 +234,8 @@ pub async fn analyse_local(
         let mut active = state.cancel.lock().map_err(|e| e.to_string())?;
         *active = Some(sender);
     }
-    run_analysis(&executable, &root, &input, receiver).await
+    let options = state.options.lock().map_err(|e| e.to_string())?.clone();
+    run_analysis(&executable, &root, &input, &options, receiver).await
 }
 
 async fn stop_process(child: &mut tokio::process::Child) -> Result<(), String> {
@@ -150,19 +271,28 @@ async fn run_analysis(
     executable: &Path,
     root: &Path,
     input: &Path,
+    options: &AnalysisOptions,
     mut receiver: oneshot::Receiver<()>,
 ) -> Result<ResultView, String> {
     let temp = tempfile::tempdir().map_err(|e| e.to_string())?;
     let report_path = temp.path().join("report.sarif");
     let mut command = Command::new(executable);
+    if let Some(config) = &options.config {
+        command.arg("--config").arg(tool_path(config));
+    } else {
+        command.arg("--static");
+    }
+    if let Some(database) = &options.compile_commands {
+        command.arg("--compile-commands").arg(tool_path(database));
+    }
     command
         .arg("--input")
-        .arg(input)
-        .args(["--static", "--sarif-format", "--report-file"])
-        .arg(&report_path)
+        .arg(tool_path(input))
+        .args(["--sarif-format", "--report-file"])
+        .arg(tool_path(&report_path))
         .arg("--output-file")
-        .arg(temp.path().join("ctrace.out"))
-        .current_dir(root)
+        .arg(tool_path(&temp.path().join("ctrace.out")))
+        .current_dir(tool_path(root))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
@@ -198,13 +328,17 @@ async fn run_analysis(
     let report = std::fs::metadata(&report_path)
         .ok()
         .filter(|m| m.len() <= 10 * 1024 * 1024)
-        .and_then(|_| std::fs::read_to_string(report_path).ok());
+        .and_then(|_| std::fs::read_to_string(report_path).ok())
+        .filter(|text| !text.trim().is_empty())
+        .or_else(|| sarif_from_output(&stdout_text, &stderr_text));
+    let warnings = execution_warnings(&stdout_text, &stderr_text, report.is_some());
     Ok(ResultView {
         exit_code: status.code(),
         stdout: stdout_text,
         stderr: stderr_text,
         report,
         cancelled,
+        warnings,
     })
 }
 #[tauri::command]
@@ -225,6 +359,33 @@ pub async fn cancel_local(state: tauri::State<'_, AnalysisState>) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn collects_complete_sarif_documents_from_tool_output() {
+        let stdout = "Running cppcheck\n{\n\"version\":\"2.1.0\",\"runs\":[{\"results\":[]}]\n}\nDiagnostics summary\n";
+        let report: serde_json::Value =
+            serde_json::from_str(&sarif_from_output(stdout, stdout).unwrap()).unwrap();
+        assert_eq!(report["runs"].as_array().unwrap().len(), 2);
+        assert!(sarif_from_output("{broken\n{\"ok\":true}\n", "").is_none());
+        assert!(sarif_from_output("{\"version\":\"2.1.0\",\"runs\":[", "").is_none());
+    }
+    #[test]
+    fn tool_failures_are_not_confused_with_a_clean_report() {
+        for failure in [
+            "Error: Failed to create process",
+            "python: can't open file 'flawfinder.py'",
+            "Failed to analyze: file.cpp",
+            "Compilation failed: file.cpp",
+        ] {
+            assert!(!execution_warnings(failure, "", true).is_empty());
+        }
+        assert!(!execution_warnings("", "", false).is_empty());
+        assert!(execution_warnings(
+            "Diagnostics summary: error=1",
+            "file.c: error: buffer overflow",
+            true
+        )
+        .is_empty());
+    }
     #[tokio::test]
     async fn native_process_returns_reports_and_can_be_cancelled() {
         let dir = tempfile::tempdir().unwrap();
@@ -249,7 +410,16 @@ mod tests {
         let input = dir.path().join("file with spaces.c");
         std::fs::write(&input, "int main() {}").unwrap();
         let (_sender, receiver) = oneshot::channel();
-        let result = run_analysis(&executable, dir.path(), &input, receiver)
+        let input = input.canonicalize().unwrap();
+        let config = dir.path().join("tool config.json");
+        let database = dir.path().join("compile_commands.json");
+        std::fs::write(&config, "{}").unwrap();
+        std::fs::write(&database, "[]").unwrap();
+        let options = AnalysisOptions {
+            config: Some(config.canonicalize().unwrap()),
+            compile_commands: Some(database.canonicalize().unwrap()),
+        };
+        let result = run_analysis(&executable, dir.path(), &input, &options, receiver)
             .await
             .unwrap();
         assert_eq!(result.exit_code, Some(1));
@@ -265,12 +435,34 @@ mod tests {
         });
         let result = tokio::time::timeout(
             Duration::from_secs(10),
-            run_analysis(&executable, dir.path(), &input, receiver),
+            run_analysis(
+                &executable,
+                dir.path(),
+                &input,
+                &AnalysisOptions::default(),
+                receiver,
+            ),
         )
         .await
         .unwrap()
         .unwrap();
         assert!(result.cancelled);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn external_tools_receive_compatible_disk_and_unc_paths() {
+        assert_eq!(
+            tool_path(Path::new(r"\\?\C:\work folder\file.cpp")),
+            PathBuf::from("C:/work folder/file.cpp")
+        );
+        assert_eq!(
+            tool_path(Path::new(r"\\?\UNC\server\share\file.cpp")),
+            PathBuf::from("//server/share/file.cpp")
+        );
+        assert_eq!(
+            tool_path(Path::new(r"C:\work\file.cpp")),
+            PathBuf::from("C:/work/file.cpp")
+        );
     }
     #[tokio::test]
     async fn output_is_bounded_without_blocking_the_child() {

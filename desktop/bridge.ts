@@ -9,6 +9,10 @@ import type {
 } from "./types";
 
 export const native = isTauri();
+export interface AnalysisOptions {
+  config: string | null;
+  compileCommands: string | null;
+}
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!native)
     return Promise.reject(
@@ -33,6 +37,9 @@ export const desktop = {
     revision: string,
   ) => call<Document>("save_file", { workspaceId, path, content, revision }),
   chooseAnalyser: () => call<string | null>("choose_analyser"),
+  analysisOptions: () => call<AnalysisOptions>("analysis_options"),
+  chooseAnalysisFile: (kind: keyof AnalysisOptions, clear = false) =>
+    call<AnalysisOptions>("choose_analysis_file", { kind, clear }),
   analyseLocal: (workspaceId: string, path: string) =>
     call<LocalResult>("analyse_local", { workspaceId, path }),
   cancelLocal: () => call<void>("cancel_local"),
@@ -41,7 +48,7 @@ export const desktop = {
       ? call<{ signedIn: boolean; baseUrl: string }>("cloud_status")
       : Promise.resolve({
           signedIn: false,
-          baseUrl: "https://coretrace.fr/v1",
+          baseUrl: "https://api.coretrace.fr/v1",
         }),
   login: () => call<DeviceCode>("login_start"),
   pollLogin: () => call<boolean>("login_poll"),

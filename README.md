@@ -44,11 +44,19 @@ production credentials are embedded in the preview.
   with its analysis tools installed. Open a source file, save it and run static analysis.
   SARIF findings, stdout/stderr and cancellation are available. The existing Linux
   `bin/ctrace` cannot run directly on Windows.
+  Settings also accepts a tool configuration (`--config`) and the project's
+  `compile_commands.json` (`--compile-commands`). With a configuration, its tool
+  selection is respected; without one, `--static` requests all static tools.
+  These choices last for the session. For the Windows CoreTrace distribution,
+  select `dist/windows/config/tool-config.json` to use its packaged tool selection,
+  and the matching build's `compile_commands.json` for compiler options. The database
+  must contain an entry for the active source file; some helper files are not build targets.
+  Missing tools must be installed or excluded in the chosen configuration.
 
-The API defaults to `https://coretrace.fr/v1`. Set `CORETRACE_BASE_URL` before launch
+The API defaults to `https://api.coretrace.fr/v1`. Set `CORETRACE_BASE_URL` before launch
 for another deployment; `/v1` is added if absent. HTTPS is required except for loopback
 API development addresses. Device-browser and signed report URLs require HTTPS.
-Web account management links target coretrace.fr.
+Web account management links target app.coretrace.fr.
 
 ## Build and verify
 

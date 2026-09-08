@@ -1,6 +1,6 @@
 import { ArrowUpRight, LogOut, Settings2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, errorMessage } from "../bridge";
+import { desktop, errorMessage, native, type AnalysisOptions } from "../bridge";
 import type { CloudModel } from "../useCloud";
 import type { Member } from "../types";
 export function Settings({
@@ -18,6 +18,17 @@ export function Settings({
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [memberError, setMemberError] = useState("");
+  const [options, setOptions] = useState<AnalysisOptions>({
+    config: null,
+    compileCommands: null,
+  });
+  useEffect(() => {
+    if (native)
+      void desktop
+        .analysisOptions()
+        .then(setOptions)
+        .catch((e) => notify(errorMessage(e)));
+  }, [notify]);
   useEffect(() => {
     let active = true;
     setMembers([]);
@@ -104,6 +115,57 @@ export function Settings({
         <p className="muted small">
           Le lancement est explicite depuis le fichier actif de l’IDE. Le choix
           vaut pour cette session.
+        </p>
+        {(
+          [
+            ["config", "Configuration des outils", "Choisir la configuration"],
+            [
+              "compileCommands",
+              "Compilation du projet",
+              "Choisir compile_commands.json",
+            ],
+          ] as const
+        ).map(([kind, label, button]) => (
+          <div className="setting-row" key={kind}>
+            <div>
+              <strong>{label}</strong>
+              <p className="path-value">
+                {options[kind] || "Aucun fichier sélectionné"}
+              </p>
+            </div>
+            <div className="inline">
+              <button
+                onClick={() =>
+                  void desktop
+                    .chooseAnalysisFile(kind)
+                    .then(setOptions)
+                    .catch((e) => notify(errorMessage(e)))
+                }
+              >
+                {button}
+              </button>
+              {options[kind] && (
+                <button
+                  aria-label={`Retirer : ${label}`}
+                  onClick={() =>
+                    void desktop
+                      .chooseAnalysisFile(kind, true)
+                      .then(setOptions)
+                      .catch((e) => notify(errorMessage(e)))
+                  }
+                >
+                  Retirer
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        <p className="muted small">
+          La configuration choisie définit les outils à lancer. Sans fichier,
+          tous les outils statiques sont demandés. La base de compilation
+          fournit les options C/C++ et les chemins d’inclusion ; choisissez
+          celle du projet ouvert. Les outils absents doivent être installés ou
+          retirés de votre configuration.
         </p>
       </section>
       {cloud.me && (

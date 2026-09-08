@@ -5,6 +5,9 @@ use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
+const DEFAULT_API_URL: &str = "https://api.coretrace.fr";
+const ACCOUNT_URL: &str = "https://app.coretrace.fr/app";
+
 pub struct Cloud(pub Mutex<Session>);
 pub struct Session {
     client: Client,
@@ -48,7 +51,7 @@ pub fn validate_base(value: &str) -> Result<String, String> {
 impl Cloud {
     pub fn new() -> Result<Self, String> {
         let base = validate_base(
-            &std::env::var("CORETRACE_BASE_URL").unwrap_or_else(|_| "https://coretrace.fr".into()),
+            &std::env::var("CORETRACE_BASE_URL").unwrap_or_else(|_| DEFAULT_API_URL.into()),
         )?;
         let client = Client::builder()
             .user_agent("coretrace-desktop/6.0.0-beta.1")
@@ -108,8 +111,14 @@ impl Session {
         let value = if bytes.is_empty() {
             Value::Null
         } else {
-            serde_json::from_slice(&bytes)
-                .map_err(|_| format!("Platform returned an invalid response (HTTP {status})"))?
+            serde_json::from_slice(&bytes).map_err(|_| {
+                let endpoint = format!("{}{path}", self.base);
+                if status == 404 {
+                    format!("API endpoint not found (HTTP 404): {endpoint}. Check the platform address; the public website does not serve the API.")
+                } else {
+                    format!("Platform returned a non-JSON response (HTTP {status}): {endpoint}")
+                }
+            })?
         };
         Ok((status, value))
     }
@@ -461,9 +470,9 @@ pub async fn open_account(cloud: tauri::State<'_, Cloud>, page: String) -> Resul
             .ok_or("No sign-in in progress")?
             .uri
             .clone(),
-        "dashboard" => "https://coretrace.fr/app".into(),
-        "repositories" => "https://coretrace.fr/app/repositories".into(),
-        "settings" => "https://coretrace.fr/app/settings".into(),
+        "dashboard" => ACCOUNT_URL.into(),
+        "repositories" => format!("{ACCOUNT_URL}/repositories"),
+        "settings" => format!("{ACCOUNT_URL}/settings"),
         _ => return Err("Unknown account page".into()),
     };
     validate_external(&url)?;
@@ -474,6 +483,12 @@ mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Read, Write};
     fn fake_platform() -> (Session, std::thread::JoinHandle<String>) {
+        fake_response("200 OK", "{\"ok\":true}")
+    }
+    fn fake_response(
+        status: &'static str,
+        response: &'static str,
+    ) -> (Session, std::thread::JoinHandle<String>) {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}/v1", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || {
@@ -505,7 +520,12 @@ mod tests {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             request.push_str(&String::from_utf8(body).unwrap());
-            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}").unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            )
+            .unwrap();
             request
         });
         (
@@ -558,9 +578,10 @@ mod tests {
     #[test]
     fn validates_platform_origin_and_identifiers() {
         assert_eq!(
-            validate_base("https://coretrace.fr").unwrap(),
-            "https://coretrace.fr/v1"
+            validate_base(DEFAULT_API_URL).unwrap(),
+            "https://api.coretrace.fr/v1"
         );
+        assert_eq!(ACCOUNT_URL, "https://app.coretrace.fr/app");
         assert_eq!(
             validate_base("http://127.0.0.1:8080/v1/").unwrap(),
             "http://127.0.0.1:8080/v1"
@@ -576,5 +597,16 @@ mod tests {
         for bad in ["..", "org/jobs", "org?x=y", "org\r\nX-Org:x"] {
             assert!(segment(bad).is_err());
         }
+    }
+    #[tokio::test]
+    async fn html_404_identifies_the_misconfigured_endpoint() {
+        let (session, server) = fake_response("404 Not Found", "<html>Not found</html>");
+        let error = session
+            .send(Method::POST, "/auth/device", None, None, false)
+            .await
+            .unwrap_err();
+        assert!(error.contains("API endpoint not found (HTTP 404)"));
+        assert!(error.contains(&format!("{}/auth/device", session.base)));
+        server.join().unwrap();
     }
 }
