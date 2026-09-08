@@ -8,3 +8,8 @@ node_modules
 .claw-logs
 ctrace-report.txt
 bundle.js
+src-tauri/target/
+src-tauri/gen/
+coverage/
+*.tsbuildinfo
+
