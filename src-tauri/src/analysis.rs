@@ -45,6 +45,93 @@ fn tool_path(path: &Path) -> PathBuf {
     path.to_owned()
 }
 
+fn database_contains(database: &Path, input: &Path) -> bool {
+    let Ok(metadata) = database.metadata() else {
+        return false;
+    };
+    if metadata.len() > 10 * 1024 * 1024 {
+        return false;
+    }
+    let Ok(bytes) = std::fs::read(database) else {
+        return false;
+    };
+    let Ok(rows) = serde_json::from_slice::<Vec<serde_json::Value>>(&bytes) else {
+        return false;
+    };
+    rows.iter().any(|row| {
+        let Some(file) = row["file"].as_str() else {
+            return false;
+        };
+        let path = PathBuf::from(file);
+        let candidate = if path.is_absolute() {
+            path
+        } else if let Some(directory) = row["directory"].as_str() {
+            PathBuf::from(directory).join(path)
+        } else {
+            return false;
+        };
+        candidate.canonicalize().is_ok_and(|path| path == input)
+    })
+}
+
+fn discover_database(root: &Path, input: &Path) -> Option<PathBuf> {
+    let mut folders = vec![(root.to_owned(), 0_u8)];
+    let mut databases = Vec::new();
+    while let Some((folder, depth)) = folders.pop() {
+        let Ok(entries) = std::fs::read_dir(folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && entry.file_name() == "compile_commands.json" {
+                databases.push(path);
+            } else if depth < 3
+                && path.is_dir()
+                && entry.file_name() != ".git"
+                && entry.file_name() != "node_modules"
+            {
+                folders.push((path, depth + 1));
+            }
+        }
+    }
+    databases.sort();
+    databases
+        .into_iter()
+        .find(|path| database_contains(path, input))
+}
+
+fn generated_database(root: &Path, input: &Path, destination: &Path) -> Result<PathBuf, String> {
+    let compiler = if input
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("c"))
+    {
+        "clang"
+    } else {
+        "clang++"
+    };
+    let mut arguments = vec![
+        compiler.into(),
+        "-c".into(),
+        tool_path(input).display().to_string(),
+    ];
+    let include = root.join("include");
+    if include.is_dir() {
+        arguments.insert(1, format!("-I{}", tool_path(&include).display()));
+    }
+    let database = destination.join("compile_commands.json");
+    let rows = serde_json::json!([{
+        "directory": tool_path(input.parent().unwrap_or(root)).display().to_string(),
+        "file": tool_path(input).display().to_string(),
+        "arguments": arguments,
+    }]);
+    std::fs::write(
+        &database,
+        serde_json::to_vec(&rows).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(database)
+}
+
 #[tauri::command]
 pub fn analysis_options(state: tauri::State<'_, AnalysisState>) -> Result<AnalysisOptions, String> {
     Ok(state.options.lock().map_err(|e| e.to_string())?.clone())
@@ -183,6 +270,23 @@ pub async fn choose_analyser(
     }
     let display = tool_path(&path).display().to_string();
     *state.executable.lock().map_err(|e| e.to_string())? = Some(path);
+    let mut options = state.options.lock().map_err(|e| e.to_string())?;
+    if options.config.is_none() {
+        let selected = PathBuf::from(&display);
+        let candidates = [
+            selected
+                .parent()
+                .map(|parent| parent.join("config/tool-config.json")),
+            selected
+                .parent()
+                .and_then(Path::parent)
+                .map(|parent| parent.join("config/tool-config.json")),
+        ];
+        options.config = candidates
+            .into_iter()
+            .flatten()
+            .find_map(|candidate| candidate.canonicalize().ok());
+    }
     Ok(Some(display))
 }
 async fn capture(mut reader: impl AsyncRead + Unpin) -> String {
@@ -276,15 +380,20 @@ async fn run_analysis(
 ) -> Result<ResultView, String> {
     let temp = tempfile::tempdir().map_err(|e| e.to_string())?;
     let report_path = temp.path().join("report.sarif");
+    let database = if let Some(database) = &options.compile_commands {
+        database.to_owned()
+    } else if let Some(database) = discover_database(root, input) {
+        database
+    } else {
+        generated_database(root, input, temp.path())?
+    };
     let mut command = Command::new(executable);
     if let Some(config) = &options.config {
         command.arg("--config").arg(tool_path(config));
     } else {
         command.arg("--static");
     }
-    if let Some(database) = &options.compile_commands {
-        command.arg("--compile-commands").arg(tool_path(database));
-    }
+    command.arg("--compile-commands").arg(tool_path(&database));
     command
         .arg("--input")
         .arg(tool_path(input))
@@ -292,7 +401,13 @@ async fn run_analysis(
         .arg(tool_path(&report_path))
         .arg("--output-file")
         .arg(tool_path(&temp.path().join("ctrace.out")))
-        .current_dir(tool_path(root))
+        .current_dir(tool_path(
+            options
+                .config
+                .as_deref()
+                .and_then(Path::parent)
+                .unwrap_or(root),
+        ))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
@@ -359,6 +474,37 @@ pub async fn cancel_local(state: tauri::State<'_, AnalysisState>) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn discovers_only_a_database_that_contains_the_active_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("src/main.cpp");
+        std::fs::create_dir_all(input.parent().unwrap()).unwrap();
+        std::fs::write(&input, "int main() {}").unwrap();
+        let input = input.canonicalize().unwrap();
+        let wrong = dir.path().join("a/compile_commands.json");
+        let right = dir.path().join("build/compile_commands.json");
+        std::fs::create_dir_all(wrong.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(right.parent().unwrap()).unwrap();
+        std::fs::write(
+            &wrong,
+            r#"[{"directory":"C:/elsewhere","file":"other.cpp","arguments":["clang++"]}]"#,
+        )
+        .unwrap();
+        std::fs::write(&right, serde_json::json!([{"directory": input.parent().unwrap(), "file": input, "arguments": ["clang++"]}]).to_string()).unwrap();
+        assert_eq!(discover_database(dir.path(), &input).unwrap(), right);
+    }
+    #[test]
+    fn generates_a_minimal_database_with_the_workspace_include_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("include")).unwrap();
+        let input = dir.path().join("main.cpp");
+        std::fs::write(&input, "int main() {}").unwrap();
+        let database = generated_database(dir.path(), &input, dir.path()).unwrap();
+        let text = std::fs::read_to_string(database).unwrap();
+        assert!(text.contains("clang++"));
+        assert!(text.contains("-I"));
+        assert!(text.contains("main.cpp"));
+    }
     #[test]
     fn collects_complete_sarif_documents_from_tool_output() {
         let stdout = "Running cppcheck\n{\n\"version\":\"2.1.0\",\"runs\":[{\"results\":[]}]\n}\nDiagnostics summary\n";

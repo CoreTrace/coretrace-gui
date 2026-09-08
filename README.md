@@ -45,12 +45,14 @@ production credentials are embedded in the preview.
   SARIF findings, stdout/stderr and cancellation are available. The existing Linux
   `bin/ctrace` cannot run directly on Windows.
   Settings also accepts a tool configuration (`--config`) and the project's
-  `compile_commands.json` (`--compile-commands`). With a configuration, its tool
+  `compile_commands.json` (`--compile-commands`). The packaged configuration is
+  selected automatically next to a CoreTrace distribution. With a configuration, its tool
   selection is respected; without one, `--static` requests all static tools.
   These choices last for the session. For the Windows CoreTrace distribution,
   select `dist/windows/config/tool-config.json` to use its packaged tool selection,
-  and the matching build's `compile_commands.json` for compiler options. The database
-  must contain an entry for the active source file; some helper files are not build targets.
+  and the matching build's `compile_commands.json` for compiler options. When none is
+  selected, the desktop searches for a database containing the active file and otherwise
+  generates a temporary entry with clang and the workspace's `include` directory.
   Missing tools must be installed or excluded in the chosen configuration.
 
 The API defaults to `https://api.coretrace.fr/v1`. Set `CORETRACE_BASE_URL` before launch
