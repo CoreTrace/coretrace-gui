@@ -212,6 +212,12 @@ fn segment(value: &str) -> Result<&str, String> {
     }
     Ok(value)
 }
+fn verification_uri(value: &str, user_code: &str) -> Result<String, String> {
+    validate_external(value)?;
+    let mut uri = url::Url::parse(value).map_err(|_| "Invalid verification URI")?;
+    uri.query_pairs_mut().append_pair("user_code", user_code);
+    Ok(uri.to_string())
+}
 #[tauri::command]
 pub async fn cloud_status(cloud: tauri::State<'_, Cloud>) -> Result<Status, String> {
     let mut session = cloud.0.lock().await;
@@ -236,7 +242,8 @@ pub async fn login_start(cloud: tauri::State<'_, Cloud>) -> Result<Value, String
         .as_str()
         .ok_or("Missing verification URI")?
         .to_owned();
-    validate_external(&uri)?;
+    let user_code = value["user_code"].as_str().ok_or("Missing user code")?;
+    let uri = verification_uri(&uri, user_code)?;
     let interval = Duration::from_secs(value["interval"].as_u64().unwrap_or(5).max(1));
     let expires = value["expires_in"].as_u64().unwrap_or(600);
     s.device = Some(Device {
@@ -247,7 +254,7 @@ pub async fn login_start(cloud: tauri::State<'_, Cloud>) -> Result<Value, String
         interval,
     });
     Ok(
-        json!({"userCode":value["user_code"], "verificationUri":uri, "interval":interval.as_secs(), "expiresIn":expires}),
+        json!({"userCode":user_code, "verificationUri":uri, "interval":interval.as_secs(), "expiresIn":expires}),
     )
 }
 #[tauri::command]
@@ -597,6 +604,17 @@ mod tests {
         for bad in ["..", "org/jobs", "org?x=y", "org\r\nX-Org:x"] {
             assert!(segment(bad).is_err());
         }
+    }
+    #[test]
+    fn verification_link_prefills_the_browser_code() {
+        assert_eq!(
+            verification_uri(
+                "https://app.coretrace.fr/v1/auth/device/verify",
+                "BCDF-GHJK"
+            )
+            .unwrap(),
+            "https://app.coretrace.fr/v1/auth/device/verify?user_code=BCDF-GHJK"
+        );
     }
     #[tokio::test]
     async fn html_404_identifies_the_misconfigured_endpoint() {
