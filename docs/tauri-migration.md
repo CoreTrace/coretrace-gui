@@ -10,8 +10,9 @@ and editable Monaco documents, and local/cloud analysis execution with visible r
 API ownership remains in Coretrace-Entreprise/coretrace-control. Contracts inspected:
 `openapi/openapi.yaml`, coretrace-cli device authentication and coretrace-web dashboard
 and analysis helpers. Remote repository analyses use the SCM endpoint; local analyses
-use an explicitly selected installed ctrace executable. Repository code is never executed
-on opening or cloning. Cloud actions that spend CTU require an explicit user action.
+use an explicitly selected installed ctrace executable. Opening or cloning does not
+launch a build or analysis. Git uses the locally configured helpers and filters.
+Cloud actions that spend CTU require an explicit user action.
 
 ## Migration and rollback
 

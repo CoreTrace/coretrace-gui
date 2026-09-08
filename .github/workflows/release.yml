@@ -1,121 +1,55 @@
-name: Build Electron App
-
-# Pushes to master and develop only run the test suite. Artifacts are published
-# from version tags alone (v5.1.0, v5.2.0-beta.1, ...), so merging a PR never
-# republishes a release, and the tag is the single trigger for a build.
+name: CoreTrace Desktop
 on:
   push:
-    branches:
-      - master
-      - develop
-    tags:
-      - "v*"
+    branches: [master, develop, feat/tauri-react-desktop]
+    tags: ["v*"]
   pull_request:
-    branches:
-      - master
-
+    branches: [master]
+  workflow_dispatch:
 permissions:
   contents: read
-
 jobs:
-  test:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.15.0
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build renderer bundle
-        run: npm run build:renderer
-
-      - name: Run tests
-        run: npm test
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: test
-    # Only this job publishes, so only this job gets a write-capable token.
-    permissions:
-      contents: write
-    runs-on: ${{ matrix.os }}
+  desktop:
     strategy:
       fail-fast: false
       matrix:
-        # windows-2022 pinned: windows-latest (now windows-2025, build 26100)
-        # breaks node-gyp VS detection during the node-pty native rebuild.
-        #
-        # macOS ships two jobs rather than one universal build: node-pty and
-        # node-llama-cpp are native modules, so each architecture is compiled on
-        # a runner of that architecture. macos-latest is Apple Silicon;
-        # macos-15-intel is the x64 runner that replaced the retired macos-13
-        # (a macos-13 job sits queued forever instead of failing).
-        # The builds are unsigned — see the note below.
-        os: [windows-2022, ubuntu-24.04, macos-latest, macos-15-intel]
-
+        os: [windows-2022, ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22.15.0
-          cache: "npm"
-
-      # The tag is what users see; package.json is what electron-builder writes
-      # into the artifacts and the update manifests. If they disagree, the
-      # updater serves a version nobody can find, so stop before publishing.
-      - name: Verify the tag matches package.json
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg."
-            exit 1
-          fi
-          echo "Releasing $pkg from tag $GITHUB_REF_NAME."
-
-      # Only `-beta.N` prereleases are recognised: electron-builder names the
-      # update manifest after the prerelease identifier, and `beta` is the one
-      # the in-app channel selector reads (see updaterHandlers.js).
-      - name: Determine release channel
-        id: channel
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          if [[ "$version" == *-* ]]; then
-            if [[ ! "$version" =~ -beta\.[0-9]+$ ]]; then
-              echo "::error::Prerelease versions must end in -beta.N (got $version)."
-              exit 1
-            fi
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Install dependencies
-        run: npm ci
-
-      # macOS artifacts are deliberately unsigned and un-notarized: that needs a
-      # paid Apple Developer account, and we would rather ship a build testers
-      # can run today. Gatekeeper blocks the first launch, so users open the app
-      # once with right-click > Open, or run `xattr -cr /Applications/CtraceGUI.app`.
-      # To sign later, restore an Apple certificate here and set `identity`,
-      # `hardenedRuntime` and `notarize` in the `mac` block of package.json.
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-          EP_PRE_RELEASE: ${{ steps.channel.outputs.prerelease }}
-        run: npm run dist:publish
+          node-version: "22.19.0"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: npm ci
+      - name: Verify release versions
+        run: node scripts/check-desktop-version.cjs
+      - run: npm run check
+      - run: npm run format:check
+      - run: npm test
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Build desktop
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: npm run tauri -- build --no-bundle
+      - name: Build release installers
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coretrace-desktop-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            src-tauri/target/release/coretrace-desktop.exe
+            src-tauri/target/release/coretrace-desktop
+            src-tauri/target/release/bundle/**
+          if-no-files-found: error

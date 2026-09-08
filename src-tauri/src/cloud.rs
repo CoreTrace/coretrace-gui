@@ -93,12 +93,18 @@ impl Session {
         if let Some(body) = body {
             request = request.json(&body);
         }
-        let response = request
+        let mut response = request
             .send()
             .await
             .map_err(|e| format!("Platform unavailable: {e}"))?;
         let status = response.status().as_u16();
-        let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            if bytes.len() + chunk.len() > 8 * 1024 * 1024 {
+                return Err("Platform response exceeds 8 MiB".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
         let value = if bytes.is_empty() {
             Value::Null
         } else {
@@ -116,13 +122,16 @@ impl Session {
             .as_str()
             .map(str::to_owned)
             .or_else(|| self.refresh.clone());
-        if let Some(token) = &refresh {
-            self.credential()?
-                .set_password(token)
-                .map_err(|e| format!("Could not save session in the OS credential store: {e}"))?;
-        }
         self.access = Some(access);
         self.refresh = refresh;
+        if let Some(token) = &self.refresh {
+            let credential = self.credential()?;
+            if let Err(error) = credential.set_password(token) {
+                // A rotated token must never be replaced by the old, already consumed token.
+                let _ = credential.delete_credential();
+                return Err(format!("Session is available in memory, but could not be saved in the OS credential store: {error}"));
+            }
+        }
         Ok(())
     }
     async fn refresh(&mut self) -> Result<(), String> {
@@ -463,6 +472,89 @@ pub async fn open_account(cloud: tauri::State<'_, Cloud>, page: String) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader, Read, Write};
+    fn fake_platform() -> (Session, std::thread::JoinHandle<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut request = String::new();
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line.to_lowercase().starts_with("content-length:") {
+                    length = line
+                        .split(':')
+                        .nth(1)
+                        .unwrap()
+                        .trim()
+                        .parse::<usize>()
+                        .unwrap();
+                }
+                let end = line == "\r\n";
+                request.push_str(&line);
+                if end {
+                    break;
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            request.push_str(&String::from_utf8(body).unwrap());
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}").unwrap();
+            request
+        });
+        (
+            Session {
+                base,
+                client: Client::builder()
+                    .timeout(Duration::from_secs(5))
+                    .build()
+                    .unwrap(),
+                access: Some("test-only-bearer".into()),
+                refresh: None,
+                device: None,
+            },
+            server,
+        )
+    }
+    #[tokio::test]
+    async fn authenticated_requests_scope_each_organisation_in_headers() {
+        let (mut session, server) = fake_platform();
+        assert_eq!(
+            session
+                .request(Method::GET, "/jobs?limit=200", Some("alpha"), None)
+                .await
+                .unwrap(),
+            json!({"ok":true})
+        );
+        let request = server.join().unwrap().to_lowercase();
+        assert!(request.starts_with("get /v1/jobs?limit=200 http/1.1"));
+        assert!(request.contains("x-org: alpha\r\n"));
+        assert!(request.contains("authorization: bearer test-only-bearer\r\n"));
+    }
+    #[tokio::test]
+    async fn device_requests_do_not_leak_an_existing_session_bearer() {
+        let (session, server) = fake_platform();
+        session
+            .send(
+                Method::POST,
+                "/auth/device/token",
+                None,
+                Some(json!({"device_code":"test-device"})),
+                false,
+            )
+            .await
+            .unwrap();
+        let request = server.join().unwrap().to_lowercase();
+        assert!(!request.contains("authorization:"));
+        assert!(!request.contains("x-org:"));
+        assert!(request.contains("\"device_code\":\"test-device\""));
+    }
     #[test]
     fn validates_platform_origin_and_identifiers() {
         assert_eq!(

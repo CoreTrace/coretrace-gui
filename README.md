@@ -1,162 +1,93 @@
-# CTrace GUI
+# CoreTrace Desktop
 
-A modern Electron-based GUI application for running CTrace analysis on C/C++ code.
+CoreTrace 6 uses **Tauri 2 / Rust**, **React / TypeScript** and an embedded Monaco editor.
+A desktop sidebar connects the personal home, organisation dashboard, repositories,
+analyses and code workspace.
 
-## Overview
+## Start
 
-CTrace GUI provides an intuitive interface for analyzing C/C++ source code using the CTrace static analysis tool. The application features a VS Code-like interface with file management, syntax highlighting, and integrated analysis results.
+Install Node.js 22.19+, Rust 1.95+ and the platform's
+[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+Windows requires Microsoft C++ Build Tools and WebView2 Runtime.
 
-## Features
-
-- **File Management**: Open individual files or entire workspaces
-- **File Tree Explorer**: Navigate project structure with refresh and auto-watch capabilities
-- **Code Editor**: Syntax-highlighted editor with line numbers and search functionality
-- **Tab Management**: Multi-file editing with tab interface
-- **CTrace Integration**: Run static analysis directly from the GUI
-- **Search**: Global search across workspace files
-- **AI Assistant**: Chat with local or cloud LLM models about your code
-- **Notifications**: User-friendly notification system
-- **Work Loss Prevention**: Automatic session saving and restoration
-
-## Architecture
-
-The application follows a modular architecture with separate managers for different concerns:
-
-- **UIController**: Main coordinator for all UI components
-- **FileOperationsManager**: Handles file I/O operations via IPC
-- **TabManager**: Manages editor tabs and file switching
-- **EditorManager**: Controls the Monaco code editor
-- **SearchManager**: Handles search operations (widget and sidebar)
-- **NotificationManager**: Manages user notifications
-- **StateManager**: Handles session persistence (work loss prevention)
-- **DiagnosticsManager**: Manages CTrace analysis results and visualization
-
-The renderer process communicates with the main process exclusively through a typed IPC bridge defined in `src/preload.js`. All IPC channels are whitelisted — the renderer cannot call anything not on the list.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-| Requirement | Version | Notes |
-|---|---|---|
-| Node.js | v18 or later | Required for the build toolchain |
-| npm | bundled with Node.js | Used to install dependencies |
-| CTrace binary | any | Must be placed at `bin/ctrace` (see below) |
-
-> **Windows users:** CTrace is a Linux binary. It runs inside WSL (Windows Subsystem for Linux). The application will detect WSL on startup and guide you through installation if it is missing.
-
-### Installation
-
-```bash
-npm install
-```
-
-This installs all Node.js dependencies including Electron and Monaco Editor.
-
-### CTrace Binary Setup
-
-The CTrace binary must be present before you can run analyses. Place it at:
-
-```
-bin/ctrace                  # Linux
-bin/ctrace                  # Windows (the binary itself runs inside WSL)
-bin/ctrace-darwin-arm64     # macOS, Apple Silicon
-bin/ctrace-darwin-x64       # macOS, Intel
-```
-
-The `bin/` directory is at the root of the repository (same level as `package.json`). Create it if it doesn't exist.
-
-If the binary is missing, the application will still launch, but the **Run Analysis** button will return an error.
-
-> **macOS users:** the `ctrace` shipped in the release artifacts is a Linux ELF and cannot run on macOS. The app detects this and tells you so instead of failing with an opaque spawn error. Supply a native Mach-O build either by naming it `ctrace-darwin-<arch>` next to the bundled one, or by selecting it from **File → Backend Settings**. Everything else — editor, explorer, search, terminal, assistant — works without it.
-
-### Running in Development
-
-```bash
+```sh
+npm ci
 npm start
 ```
 
-This automatically rebuilds the renderer bundle (`src/renderer/bundle.js`) before launching Electron. You must rerun `npm start` (or `npm run build:renderer`) any time you edit files under `src/renderer/`.
+`npm start` launches the native application. `npm run dev` is a browser preview;
+filesystem, Git and account actions deliberately require Tauri. No demo data or
+production credentials are embedded in the preview.
 
-### Security notes
+## Use
 
-- The renderer runs sandboxed (`sandbox: true`, `contextIsolation: true`) behind a strict Content-Security-Policy: no inline script, no remote scripts, and no navigation away from `index.html`. New UI code must attach listeners with `addEventListener` (or the `data-action` attributes in `index.html`) and pass every external string (file names, tool output, error messages) through `escapeHtml()` before inserting it as HTML.
-- DevTools shortcuts (F12, Ctrl/Cmd+Shift+I) are only active in development. Set `CTRACE_DEVTOOLS=1` to enable them in a packaged build.
-- File-system IPC only accepts paths that came from a native dialog, the restored session, or the currently opened workspace.
-- The assistant API key is encrypted with the OS credential store and never leaves the main process; keyed requests only go to `https:` endpoints (or `http://localhost`).
-- App updates download automatically but are only installed after the user chooses "restart to apply". Builds are not code-signed yet, so keep it that way until signing is in place.
+- **Local code:** Open a folder. Browse the tree, edit files, search with Ctrl/Cmd+F,
+  save with Ctrl/Cmd+S. Tabs retain drafts while navigating. Closing dirty tabs,
+  switching folders and closing the desktop asks before discarding. Save conflicts
+  preserve external edits and your in-memory draft; copy the draft before reopening.
+- **GitHub:** Enter `owner/repository` or its HTTPS GitHub URL and choose a parent
+  folder. Git clones into a new child directory; existing destinations are never
+  overwritten. Private repositories use Git Credential Manager or `gh auth setup-git`.
+  CoreTrace does not launch builds or install dependencies while opening or cloning;
+  Git uses your existing local configuration.
+- **Account:** Approve the device code in your browser. Rust keeps access tokens in
+  memory and refresh tokens in the OS credential manager, separated by API URL.
+  Credentials never enter React, localStorage or config files. Select the organisation
+  in the top bar. Dashboards show its quotas, reported period spend, plan and jobs.
+  Missing figures remain unknown. Account settings list members subject to permissions.
+- **Cloud analysis:** Select an enabled connected GitHub repository and branch, tag or
+  commit, then confirm CTU spending. The repository configuration determines the tools.
+  Follow progress, cancel, inspect verified reports and open findings in the matching
+  workspace. Retrying an uncertain submission keeps its idempotency key until inputs
+  change or submission succeeds. Local edits are not uploaded by this workflow.
+- **Local analysis:** Select your installed native `ctrace` executable in Settings,
+  with its analysis tools installed. Open a source file, save it and run static analysis.
+  SARIF findings, stdout/stderr and cancellation are available. The existing Linux
+  `bin/ctrace` cannot run directly on Windows.
 
-### Building for Distribution
+The API defaults to `https://coretrace.fr/v1`. Set `CORETRACE_BASE_URL` before launch
+for another deployment; `/v1` is added if absent. HTTPS is required except for loopback
+API development addresses. Device-browser and signed report URLs require HTTPS.
+Web account management links target coretrace.fr.
 
-| Platform | Command | Output |
-|---|---|---|
-| Current platform | `npm run dist` | `dist/` |
-| Linux (AppImage) | `npm run dist:linux` | `dist/*.AppImage` |
-| Windows (NSIS installer) | `npm run dist:win` | `dist/*.exe` |
-| macOS (DMG + ZIP) | `npm run dist:mac` | `dist/*.dmg`, `dist/*.zip` |
+## Build and verify
 
-macOS builds are **unsigned and un-notarized** (signing requires a paid Apple Developer account). Gatekeeper blocks the first launch, so open the app once with right-click → **Open**, or clear the quarantine attribute:
-
-```bash
-xattr -cr /Applications/CtraceGUI.app
-```
-
-CI builds macOS twice — `macos-latest` for arm64 and `macos-13` for x64 — because `node-pty` and `node-llama-cpp` are native modules and each architecture is compiled on a runner of that architecture. To sign later, restore an Apple certificate step in `.github/workflows/release.yml` and set `identity`, `hardenedRuntime` and `notarize` in the `mac` block of `package.json` (`build/entitlements.mac.plist` is kept for that purpose).
-
-### Releases and versioning
-
-Versions are semver, and the git tag is always `v<package.json version>`:
-
-| Channel | Version shape | Update manifest | Example |
-|---|---|---|---|
-| stable (`main` in the app) | `X.Y.Z` | `latest*.yml` | `5.1.0` |
-| beta | `X.Y.Z-beta.N` | `beta*.yml` | `5.2.0-beta.1` |
-
-`-beta.N` is the **only** accepted prerelease form. electron-builder names the update manifest after the prerelease identifier, so a version like `5.0.1-a` produces an `a.yml` that neither channel reads — the release becomes invisible to the updater. `scripts/release.sh` and the release workflow both reject it, and `tests/version.test.js` pins the rule.
-
-Cut a release from `master` with a clean tree:
-
-```bash
-./scripts/release.sh minor          # 5.1.0 -> 5.2.0
-./scripts/release.sh 5.2.0-beta.1   # beta channel
-./scripts/release.sh prerelease     # 5.2.0-beta.1 -> 5.2.0-beta.2
-```
-
-The script bumps `package.json`, tags, and pushes. **Only the tag triggers a build**: pushes to `master` and pull requests run the test suite and nothing else, so merging a PR never republishes a release. CI verifies the tag matches `package.json` before publishing, and marks the GitHub release as a prerelease when the version carries `-beta.N`.
-
-### Running Tests
-
-```bash
+```sh
+npm run check
 npm test
+npm run format:check
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+npm run test:native
+npm run tauri -- build --no-bundle
+npm run dist
 ```
 
-Uses Node.js's built-in test runner (`node --test`). No extra test framework is required.
+Windows executable: `src-tauri/target/release/coretrace-desktop.exe`.
+`npm run dist` builds installers. Builds are unsigned; the CI validates Windows,
+macOS and Linux and retains tag installers as artifacts. No automatic publication,
+signing or replacement update service is configured by this migration.
 
-### Generating Documentation
+## Architecture and current boundaries
 
-```bash
-npm run docs
-```
+- `desktop/`: React features, typed native bridge, platform projections and tests.
+- `src-tauri/src/`: workspace, GitHub, cloud authentication/API and local process services.
+- `desktop/platform-schema.d.ts`: generated contract snapshot from
+  Coretrace-Entreprise/coretrace-web, matching the control plane OpenAPI schema.
+- Editing is confined to the chosen workspace, excludes Git metadata and path escapes,
+  and accepts UTF-8 text up to 4 MiB. Atomic saves check the on-disk revision. Directory
+  listing omits links and dependency/build folders, with a 5,000-entry limit per folder.
+- Reports are capped at 10 MiB, output at 1 MiB per stream, local runs at 15 minutes,
+  clones at five minutes and cloud history at 200 jobs. Inspect incomplete clone folders
+  before retrying. Workspace tabs and the analyser choice last for the session.
+- The IDE includes exploration, syntax colouring, tabs, search, editing and findings
+  navigation. Terminal, debugger, LSP, extensions, Git commit/push UI, WSL bridging and
+  local LLM integrations are not included. Local analysis targets the active source
+  file; cloud analysis targets connected GitHub commits. Uploading arbitrary local
+  folders to the cloud is not implemented.
 
-Generates JSDoc API docs. Hosted version: https://coretrace.github.io/coretrace-gui/
-
----
-
-## Documentation
-
-Complete API documentation is available [here](https://coretrace.github.io/coretrace-gui/)
-
-IPC channel reference (all renderer ↔ main channels): [docs/ipc-channels.md](docs/ipc-channels.md)
-
-
----
-
-## License
-
-Licensed under the Apache License, Version 2.0.
-
-You may obtain a copy of the License in this repository at [LICENSE](LICENSE) or at:
-
-http://www.apache.org/licenses/LICENSE-2.0
+See [migration/rollback](docs/tauri-migration.md) and
+[validation evidence](docs/desktop-validation.md). The old Electron implementation stays
+in `src/` as reference, with its [README](docs/electron-readme.md),
+[manifest](docs/electron-package.json) and `tests/`. It is not the new runtime; recover it
+in a separate clean worktree at `807e2c9` when needed. Existing user changes are preserved.
