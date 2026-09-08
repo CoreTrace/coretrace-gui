@@ -25,6 +25,7 @@ import { Analyses } from "./features/Analyses";
 import { Settings } from "./features/Settings";
 import type { EditorHandle } from "./features/WorkspaceEditor";
 import { useCloud } from "./useCloud";
+import { workspaceRelativePath } from "./model";
 import type { Job, LocalResult, Page, Repository, Workspace } from "./types";
 const WorkspaceEditor = lazy(() =>
   import("./features/WorkspaceEditor").then((module) => ({
@@ -87,8 +88,12 @@ export default function App() {
               "Quitter",
             )
           ) {
-            if (localRunning) await desktop.cancelLocal();
-            await window.destroy();
+            try {
+              if (localRunning) await desktop.cancelLocal();
+              await window.destroy();
+            } catch (e) {
+              setMessage(errorMessage(e));
+            }
           }
         });
         if (disposed) off();
@@ -183,9 +188,14 @@ export default function App() {
       return;
     }
     setPage("workspace");
-    void editor.current
-      .open(path, line)
-      .catch((e) => setMessage(errorMessage(e)));
+    try {
+      const relative = workspaceRelativePath(path, workspace.path);
+      void editor.current
+        .open(relative, line)
+        .catch((e) => setMessage(errorMessage(e)));
+    } catch (e) {
+      setMessage(errorMessage(e));
+    }
   };
   const selectJob = (job: Job | null) => {
     if (orgRef.current !== cloud.org) return;
@@ -323,7 +333,11 @@ export default function App() {
                 <select
                   aria-label="Organisation active"
                   value={cloud.org}
-                  onChange={(e) => cloud.setOrg(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedJob(null);
+                    setDraftRepo(null);
+                    cloud.setOrg(e.target.value);
+                  }}
                 >
                   {cloud.me.orgs.map((org) => (
                     <option key={org.id} value={org.slug}>
@@ -398,7 +412,7 @@ export default function App() {
               notify={setMessage}
             />
           )}
-          {page === "analyses" && (
+          <div hidden={page !== "analyses"}>
             <Analyses
               key={cloud.org}
               cloud={cloud}
@@ -406,7 +420,9 @@ export default function App() {
               select={selectJob}
               initialRepository={draftRepo}
               initialRef=""
-              clearDraft={() => setDraftRepo(null)}
+              clearDraft={() => {
+                if (orgRef.current === cloud.org) setDraftRepo(null);
+              }}
               notify={setMessage}
               openFinding={openFinding}
               local={local}
@@ -415,7 +431,7 @@ export default function App() {
                 workspace ? setPage("workspace") : void openFolder()
               }
             />
-          )}
+          </div>
           {page === "settings" && (
             <Settings
               cloud={cloud}

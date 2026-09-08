@@ -75,7 +75,7 @@ export function parseFindings(text: string, tool?: string): Finding[] {
   try {
     parsed = JSON.parse(text);
   } catch {
-    return text.split("\n").flatMap((line) => {
+    const findings = text.split("\n").flatMap((line) => {
       try {
         const f = finding(JSON.parse(line));
         return f ? [f] : [];
@@ -83,8 +83,13 @@ export function parseFindings(text: string, tool?: string): Finding[] {
         return [];
       }
     });
+    if (!findings.length && text.trim())
+      throw new Error(
+        "Rapport illisible : aucun résultat valide n’a pu être chargé.",
+      );
+    return findings;
   }
-  if (!record(parsed)) return [];
+  if (!record(parsed)) throw new Error("Format de rapport non reconnu.");
   if (Array.isArray(parsed.findings))
     return parsed.findings.map(finding).filter((f): f is Finding => f !== null);
   if (Array.isArray(parsed.runs)) {
@@ -114,5 +119,35 @@ export function parseFindings(text: string, tool?: string): Finding[] {
     });
   }
   const single = finding(parsed);
-  return single ? [single] : [];
+  if (!single) throw new Error("Format de rapport non reconnu.");
+  return [single];
+}
+
+export function workspaceRelativePath(value: string, root: string): string {
+  let path = value;
+  if (path.startsWith("file://")) {
+    const uri = new URL(path);
+    if (uri.hostname && uri.hostname !== "localhost")
+      throw new Error("Le résultat désigne un fichier sur une autre machine.");
+    path = uri.pathname.replace(/^\/([a-z]:)/i, "$1");
+  }
+  path = decodeURIComponent(path).replaceAll("\\", "/");
+  const base = root
+    .replace(/^\\\\\?\\/, "")
+    .replaceAll("\\", "/")
+    .replace(/\/$/, "");
+  if (path.startsWith("/") || /^[a-z]:/i.test(path)) {
+    const windows = /^[a-z]:/i.test(base);
+    const match = windows ? path.toLowerCase() : path;
+    const prefix = (windows ? base.toLowerCase() : base) + "/";
+    if (!match.startsWith(prefix))
+      throw new Error(
+        "Ce résultat appartient à un autre dossier. Ouvrez le dossier correspondant.",
+      );
+    path = path.slice(base.length + 1);
+  }
+  path = path.replace(/^(\.\/)+/, "");
+  if (!path || path.split("/").includes("..") || path.includes(":"))
+    throw new Error("Emplacement de résultat invalide.");
+  return path;
 }

@@ -13,7 +13,9 @@
     "dist": "tauri build",
     "test": "vitest run",
     "test:native": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "format": "prettier --write desktop vite.config.ts vitest.config.ts",
+    "format:check": "prettier --check desktop vite.config.ts vitest.config.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

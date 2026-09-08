@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   FileCode2,
@@ -313,6 +313,16 @@ export function Analyses({
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
   const confirm = useConfirm();
+  const localReport = useMemo(() => {
+    try {
+      return {
+        findings: local?.report ? parseFindings(local.report) : [],
+        error: "",
+      };
+    } catch (e) {
+      return { findings: [], error: errorMessage(e) };
+    }
+  }, [local]);
   useEffect(() => {
     if (initialRepository) {
       setRepositoryId(initialRepository.id);
@@ -493,15 +503,17 @@ export function Analyses({
                     : `Code de sortie ${local.exitCode ?? "inconnu"}`}
                 </span>
               </div>
-              {local.report ? (
-                <Findings
-                  findings={parseFindings(local.report)}
-                  open={openFinding}
-                />
+              {local.report && !localReport.error ? (
+                <Findings findings={localReport.findings} open={openFinding} />
               ) : (
                 <p className="muted">
                   Aucun rapport structuré produit. Consultez la sortie de
                   l’outil.
+                </p>
+              )}
+              {localReport.error && (
+                <p className="error" role="alert">
+                  {localReport.error}
                 </p>
               )}
               <details>
