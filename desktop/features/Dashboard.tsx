@@ -120,7 +120,7 @@ export function Dashboard({
       )}
       <div className="action-grid">
         <button className="action-card" onClick={openFolder}>
-          <span className="action-icon mint">
+          <span className="action-icon brand-accent">
             <FolderOpen size={23} />
           </span>
           <strong>Ouvrir un dossier</strong>
@@ -128,7 +128,7 @@ export function Dashboard({
           <ArrowRight size={18} />
         </button>
         <button className="action-card" onClick={clone}>
-          <span className="action-icon lilac">
+          <span className="action-icon brand-accent">
             <GitBranch size={23} />
           </span>
           <strong>Charger un dépôt GitHub</strong>
@@ -136,7 +136,7 @@ export function Dashboard({
           <ArrowRight size={18} />
         </button>
         <button className="action-card" onClick={() => navigate("analyses")}>
-          <span className="action-icon peach">
+          <span className="action-icon brand-accent">
             <Sparkles size={23} />
           </span>
           <strong>Lancer une analyse</strong>
