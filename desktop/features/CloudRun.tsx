@@ -17,7 +17,16 @@ function active(phase: CloudPhase): boolean {
 }
 
 function megabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} Ko`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+/** mm:ss since a phase began. */
+function elapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m} min ${String(s).padStart(2, "0")} s` : `${s} s`;
 }
 
 /**
@@ -43,6 +52,11 @@ export function CloudRun({
   // The job whose results have already been opened, so finishing opens them
   // once rather than on every poll.
   const opened = useRef<string>(undefined);
+  // Animations may be switched off system-wide, and then nothing can turn. A
+  // count that ticks every second is motion the reader can trust: it is the
+  // real elapsed time, not decoration.
+  const [seconds, setSeconds] = useState(0);
+  const startedAt = useRef<number>(Date.now());
 
   const poll = useCallback(async () => {
     try {
@@ -51,6 +65,19 @@ export function CloudRun({
       // A status that cannot be read is not worth interrupting the run for.
     }
   }, []);
+
+  useEffect(() => {
+    if (!active(phase)) {
+      setSeconds(0);
+      startedAt.current = Date.now();
+      return;
+    }
+    const tick = setInterval(
+      () => setSeconds(Math.floor((Date.now() - startedAt.current) / 1000)),
+      1000,
+    );
+    return () => clearInterval(tick);
+  }, [phase]);
 
   useEffect(() => {
     if (phase.phase === "done" && opened.current !== phase.job) {
@@ -116,23 +143,26 @@ export function CloudRun({
 
       {phase.phase === "packing" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Préparation de l’archive…
+          <Loader2 size={14} className="spin" /> Préparation de l’archive :{" "}
+          {phase.files} fichiers ({megabytes(phase.bytes)}) · {elapsed(seconds)}
         </p>
       )}
       {phase.phase === "uploading" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Envoi de {phase.files} fichiers ({megabytes(phase.total)})…
+          <Loader2 size={14} className="spin" /> Envoi de {phase.files} fichiers
+          ({megabytes(phase.total)}) · {elapsed(seconds)}
         </p>
       )}
       {phase.phase === "verifying" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Vérification par la plateforme…
+          <Loader2 size={14} className="spin" /> Vérification par la plateforme ·{" "}
+          {elapsed(seconds)}
         </p>
       )}
 
       {phase.phase === "quoting" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Calcul du coût…
+          <Loader2 size={14} className="spin" /> Calcul du coût · {elapsed(seconds)}
         </p>
       )}
 
@@ -153,7 +183,8 @@ export function CloudRun({
 
       {phase.phase === "running" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Analyse en cours dans le cloud…
+          <Loader2 size={14} className="spin" /> Analyse en cours dans le cloud ·{" "}
+          {elapsed(seconds)}
         </p>
       )}
       {phase.phase === "done" && (

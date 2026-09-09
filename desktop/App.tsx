@@ -65,6 +65,9 @@ export default function App() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
+  // Nothing can spin when the system disallows animation, so the banner counts
+  // real seconds instead: a number that changes is proof the work is alive.
+  const [waited, setWaited] = useState(0);
   const [message, setMessage] = useState("");
   const [login, setLogin] = useState(false);
   const [clone, setClone] = useState<string | null>(null);
@@ -73,6 +76,18 @@ export default function App() {
   const [analyser, setAnalyser] = useState("");
   const [local, setLocal] = useState<LocalResult | null>(null);
   const [localRunning, setLocalRunning] = useState(false);
+  useEffect(() => {
+    if (!busy && !localRunning) {
+      setWaited(0);
+      return;
+    }
+    const started = Date.now();
+    const tick = setInterval(
+      () => setWaited(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => clearInterval(tick);
+  }, [busy, localRunning]);
   const editor = useRef<EditorHandle>(null);
   const confirm = useConfirm();
   const orgRef = useRef(cloud.org);
@@ -456,7 +471,8 @@ export default function App() {
         {(busy || localRunning) && (
           <div className="operation" role="status">
             <LoaderCircle className="spin" size={16} />
-            {busy || "Analyse locale en cours… ctrace examine le fichier."}
+            {busy || "Analyse locale en cours : ctrace examine le fichier."}
+            {waited > 0 && <span className="muted"> · {waited} s</span>}
           </div>
         )}
         <main
@@ -639,11 +655,19 @@ export default function App() {
               ))}
             </datalist>
           </label>
-          <p className="muted small">
-            Les dépôts privés utilisent votre connexion Git locale. Si
-            nécessaire, connectez Git Credential Manager ou exécutez gh auth
-            setup-git.
-          </p>
+          {busy ? (
+            <p role="status" className="operation">
+              <LoaderCircle className="spin" size={16} />
+              {busy}
+              {waited > 0 && <span className="muted"> · {waited} s</span>}
+            </p>
+          ) : (
+            <p className="muted small">
+              Les dépôts privés utilisent votre connexion Git locale. Si
+              nécessaire, connectez Git Credential Manager ou exécutez gh auth
+              setup-git.
+            </p>
+          )}
           <footer>
             <button disabled={!!busy} onClick={() => setClone(null)}>
               Annuler

@@ -1438,3 +1438,27 @@ dialog label {
   color: #c9f5e4;
   font-size: 13px;
 }
+
+/* The count belongs at the far end of the search field, not against the
+   placeholder where it read as part of it. */
+.search input {
+  flex: 1;
+  min-width: 0;
+}
+.search .count {
+  margin-left: auto;
+  padding-left: 12px;
+  white-space: nowrap;
+}
+
+/* Findings grouped by severity: the heading separates the groups without
+   turning each into a boxed section. */
+.finding-group + .finding-group {
+  margin-top: 18px;
+}
+.finding-group > h3 {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}

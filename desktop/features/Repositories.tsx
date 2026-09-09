@@ -61,7 +61,7 @@ export function Repositories({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <span className="muted small">
+          <span className="muted small count">
             {search.trim()
               ? `${shown.length} sur ${cloud.repositories.length}`
               : `${cloud.repositories.length} dépôts`}

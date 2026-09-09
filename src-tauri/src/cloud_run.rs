@@ -230,7 +230,9 @@ async fn run_until_quote(
     let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
     let archive = dir.path().join("workspace.tar.zst");
     *state.archive.lock().unwrap() = Some(dir);
-    let packed = pack(&root, &archive, &state.cancel)?;
+    let packed = pack(&root, &archive, &state.cancel, &|files, bytes| {
+        state.set(Phase::Packing { files, bytes });
+    })?;
 
     if state.cancelled() {
         return Err("Cancelled".into());
@@ -489,7 +491,7 @@ mod tests {
     fn tiny_archive() -> (tempfile::TempDir, Packed) {
         let (dir, root) = workspace();
         let out = dir.path().join("archive.tar.zst");
-        let packed = pack(&root, &out, &AtomicBool::new(false)).unwrap();
+        let packed = pack(&root, &out, &AtomicBool::new(false), &|_, _| {}).unwrap();
         (dir, packed)
     }
 

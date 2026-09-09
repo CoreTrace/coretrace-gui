@@ -24,6 +24,15 @@ import type { Finding, Job, LocalResult, Repository } from "../types";
 import { JobRows } from "./Dashboard";
 
 /** The letter and colour a level gets, as the web application shows them. */
+/** Section titles when the findings are grouped by severity. */
+const GROUP: Record<string, string> = {
+  error: "Erreurs",
+  warning: "Avertissements",
+  note: "Notes",
+  info: "Informations",
+  other: "Autres",
+};
+
 /** Reports of finished runs, which are immutable once written. */
 const reportCache = new Map<string, string>();
 
@@ -84,7 +93,31 @@ export function Findings({
           </article>
         ))}
       {!loading &&
-        filtered.map((f, i) => (
+        // Grouped by severity: a reader scanning a long list wants the errors
+        // first, and the level was otherwise only a small mark on each row.
+        (
+          [
+            ...["error", "warning", "note", "info"].map(
+              (level): [string, Finding[]] => [
+                level,
+                filtered.filter((f) => f.level === level),
+              ],
+            ),
+            [
+              "other",
+              filtered.filter(
+                (f) => !["error", "warning", "note", "info"].includes(f.level),
+              ),
+            ] as [string, Finding[]],
+          ] as [string, Finding[]][]
+        )
+          .filter(([, group]) => group.length > 0)
+          .map(([level, group]) => (
+            <div className="finding-group" key={level}>
+              <h3 className="muted small">
+                {GROUP[level] ?? level} · {group.length}
+              </h3>
+              {group.map((f, i) => (
         <article
           className={`finding ${f.level}`}
           key={`${f.path}-${f.line}-${i}`}
@@ -112,7 +145,9 @@ export function Findings({
             {f.path || "Sans emplacement"}:{f.line}
           </button>
         </article>
-        ))}
+              ))}
+            </div>
+          ))}
       {!filtered.length && (
         <p className="muted">
           {findings.length
