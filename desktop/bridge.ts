@@ -32,6 +32,10 @@ export const desktop = {
   /** Approves the quote. This is the call that spends CTU. */
   confirmCloudRun: (org: string) => call<void>("cloud_run_confirm", { org }),
   cancelCloudRun: () => call<void>("cloud_run_cancel"),
+  /** Every folder open now, in the order they were opened. */
+  workspaces: () => call<Workspace[]>("workspaces"),
+  /** Closes one folder; the files on disk are untouched. */
+  closeWorkspace: (id: string) => call<Workspace[]>("close_workspace", { id }),
   /** Where clones are kept, for Settings to show. */
   cloneLocation: () => call<string>("clone_location"),
   cloneRepository: (repository: string) =>

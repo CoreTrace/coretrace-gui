@@ -244,10 +244,17 @@ async fn run_until_quote(
     if state.cancelled() {
         return Err("Cancelled".into());
     }
+    // The platform sees an upload, not a project. Naming the folder is the only
+    // way a history of uploads can say what each one was.
+    let label = root
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     let mut body = json!({
         "input_id": input,
         "allow_partial": true,
         "idempotency_key": uuid::Uuid::new_v4().to_string(),
+        "label": label,
     });
     if !tools.is_empty() {
         body["tools"] = json!(tools);

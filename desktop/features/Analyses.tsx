@@ -225,7 +225,7 @@ function JobDetail({
       </button>
       <div className="page-heading">
         <div>
-          <h1>{job.source?.repo_full_name ?? "Analyse cloud"}</h1>
+          <h1>{job.source?.repo_full_name ?? job.label ?? "Analyse cloud"}</h1>
           <p>
             {job.source?.ref ?? job.source?.commit_sha} · {date(job.created_at)}
           </p>
