@@ -307,7 +307,7 @@ test('run-ctrace handler preserves tool name for real unknown tool failures', as
   platformMock.mock.restore();
 });
 
-test('run-ctrace handler surfaces an unsupported-input-file error instead of reporting a clean run', async (t) => {
+test('run-ctrace handler fails fast on an unknown --invoke tool name instead of reporting a clean run', async (t) => {
   const handlers = new Map();
   const electronStub = {
     ipcMain: {
@@ -317,25 +317,13 @@ test('run-ctrace handler surfaces an unsupported-input-file error instead of rep
 
   const serveClientStub = {
     ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    // The real /api run_analysis endpoint silently drops unknown invoke
+    // entries (empty outputs, status "ok") instead of erroring, so this
+    // stub should never even be reached once the fix validates client-side.
     callApi: t.mock.fn(async () => ({
       ok: true,
       statusCode: 200,
-      json: {
-        result: {
-          outputs: {
-            cppcheck: [{ stream: 'stdout', message: '' }],
-            ikos: [{ stream: 'stdout', message: '' }],
-            tscancode: [{ stream: 'stdout', message: '' }],
-            ctrace_stack_analyzer: [
-              {
-                stream: 'stderr',
-                // Verbatim shape reported by the real backend for a .txt input.
-                message: 'Unsupported input file type: /tmp/notcode.txt\nstack_usage_analyzer: error: \n\n^\nFailed to analyze: /tmp/notcode.txt'
-              }
-            ]
-          }
-        }
-      }
+      json: { result: { outputs: {}, invoked_tools: ['notatool'] } }
     })),
     shutdownServer: t.mock.fn(async () => ({ success: true })),
     resolveBinaryPath: () => '/fake/bin/ctrace',
@@ -355,15 +343,14 @@ test('run-ctrace handler surfaces an unsupported-input-file error instead of rep
   const platformMock = t.mock.method(os, 'platform', () => 'linux');
 
   setupCtraceHandlers();
-  const response = await handlers.get('run-ctrace')(null, []);
+  const response = await handlers.get('run-ctrace')(null, ['--invoke', 'notatool']);
 
-  assert.strictEqual(response.success, true);
-  const parsed = JSON.parse(response.output);
-  assert.ok(Array.isArray(parsed.diagnostics));
-  assert.ok(parsed.diagnostics.length > 0, 'expected an unsupported-input diagnostic instead of a silent clean run');
-  assert.strictEqual(parsed.diagnostics[0].ruleId, 'ToolExecutionError.ctrace_stack_analyzer');
-  assert.match(parsed.diagnostics[0].details.message, /does not support this file's type/i);
+  assert.strictEqual(response.success, false);
+  assert.match(response.error, /Unknown tool 'notatool'/);
+  assert.match(response.error, /ikos,cppcheck,tscancode,ctrace_stack_analyzer/);
+  assert.strictEqual(serveClientStub.callApi.mock.calls.length, 0, 'should fail before ever calling the backend API');
 
   accessMock.mock.restore();
   platformMock.mock.restore();
 });
+
