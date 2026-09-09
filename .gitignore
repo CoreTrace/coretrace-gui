@@ -12,4 +12,6 @@ src-tauri/target/
 src-tauri/gen/
 coverage/
 *.tsbuildinfo
-
+# Rust build output from the native spikes: 12 GB, rebuildable, and next to sources that are not
+# ignored so they stay visible.
+native/target/
