@@ -46,12 +46,16 @@ export function CloudRun({
   org,
   notify,
   onFinished,
+  typical,
 }: {
   workspace: string;
   org: string;
   notify: (message: string) => void;
   /** Called once when a run finishes, so its results can be opened. */
   onFinished: (job: string) => void;
+  /** Seconds a cloud analysis usually takes here, measured from finished jobs.
+      Undefined when too few have run to say anything. */
+  typical?: number;
 }) {
   const [phase, setPhase] = useState<CloudPhase>(IDLE);
   const [busy, setBusy] = useState(false);
@@ -189,6 +193,18 @@ export function CloudRun({
         <p role="status">
           <Loader2 size={14} className="spin" /> Analyse en cours dans le cloud ·{" "}
           {elapsed(seconds)}
+          {typical !== undefined && (
+            <>
+              {" · "}
+              {seconds < typical
+                ? `environ ${elapsed(typical - seconds)} restant`
+                : "plus longue que d’habitude"}
+              <span className="muted">
+                {" "}
+                (d’après vos analyses précédentes, ~{elapsed(typical)})
+              </span>
+            </>
+          )}
         </p>
       )}
       {phase.phase === "done" && (

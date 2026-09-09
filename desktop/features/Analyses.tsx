@@ -18,6 +18,7 @@ import {
   outcome,
   parseFindings,
   terminal,
+  typicalSeconds,
 } from "../model";
 import type { CloudModel } from "../useCloud";
 import type { Finding, Job, LocalResult, Repository } from "../types";
@@ -494,14 +495,18 @@ export function Analyses({
               workspace={workspaceRoot}
               org={cloud.org}
               notify={notify}
+              typical={typicalSeconds(cloud.jobs)}
               onFinished={(id) => {
                 void (async () => {
-                  await cloud.refresh();
                   try {
+                    // The analysis first, the history afterwards: refreshing
+                    // every list before showing the result is what made the
+                    // reader wait after being told it was ready.
                     select(await desktop.readCloud<Job>("job", cloud.org, id));
                   } catch (e) {
                     notify(errorMessage(e));
                   }
+                  void cloud.refresh();
                 })();
               }}
             />
