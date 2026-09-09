@@ -122,3 +122,50 @@ it("keeps a conflicted draft and respects cancelling a dirty-tab close", async (
   expect(screen.getByRole("tab", { name: /main.ts/ })).toBeTruthy();
   expect((buffer as HTMLTextAreaElement).value).toBe("my draft");
 });
+
+it("reopens the files a folder had open, from disk", async () => {
+  // Switching folders remounts the editor, so tabs were lost. What comes back
+  // is which files were open, never their unsaved drafts: switching discards
+  // those by design, and resurrecting them would contradict the warning.
+  const tabsChanged = vi.fn();
+  render(
+    <ConfirmProvider>
+      <WorkspaceEditor
+        workspace={{ id: "workspace-1", name: "project", path: "C:/project" }}
+        dirtyChanged={vi.fn()}
+        run={vi.fn()}
+        busy={false}
+        notify={vi.fn()}
+        restore={{ paths: ["main.ts"], active: "main.ts" }}
+        tabsChanged={tabsChanged}
+      />
+    </ConfirmProvider>,
+  );
+
+  // The file is opened again without the reader clicking the tree.
+  const buffer = (await screen.findByRole("textbox", {
+    name: "Editor buffer",
+  })) as HTMLTextAreaElement;
+  expect(buffer.value).toBe("original");
+  expect(desktop.read).toHaveBeenCalledWith("workspace-1", "main.ts");
+  await waitFor(() =>
+    expect(tabsChanged).toHaveBeenCalledWith(["main.ts"], "main.ts"),
+  );
+});
+
+it("reports an emptied folder so nothing stale is restored", async () => {
+  const tabsChanged = vi.fn();
+  render(
+    <ConfirmProvider>
+      <WorkspaceEditor
+        workspace={{ id: "workspace-1", name: "project", path: "C:/project" }}
+        dirtyChanged={vi.fn()}
+        run={vi.fn()}
+        busy={false}
+        notify={vi.fn()}
+        tabsChanged={tabsChanged}
+      />
+    </ConfirmProvider>,
+  );
+  await waitFor(() => expect(tabsChanged).toHaveBeenCalledWith([], ""));
+});
