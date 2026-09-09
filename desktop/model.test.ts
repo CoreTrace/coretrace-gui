@@ -164,3 +164,27 @@ it("takes a job's cost from the job, not from runs the listing never sends", () 
     billed({ runs: [{ billed_ctu: 40 }, { billed_ctu: 2 }] } as unknown as Job),
   ).toBe(42);
 });
+
+it("names every status and conclusion the platform sends, in French", () => {
+  // A value missing from the map fell through to the raw English word, so the
+  // history mixed the two languages.
+  for (const status of [
+    "preparing_input",
+    "quoting",
+    "awaiting_confirmation",
+    "queued",
+    "running",
+    "finalizing",
+    "completed",
+    "rejected",
+    "cancelled",
+  ]) {
+    const label = outcome({ status, runs: [] } as unknown as Job);
+    expect(label, status).not.toBe(status);
+    expect(label, status).not.toContain("_");
+  }
+  for (const conclusion of ["clean", "findings", "partial", "failed", "capped"]) {
+    const label = outcome({ status: "completed", conclusion, runs: [] } as unknown as Job);
+    expect(label, conclusion).not.toBe(conclusion);
+  }
+});

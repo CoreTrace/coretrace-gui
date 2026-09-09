@@ -23,6 +23,12 @@ const labels: Record<string, string> = {
   preparing: "Préparation",
   metering: "Calcul CTU",
   succeeded: "Terminée",
+  // Every status and conclusion the platform sends. One missing value shows the
+  // reader an English word in a French interface.
+  partial: "Partiellement analysé",
+  preparing_input: "Préparation des sources",
+  quoting: "Estimation du coût",
+  finalizing: "Finalisation",
 };
 export const outcome = (job: Job) =>
   labels[job.conclusion ?? job.status] ?? job.status.replaceAll("_", " ");

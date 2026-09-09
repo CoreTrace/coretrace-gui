@@ -1321,11 +1321,12 @@ dialog label {
     transition: none !important;
     scroll-behavior: auto !important;
   }
-  /* A spinner that cannot turn reads as a hung application. The words beside it
-     already say what is happening, so the frozen circle goes rather than
-     staying to be misread. */
+  /* Animations are off, so the spinner cannot turn. Hiding it left nothing at
+     all to say the application was working, which is worse than a still icon:
+     the reader could not tell a slow operation from a dead one. The icon stays,
+     motionless, and the words beside it carry the meaning. */
   .spin {
-    display: none;
+    opacity: 0.85;
   }
 }
 
@@ -1408,4 +1409,32 @@ dialog label {
 }
 .folder-picker:hover {
   background: #2a2a2a;
+}
+
+/* One section per open folder in the explorer, so a second folder does not hide
+   the first. The folder being edited is the one whose name is not dimmed. */
+.explorer-root + .explorer-root {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+.explorer-heading span {
+  color: #9a9a9a;
+}
+.explorer-heading span.current {
+  color: inherit;
+  font-weight: 600;
+}
+
+/* Work in progress has to be visible whether or not animations are allowed, so
+   the banner is a band across the top rather than a small icon somewhere. */
+.operation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #3a5f52;
+  background: #1d3b34;
+  color: #c9f5e4;
+  font-size: 13px;
 }

@@ -1,7 +1,8 @@
-import { ArrowUpRight, FolderGit2, GitBranch } from "lucide-react";
+import { ArrowUpRight, FolderGit2, GitBranch, Search } from "lucide-react";
 import { desktop, errorMessage } from "../bridge";
 import type { CloudModel } from "../useCloud";
 import type { Repository } from "../types";
+import { useState } from "react";
 export function Repositories({
   cloud,
   clone,
@@ -13,6 +14,13 @@ export function Repositories({
   analyse: (repo: Repository) => void;
   notify: (message: string) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const needle = search.trim().toLowerCase();
+  const shown = needle
+    ? cloud.repositories.filter((r) =>
+        r.full_name.toLowerCase().includes(needle),
+      )
+    : cloud.repositories;
   return (
     <div className="page">
       <div className="page-heading">
@@ -44,9 +52,25 @@ export function Repositories({
           Gérer les connexions <ArrowUpRight size={14} />
         </button>
       </div>
+      {cloud.repositories.length > 0 && (
+        <label className="search">
+          <Search size={15} />
+          <input
+            aria-label="Rechercher un dépôt"
+            placeholder="Rechercher un dépôt…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <span className="muted small">
+            {search.trim()
+              ? `${shown.length} sur ${cloud.repositories.length}`
+              : `${cloud.repositories.length} dépôts`}
+          </span>
+        </label>
+      )}
       {cloud.repositories.length ? (
         <div className="repository-grid">
-          {cloud.repositories.map((repo) => (
+          {shown.map((repo) => (
             <article className="repository-card" key={repo.id}>
               <div className="inline">
                 <FolderGit2 size={22} />

@@ -451,7 +451,7 @@ export function Analyses({
             </div>
             <button onClick={openWorkspace}>
               <FileCode2 size={16} />
-              Analyser un fichier local
+              Analyser un dossier de cette machine
             </button>
           </div>
           {workspaceRoot && cloud.org && (
@@ -633,7 +633,7 @@ export function Analyses({
           <JobRows
             jobs={cloud.jobs.filter(
               (job) =>
-                (job.source?.repo_full_name ?? "")
+                (job.source?.repo_full_name ?? job.label ?? "")
                   .toLowerCase()
                   .includes(filter.toLowerCase()) &&
                 (!status ||

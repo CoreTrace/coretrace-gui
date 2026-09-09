@@ -40,6 +40,10 @@ interface Props {
   run: (path: string) => void;
   /** Sends the whole workspace to the platform; absent when signed out. */
   runInCloud?: () => void;
+  /** Every folder open now, so the explorer shows them all at once. */
+  workspaces?: Workspace[];
+  /** Opens a file living in another open folder. */
+  openIn?: (workspace: string, path: string) => void;
   /** Files that were open in this folder last time, and which was in front. */
   restore?: { paths: string[]; active: string };
   /** Reports which files are open, so returning to this folder finds them. */
@@ -164,7 +168,18 @@ function Tree({
 
 export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
   function WorkspaceEditor(
-    { workspace, dirtyChanged, run, runInCloud, busy, notify, restore, tabsChanged },
+    {
+      workspace,
+      workspaces,
+      openIn,
+      dirtyChanged,
+      run,
+      runInCloud,
+      busy,
+      notify,
+      restore,
+      tabsChanged,
+    },
     ref,
   ) {
     const [tabs, setTabs] = useState<Tab[]>([]);
@@ -307,26 +322,38 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     return (
       <div className="ide">
         <aside className="file-explorer">
-          <div className="explorer-heading">
-            <span>
-              <FolderOpen size={14} /> {workspace.name}
-            </span>
-            <button
-              className="icon"
-              aria-label="Actualiser les fichiers"
-              onClick={() => setRefresh((n) => n + 1)}
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
-          <Tree
-            workspace={workspace}
-            select={(path) =>
-              void open(path).catch((e) => notify(errorMessage(e)))
-            }
-            selected={active}
-            refresh={refresh}
-          />
+          {/* Every open folder, not only the one being edited: closing the
+              others out of sight was the part that felt unlike an editor. */}
+          {(workspaces?.length ? workspaces : [workspace]).map((w) => (
+            <section key={w.id} className="explorer-root">
+              <div className="explorer-heading">
+                <span className={w.id === workspace.id ? "current" : undefined}>
+                  <FolderOpen size={14} /> {w.name}
+                </span>
+                {w.id === workspace.id && (
+                  <button
+                    className="icon"
+                    aria-label="Actualiser les fichiers"
+                    onClick={() => setRefresh((n) => n + 1)}
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                )}
+              </div>
+              <Tree
+                workspace={w}
+                select={(path) => {
+                  if (w.id === workspace.id) {
+                    void open(path).catch((e) => notify(errorMessage(e)));
+                  } else {
+                    openIn?.(w.id, path);
+                  }
+                }}
+                selected={w.id === workspace.id ? active : ""}
+                refresh={refresh}
+              />
+            </section>
+          ))}
         </aside>
         <section className="editor-area">
           <div
