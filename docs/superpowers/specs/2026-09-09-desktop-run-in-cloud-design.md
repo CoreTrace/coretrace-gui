@@ -86,6 +86,14 @@ frontend already polls for jobs. A `cloud_run_status` command returns the curren
 | `failed` | reason, in the platform's words where it gave one |
 | `cancelled` | whether anything was spent |
 
+**Correction, 2026-09-09.** This design assumed the CTU cost could be read by polling
+`GET /jobs/{id}`. It cannot: that view carries `quote_id` and `confirm_deadline` but no amount, and
+the total is published only as a `job.quoted` event on the SSE stream
+(`internal/jobs/service.go:342`). Rather than give the desktop an event-stream client for one
+number, the control plane exposes it: a cost the user must approve should be readable from the job,
+not only from a transient stream. `sum(quote_items.reserved_ctu)` is already stored, so this is a
+read, and it is the first task of the plan.
+
 **Cancelling before confirmation costs nothing**: no CTU moves until `/jobs/{id}/confirm`. After
 confirmation, cancelling calls `POST /jobs/{id}/cancel`, which is the platform's own behaviour and
 is not a promise that the CTU come back.
