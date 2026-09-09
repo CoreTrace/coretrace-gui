@@ -52,7 +52,11 @@ export function duration(job: Job): string {
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
 }
-export function parseFindings(text: string, tool?: string): Finding[] {
+export function parseFindings(
+  text: string,
+  tool?: string,
+  origin?: "local" | "cloud",
+): Finding[] {
   const finding = (value: unknown): Finding | null => {
     if (
       !record(value) ||
@@ -69,6 +73,7 @@ export function parseFindings(text: string, tool?: string): Finding[] {
       path: value.location.path,
       line: value.location.line,
       tool,
+      origin,
     };
   };
   let parsed: unknown;

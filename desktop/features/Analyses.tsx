@@ -62,6 +62,7 @@ export function Findings({
             <span className="muted small">
               {f.tool} {f.rule}
             </span>
+            {f.origin === "cloud" && <span className="badge">cloud</span>}
           </div>
           <p>{f.message}</p>
           <button
@@ -141,6 +142,7 @@ function JobDetail({
         parseFindings(
           await desktop.report(cloud.org, job.id, run.id),
           run.tool,
+          "cloud",
         ),
       ),
     ).then((results) => {
@@ -320,7 +322,7 @@ export function Analyses({
   const localReport = useMemo(() => {
     try {
       return {
-        findings: local?.report ? parseFindings(local.report) : [],
+        findings: local?.report ? parseFindings(local.report, undefined, "local") : [],
         error: "",
       };
     } catch (e) {

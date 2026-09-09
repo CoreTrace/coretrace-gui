@@ -44,6 +44,8 @@ export interface Finding {
   line: number;
   message: string;
   tool?: string;
+  /** Which machine ran the tool. Otherwise the two are indistinguishable. */
+  origin?: "local" | "cloud";
 }
 export type Page =
   | "home"
