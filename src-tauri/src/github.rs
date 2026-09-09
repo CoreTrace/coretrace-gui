@@ -1,9 +1,28 @@
 use crate::workspace::{activate, Workspace, WorkspaceState};
+use std::path::PathBuf;
 use std::time::Duration;
-use tauri_plugin_dialog::DialogExt;
+use tauri::Manager;
 use tokio::process::Command;
 
-pub fn repository_url(value: &str) -> Result<(String, String), String> {
+/// Where clones are kept. Choosing a folder for every clone was a decision the
+/// user had no basis to make; CoreTrace keeps them together instead, and
+/// Settings says where. Repositories sit under their owner, so two accounts
+/// with a repository of the same name cannot land in the same folder.
+pub fn clone_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No application data directory: {e}"))?;
+    Ok(base.join("repositories"))
+}
+
+/// The clone location, for Settings to show.
+#[tauri::command]
+pub fn clone_location(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(clone_root(&app)?.display().to_string())
+}
+
+pub fn repository_url(value: &str) -> Result<(String, String, String), String> {
     let value = value.trim().trim_end_matches('/').trim_end_matches(".git");
     let name = value.strip_prefix("https://github.com/").unwrap_or(value);
     let parts: Vec<_> = name.split('/').collect();
@@ -19,7 +38,11 @@ pub fn repository_url(value: &str) -> Result<(String, String), String> {
     {
         return Err("Use owner/repository or https://github.com/owner/repository".into());
     }
-    Ok((format!("https://github.com/{name}.git"), parts[1].into()))
+    Ok((
+        format!("https://github.com/{name}.git"),
+        parts[0].into(),
+        parts[1].into(),
+    ))
 }
 #[tauri::command]
 pub async fn clone_repository(
@@ -27,25 +50,16 @@ pub async fn clone_repository(
     state: tauri::State<'_, WorkspaceState>,
     repository: String,
 ) -> Result<Option<Workspace>, String> {
-    let (url, name) = repository_url(&repository)?;
-    let Some(parent) = app
-        .dialog()
-        .file()
-        .set_title("Choose where to clone the repository")
-        .blocking_pick_folder()
-    else {
-        return Ok(None);
-    };
-    let parent = parent
-        .into_path()
-        .map_err(|e| e.to_string())?
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
+    let (url, owner, name) = repository_url(&repository)?;
+    let parent = clone_root(&app)?.join(owner);
+    std::fs::create_dir_all(&parent)
+        .map_err(|e| format!("Could not create the clone folder: {e}"))?;
+    let parent = parent.canonicalize().map_err(|e| e.to_string())?;
     let destination = parent.join(name);
     if destination.exists() {
-        return Err(
-            "Destination already exists. Open it as a folder or choose another location.".into(),
-        );
+        // Already cloned here: open it rather than refusing, which is what the
+        // user asking to clone it again wants.
+        return Ok(Some(activate(&state, destination)?));
     }
     let mut command = Command::new("git");
     command
@@ -87,6 +101,8 @@ mod tests {
                 .0,
             "https://github.com/CoreTrace/coretrace-gui.git"
         );
+        let (_, owner, name) = repository_url("CoreTrace/coretrace-gui").unwrap();
+        assert_eq!((owner.as_str(), name.as_str()), ("CoreTrace", "coretrace-gui"));
         for bad in [
             "--upload-pack=sh",
             "https://evil.test/a/b",

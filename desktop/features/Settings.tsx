@@ -18,6 +18,7 @@ export function Settings({
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [connectingGitHub, setConnectingGitHub] = useState(false);
+  const [cloneLocation, setCloneLocation] = useState("");
   const githubConnected =
     cloud.me?.identities?.includes("https://github.com") ?? false;
 
@@ -46,6 +47,13 @@ export function Settings({
     config: null,
     compileCommands: null,
   });
+  useEffect(() => {
+    if (native)
+      void desktop
+        .cloneLocation()
+        .then(setCloneLocation)
+        .catch(() => setCloneLocation(""));
+  }, []);
   useEffect(() => {
     if (native)
       void desktop
@@ -138,6 +146,11 @@ export function Settings({
         <p className="muted small">
           Plateforme : {cloud.baseUrl || "Chargement…"}
         </p>
+        {cloneLocation && (
+          <p className="muted small">
+            Dépôts clonés dans : <code>{cloneLocation}</code>
+          </p>
+        )}
         <button
           onClick={() =>
             void desktop

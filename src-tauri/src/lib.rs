@@ -15,6 +15,7 @@ pub fn run() {
             workspace::read_file,
             workspace::save_file,
             github::clone_repository,
+            github::clone_location,
             analysis::choose_analyser,
             analysis::analysis_options,
             analysis::choose_analysis_file,

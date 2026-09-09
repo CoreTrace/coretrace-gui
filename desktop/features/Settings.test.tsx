@@ -5,13 +5,14 @@ import { desktop } from "../bridge";
 import { Settings } from "./Settings";
 import type { CloudModel } from "../useCloud";
 vi.mock("../bridge", () => ({
-  native: false,
+  native: true,
   desktop: {
     analysisOptions: vi.fn(() =>
       Promise.resolve({ config: null, compileCommands: null }),
     ),
     readCloud: vi.fn(() => Promise.resolve([])),
     connectGitHub: vi.fn(() => Promise.resolve("https://github.com/login/oauth/authorize")),
+    cloneLocation: vi.fn(() => Promise.resolve("/home/me/.local/share/CoreTrace/repositories")),
   },
   errorMessage: (e: unknown) => String(e),
 }));
@@ -70,4 +71,13 @@ it("says GitHub is connected instead of offering to connect it again", () => {
   });
   expect(screen.getByText("GitHub connecté")).toBeDefined();
   expect(screen.queryByRole("button", { name: /Connecter GitHub/ })).toBeNull();
+});
+
+it("says where cloned repositories are kept", async () => {
+  // Clones no longer ask for a folder, so the one they go to has to be visible
+  // somewhere; otherwise the user cannot find what they just cloned.
+  show({ principal: { kind: "user" }, email: "c@example.test", orgs: [] });
+  expect(
+    await screen.findByText("/home/me/.local/share/CoreTrace/repositories"),
+  ).toBeDefined();
 });
