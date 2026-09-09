@@ -69,6 +69,22 @@ impl Cloud {
     }
 }
 impl Session {
+    /// A session pointed at a test server, with no stored credential.
+    #[cfg(test)]
+    pub(crate) fn for_tests(base: String) -> Self {
+        Session {
+            client: Client::builder().build().expect("client"),
+            base,
+            access: Some("test-token".into()),
+            refresh: None,
+            device: None,
+        }
+    }
+    /// The bare HTTP client, for a presigned URL. Signed links never receive
+    /// the platform bearer or the X-Org header.
+    pub(crate) fn http(&self) -> &Client {
+        &self.client
+    }
     fn credential(&self) -> Result<keyring::Entry, String> {
         keyring::Entry::new("fr.coretrace.desktop", &self.base)
             .map_err(|e| format!("Credential store: {e}"))
@@ -163,7 +179,7 @@ impl Session {
             .await?;
         self.accept_tokens(success(response)?)
     }
-    async fn request(
+    pub(crate) async fn request(
         &mut self,
         method: Method,
         path: &str,
