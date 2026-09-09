@@ -40,6 +40,10 @@ interface Props {
   run: (path: string) => void;
   /** Sends the whole workspace to the platform; absent when signed out. */
   runInCloud?: () => void;
+  /** Files that were open in this folder last time, and which was in front. */
+  restore?: { paths: string[]; active: string };
+  /** Reports which files are open, so returning to this folder finds them. */
+  tabsChanged?: (paths: string[], active: string) => void;
   busy: boolean;
   notify: (message: string) => void;
 }
@@ -160,7 +164,7 @@ function Tree({
 
 export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
   function WorkspaceEditor(
-    { workspace, dirtyChanged, run, runInCloud, busy, notify },
+    { workspace, dirtyChanged, run, runInCloud, busy, notify, restore, tabsChanged },
     ref,
   ) {
     const [tabs, setTabs] = useState<Tab[]>([]);
@@ -182,6 +186,14 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     useEffect(() => {
       dirtyChanged(dirty);
     }, [dirty, dirtyChanged]);
+    // Which files are open, not what is in them: switching folders discards
+    // unsaved work by design, so drafts are never resurrected.
+    useEffect(() => {
+      tabsChanged?.(
+        tabs.map((t) => t.path),
+        active,
+      );
+    }, [tabs, active, tabsChanged]);
     useEffect(() => {
       const prevent = (event: BeforeUnloadEvent) => {
         if (dirty) {
@@ -215,6 +227,24 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
       }
     };
     useImperativeHandle(ref, () => ({ open }));
+    // Reopen what was open in this folder. The content comes from disk, so a
+    // file changed elsewhere since is the file that appears.
+    const restored = useRef(false);
+    useEffect(() => {
+      if (restored.current || !restore?.paths.length) return;
+      restored.current = true;
+      void (async () => {
+        for (const path of restore.paths) {
+          try {
+            await open(path);
+          } catch {
+            // A file deleted or renamed since simply does not come back.
+          }
+        }
+        if (restore.active) setActive(restore.active);
+      })();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [restore]);
     useEffect(() => {
       if (pendingLine.current) {
         const line = pendingLine.current;

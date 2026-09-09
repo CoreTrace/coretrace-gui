@@ -54,6 +54,11 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   // Several folders can be open at once; `workspace` is the one being edited.
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  // Which files were open in each folder. A ref, not state: remembering must
+  // not re-render the editor that is reporting it.
+  const openTabs = useRef<Record<string, { paths: string[]; active: string }>>(
+    {},
+  );
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
@@ -146,6 +151,7 @@ export default function App() {
     if (id === workspace?.id && !(await canSwitch())) return;
     try {
       const open = await desktop.closeWorkspace(id);
+      delete openTabs.current[id];
       setWorkspaces(open);
       if (id === workspace?.id) {
         setWorkspace(open[open.length - 1] ?? null);
@@ -508,6 +514,10 @@ export default function App() {
                   key={workspace.id}
                   ref={editor}
                   workspace={workspace}
+                  restore={openTabs.current[workspace.id]}
+                  tabsChanged={(paths, active) => {
+                    openTabs.current[workspace.id] = { paths, active };
+                  }}
                   dirtyChanged={setDirty}
                   run={(path) => void runLocal(path)}
                   runInCloud={
