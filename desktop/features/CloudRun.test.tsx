@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { desktop } from "../bridge";
@@ -20,8 +20,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function show() {
-  render(<CloudRun workspace="C:/work/app" org="alpha" notify={vi.fn()} />);
+function show(onFinished = vi.fn()) {
+  render(
+    <CloudRun
+      workspace="C:/work/app"
+      org="alpha"
+      notify={vi.fn()}
+      onFinished={onFinished}
+    />,
+  );
+  return onFinished;
 }
 
 it("shows the cost and spends nothing until the user approves", async () => {
@@ -70,4 +78,14 @@ it("offers the run when nothing is happening", async () => {
   show();
   await userEvent.click(await screen.findByRole("button", { name: /Analyser dans le cloud/ }));
   expect(desktop.startCloudRun).toHaveBeenCalledWith("C:/work/app", "alpha");
+});
+
+it("opens the results once when the run finishes", async () => {
+  // The panel said "results below" and did nothing, so a finished analysis
+  // showed an empty page. Opening it is what that sentence promised.
+  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "done", job: "job-7" });
+  const onFinished = show();
+  await waitFor(() => expect(onFinished).toHaveBeenCalledWith("job-7"));
+  await new Promise((r) => setTimeout(r, 1100));
+  expect(onFinished).toHaveBeenCalledTimes(1);
 });

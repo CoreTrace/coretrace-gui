@@ -29,14 +29,20 @@ export function CloudRun({
   workspace,
   org,
   notify,
+  onFinished,
 }: {
   workspace: string;
   org: string;
   notify: (message: string) => void;
+  /** Called once when a run finishes, so its results can be opened. */
+  onFinished: (job: string) => void;
 }) {
   const [phase, setPhase] = useState<CloudPhase>(IDLE);
   const [busy, setBusy] = useState(false);
   const polling = useRef<ReturnType<typeof setInterval>>(undefined);
+  // The job whose results have already been opened, so finishing opens them
+  // once rather than on every poll.
+  const opened = useRef<string>(undefined);
 
   const poll = useCallback(async () => {
     try {
@@ -45,6 +51,13 @@ export function CloudRun({
       // A status that cannot be read is not worth interrupting the run for.
     }
   }, []);
+
+  useEffect(() => {
+    if (phase.phase === "done" && opened.current !== phase.job) {
+      opened.current = phase.job;
+      onFinished(phase.job);
+    }
+  }, [phase, onFinished]);
 
   useEffect(() => {
     if (!native) return;
@@ -143,7 +156,9 @@ export function CloudRun({
           <Loader2 size={14} className="spin" /> Analyse en cours dans le cloud…
         </p>
       )}
-      {phase.phase === "done" && <p role="status">Analyse terminée. Résultats ci-dessous.</p>}
+      {phase.phase === "done" && (
+        <p role="status">Analyse terminée. Les résultats sont ouverts.</p>
+      )}
       {phase.phase === "failed" && (
         <p role="alert" className="error">
           {phase.reason}

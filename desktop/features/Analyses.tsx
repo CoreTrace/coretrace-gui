@@ -413,7 +413,21 @@ export function Analyses({
             </button>
           </div>
           {workspaceRoot && cloud.org && (
-            <CloudRun workspace={workspaceRoot} org={cloud.org} notify={notify} />
+            <CloudRun
+              workspace={workspaceRoot}
+              org={cloud.org}
+              notify={notify}
+              onFinished={(id) => {
+                void (async () => {
+                  await cloud.refresh();
+                  try {
+                    select(await desktop.readCloud<Job>("job", cloud.org, id));
+                  } catch (e) {
+                    notify(errorMessage(e));
+                  }
+                })();
+              }}
+            />
           )}
           <section className="panel">
             <div className="section-heading">
