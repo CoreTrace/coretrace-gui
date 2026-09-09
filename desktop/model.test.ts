@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   billed,
+  typicalSeconds,
   duration,
   outcome,
   parseFindings,
@@ -187,4 +188,22 @@ it("names every status and conclusion the platform sends, in French", () => {
     const label = outcome({ status: "completed", conclusion, runs: [] } as unknown as Job);
     expect(label, conclusion).not.toBe(conclusion);
   }
+});
+
+describe("typicalSeconds", () => {
+  const job = (ms?: number) => ({ execution_ms: ms, runs: [] }) as unknown as Job;
+
+  it("says nothing when too few analyses have been measured", () => {
+    // An estimate from one or two runs is a guess wearing a measurement's
+    // clothes; showing no figure is the honest answer.
+    expect(typicalSeconds([])).toBeUndefined();
+    expect(typicalSeconds([job(1000), job(2000)])).toBeUndefined();
+    expect(typicalSeconds([job(1000), job(undefined), job(0)])).toBeUndefined();
+  });
+
+  it("takes the median of what actually ran", () => {
+    expect(
+      typicalSeconds([job(10_000), job(20_000), job(120_000), job(undefined)]),
+    ).toBe(20);
+  });
 });

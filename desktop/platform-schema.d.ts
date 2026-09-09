@@ -1073,6 +1073,11 @@ export interface components {
             billed_ctu?: number;
             /** @description What the job was run against, as the caller named it. An upload names no repository, so without it a history can only say "imported sources". */
             label?: string;
+            /**
+             * Format: int64
+             * @description How long the tools ran, measured from the runs. A client can only estimate a remaining time from durations it has seen, and the listing carries no runs to measure.
+             */
+            execution_ms?: number;
             /** Format: date-time */
             confirm_deadline?: string;
             /** Format: date-time */

@@ -167,3 +167,24 @@ export function workspaceRelativePath(value: string, root: string): string {
     throw new Error("Emplacement de résultat invalide.");
   return path;
 }
+
+/**
+ * How long a cloud analysis usually takes for this organisation, in seconds,
+ * from the jobs it has actually run. Undefined when too few have finished to
+ * say anything: a guess dressed as a measurement is worse than no answer.
+ *
+ * The median, not the mean, so one pathological run does not move it.
+ */
+export function typicalSeconds(jobs: Job[]): number | undefined {
+  const measured = jobs
+    .map((job) => job.execution_ms ?? 0)
+    .filter((ms) => ms > 0)
+    .sort((a, b) => a - b);
+  if (measured.length < 3) return undefined;
+  const middle = Math.floor(measured.length / 2);
+  const median =
+    measured.length % 2 === 0
+      ? (measured[middle - 1] + measured[middle]) / 2
+      : measured[middle];
+  return Math.round(median / 1000);
+}
