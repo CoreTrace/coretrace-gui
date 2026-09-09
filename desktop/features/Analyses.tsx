@@ -24,6 +24,9 @@ import type { Finding, Job, LocalResult, Repository } from "../types";
 import { JobRows } from "./Dashboard";
 
 /** The letter and colour a level gets, as the web application shows them. */
+/** Reports of finished runs, which are immutable once written. */
+const reportCache = new Map<string, string>();
+
 const MARK: Record<string, { letter: string; label: string }> = {
   error: { letter: "E", label: "Erreur" },
   warning: { letter: "W", label: "Avertissement" },
@@ -173,13 +176,17 @@ function JobDetail({
     setLoading(true);
     setReportErrors([]);
     void Promise.allSettled(
-      job.runs.map(async (run) =>
-        parseFindings(
-          await desktop.report(cloud.org, job.id, run.id),
-          run.tool,
-          "cloud",
-        ),
-      ),
+      job.runs.map(async (run) => {
+        // A finished run's report never changes, so fetching it again on every
+        // visit only adds two round trips to the platform and its storage.
+        const key = `${job.id}/${run.id}`;
+        let text = reportCache.get(key);
+        if (text === undefined) {
+          text = await desktop.report(cloud.org, job.id, run.id);
+          reportCache.set(key, text);
+        }
+        return parseFindings(text, run.tool, "cloud");
+      }),
     ).then((results) => {
       if (!active) return;
       setFindings(

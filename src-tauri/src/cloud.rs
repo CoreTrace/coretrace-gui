@@ -471,10 +471,15 @@ pub async fn cloud_report(
     if link["size"].as_u64().unwrap_or(u64::MAX) > 10 * 1024 * 1024 {
         return Err("Report exceeds the desktop limit of 10 MiB".into());
     }
+    // The download needs no session state, and holding the session through it
+    // serialises every report behind the last and blocks every other call the
+    // application is making. Opening one analysis stalled the whole interface.
+    let client = s.http().clone();
+    let uri = uri.to_owned();
+    drop(s);
     // Signed artifact links never receive the platform bearer or X-Org header.
-    let mut response = s
-        .client
-        .get(uri)
+    let mut response = client
+        .get(&uri)
         .send()
         .await
         .map_err(|_| "Could not download report")?;
