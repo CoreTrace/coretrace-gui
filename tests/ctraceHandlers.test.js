@@ -307,3 +307,63 @@ test('run-ctrace handler preserves tool name for real unknown tool failures', as
   platformMock.mock.restore();
 });
 
+test('run-ctrace handler surfaces an unsupported-input-file error instead of reporting a clean run', async (t) => {
+  const handlers = new Map();
+  const electronStub = {
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler)
+    }
+  };
+
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    callApi: t.mock.fn(async () => ({
+      ok: true,
+      statusCode: 200,
+      json: {
+        result: {
+          outputs: {
+            cppcheck: [{ stream: 'stdout', message: '' }],
+            ikos: [{ stream: 'stdout', message: '' }],
+            tscancode: [{ stream: 'stdout', message: '' }],
+            ctrace_stack_analyzer: [
+              {
+                stream: 'stderr',
+                // Verbatim shape reported by the real backend for a .txt input.
+                message: 'Unsupported input file type: /tmp/notcode.txt\nstack_usage_analyzer: error: \n\n^\nFailed to analyze: /tmp/notcode.txt'
+              }
+            ]
+          }
+        }
+      }
+    })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
+  };
+
+  const { setupCtraceHandlers } = withModuleMocks({
+    electron: electronStub,
+    '../utils/ctraceServeClient': serveClientStub
+  }, () => {
+    const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
+    delete require.cache[modulePath];
+    return require(modulePath);
+  });
+
+  const accessMock = t.mock.method(fsPromises, 'access', async () => {});
+  const platformMock = t.mock.method(os, 'platform', () => 'linux');
+
+  setupCtraceHandlers();
+  const response = await handlers.get('run-ctrace')(null, []);
+
+  assert.strictEqual(response.success, true);
+  const parsed = JSON.parse(response.output);
+  assert.ok(Array.isArray(parsed.diagnostics));
+  assert.ok(parsed.diagnostics.length > 0, 'expected an unsupported-input diagnostic instead of a silent clean run');
+  assert.strictEqual(parsed.diagnostics[0].ruleId, 'ToolExecutionError.ctrace_stack_analyzer');
+  assert.match(parsed.diagnostics[0].details.message, /does not support this file's type/i);
+
+  accessMock.mock.restore();
+  platformMock.mock.restore();
+});
