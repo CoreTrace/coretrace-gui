@@ -12,6 +12,7 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import {
   ChevronDown,
   ChevronRight,
+  CloudUpload,
   FileCode2,
   Folder,
   FolderOpen,
@@ -37,6 +38,8 @@ interface Props {
   workspace: Workspace;
   dirtyChanged: (dirty: boolean) => void;
   run: (path: string) => void;
+  /** Sends the whole workspace to the platform; absent when signed out. */
+  runInCloud?: () => void;
   busy: boolean;
   notify: (message: string) => void;
 }
@@ -157,7 +160,7 @@ function Tree({
 
 export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
   function WorkspaceEditor(
-    { workspace, dirtyChanged, run, busy, notify },
+    { workspace, dirtyChanged, run, runInCloud, busy, notify },
     ref,
   ) {
     const [tabs, setTabs] = useState<Tab[]>([]);
@@ -353,6 +356,16 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                     <Play size={14} />
                     Analyser le fichier
                   </button>
+                  {runInCloud && (
+                    <button
+                      disabled={busy}
+                      title="Envoie le dossier ouvert à la plateforme et l’analyse avec vos CTU"
+                      onClick={runInCloud}
+                    >
+                      <CloudUpload size={14} />
+                      Analyser dans le cloud
+                    </button>
+                  )}
                 </div>
               </div>
               <Editor

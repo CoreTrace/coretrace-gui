@@ -1341,3 +1341,56 @@ dialog label {
   background: #1d3b34;
   cursor: default;
 }
+
+/* A finding's level, as a letter rather than a word: it reads at a glance and
+   keeps the row's left edge aligned however long the level's name is. */
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid #414141;
+  background: #2e2e2e;
+  color: #c1c1c1;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mark.error {
+  color: #ff8a8a;
+  border-color: #7f3535;
+  background: #3a1f1f;
+}
+.mark.warning {
+  color: #f3c969;
+  border-color: #7a5d20;
+  background: #3a301a;
+}
+.mark.note,
+.mark.info {
+  color: #8ab4ff;
+  border-color: #35507f;
+  background: #1f2a3a;
+}
+
+/* Placeholders while a report is still being fetched: an empty list reads as
+   "no findings", which is a different and wrong answer. */
+.finding.placeholder {
+  pointer-events: none;
+}
+.skeleton {
+  background: #2b2b2b;
+  border-radius: 6px;
+  color: transparent;
+}
+.skeleton.line {
+  display: block;
+  height: 11px;
+  margin: 6px 0;
+}
+.skeleton.line.short {
+  width: 120px;
+}
