@@ -5,7 +5,7 @@
 use coretrace_ipc::{ExtensionHostClient, HostResponse};
 
 fn main() {
-    let mut client = ExtensionHostClient::connect(7331).expect("connect to sidecar");
+    let mut client = ExtensionHostClient::connect(7331, &dev_token()).expect("connect to sidecar");
 
     client
         .set_document_text("hello world", None, None)
@@ -27,4 +27,10 @@ fn main() {
     println!("document after real extension command ran: {text:?}");
     assert_eq!(text, "helloWorld", "real change-case extension did not produce the expected result");
     println!("OK: unmodified wmaurer.change-case extension ran inside the Node sidecar and mutated the document via IPC");
+}
+
+/// Manual dev runs start the sidecar by hand (`PORT=7331 node src/index.js`);
+/// it prints `TOKEN <hex>` at startup, pass that back via CORETRACE_HOST_TOKEN.
+fn dev_token() -> String {
+    std::env::var(coretrace_ipc::TOKEN_ENV).unwrap_or_default()
 }

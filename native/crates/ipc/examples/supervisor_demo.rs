@@ -29,7 +29,8 @@ fn main() {
     let pid1 = supervisor.pid().expect("pid available once port is set");
     println!("sidecar #1: pid={pid1} port={port1}");
 
-    let mut client = ExtensionHostClient::connect(port1).expect("connect to sidecar #1");
+    let token1 = supervisor.token().expect("token available");
+    let mut client = ExtensionHostClient::connect(port1, &token1).expect("connect to sidecar #1");
     assert!(matches!(client.ping().unwrap(), HostResponse::Pong));
     println!("sidecar #1 responds to ping");
 
@@ -44,7 +45,8 @@ fn main() {
     assert_ne!(pid1, pid2, "respawned process should have a different PID");
     assert_ne!(port1, port2, "respawned process should get a freshly negotiated port");
 
-    let mut client2 = ExtensionHostClient::connect(port2).expect("connect to sidecar #2");
+    let token2 = supervisor.token().expect("token available after respawn");
+    let mut client2 = ExtensionHostClient::connect(port2, &token2).expect("connect to sidecar #2");
     assert!(matches!(client2.ping().unwrap(), HostResponse::Pong));
     println!("sidecar #2 responds to ping");
 

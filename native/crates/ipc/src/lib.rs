@@ -5,4 +5,4 @@ mod transport;
 
 pub use client::ExtensionHostClient;
 pub use protocol::{HostRequest, HostResponse};
-pub use supervisor::SidecarSupervisor;
+pub use supervisor::{SidecarSupervisor, TOKEN_ENV};
