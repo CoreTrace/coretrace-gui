@@ -4,7 +4,7 @@
 use coretrace_ipc::ExtensionHostClient;
 
 fn main() {
-    let mut client = ExtensionHostClient::connect(7331).expect("connect to sidecar");
+    let mut client = ExtensionHostClient::connect(7331, &dev_token()).expect("connect to sidecar");
     let pong = client.ping().expect("ping sidecar");
     println!("ping -> {pong:?}");
 
@@ -12,4 +12,10 @@ fn main() {
         .invoke_command("coretrace.spike.echo", vec![serde_json::json!("hello")])
         .expect("invoke command");
     println!("invoke_command -> {result:?}");
+}
+
+/// Manual dev runs start the sidecar by hand (`PORT=7331 node src/index.js`);
+/// it prints `TOKEN <hex>` at startup, pass that back via CORETRACE_HOST_TOKEN.
+fn dev_token() -> String {
+    std::env::var(coretrace_ipc::TOKEN_ENV).unwrap_or_default()
 }

@@ -20,12 +20,18 @@ pub fn run_static_analysis(
     let bin_wsl = to_wsl_path(ctrace_bin).ok_or(CtraceError::InvalidPath)?;
     let file_wsl = to_wsl_path(file).ok_or(CtraceError::InvalidPath)?;
 
-    let script = format!("'{bin_wsl}' --input='{file_wsl}' --static --sarif-format 2>&1");
+    // A login shell is still used so ctrace sees the user's WSL environment,
+    // but both paths travel as positional parameters ($0 / $1) rather than
+    // being spliced into the script text: a file name containing quotes or
+    // `$(...)` is then just data, never shell syntax.
+    const SCRIPT: &str = r#""$0" --input="$1" --static --sarif-format 2>&1"#;
     let output = Command::new("wsl.exe")
         .arg("-e")
         .arg("bash")
         .arg("-lc")
-        .arg(&script)
+        .arg(SCRIPT)
+        .arg(&bin_wsl)
+        .arg(&file_wsl)
         .output()?;
 
     let text = String::from_utf8_lossy(&output.stdout);
