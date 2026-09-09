@@ -360,7 +360,17 @@ export function Analyses({
         rerun,
         requestId,
       );
-      select(job);
+      // The commit already had an analysis and the platform named it. Opening it
+      // is what the reader asked for; a bare conflict left them stuck.
+      const existing = (job as { existing_job?: string }).existing_job;
+      if (existing) {
+        notify(
+          "Ce commit a déjà été analysé. Voici le résultat ; utilisez « Relancer » pour l’analyser à nouveau.",
+        );
+        select(await desktop.readCloud<Job>("job", cloud.org, existing));
+      } else {
+        select(job);
+      }
       setRequestId(crypto.randomUUID());
       clearDraft();
       void cloud.refresh();

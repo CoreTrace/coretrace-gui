@@ -179,6 +179,28 @@ impl Session {
             .await?;
         self.accept_tokens(success(response)?)
     }
+    /// Like `request`, but hands back the status and body so a caller can act
+    /// on a particular refusal instead of only reporting it.
+    pub(crate) async fn request_status(
+        &mut self,
+        method: Method,
+        path: &str,
+        org: Option<&str>,
+        body: Option<Value>,
+    ) -> Result<(u16, Value), String> {
+        if self.access.is_none() {
+            self.refresh().await?;
+        }
+        let response = self
+            .send(method.clone(), path, org, body.clone(), true)
+            .await?;
+        if response.0 != 401 {
+            return Ok(response);
+        }
+        self.access = None;
+        self.refresh().await?;
+        self.send(method, path, org, body, true).await
+    }
     pub(crate) async fn request(
         &mut self,
         method: Method,
@@ -390,17 +412,25 @@ pub async fn cloud_analyse(
         segment(&installation)?,
         segment(&repository)?
     );
-    cloud
+    let (status, value) = cloud
         .0
         .lock()
         .await
-        .request(
+        .request_status(
             Method::POST,
             &path,
             Some(&org),
             Some(json!({"ref":reference,"rerun":rerun,"idempotency_key":segment(&request_id)?})),
         )
-        .await
+        .await?;
+    // The commit already has an analysis and the platform names it. Reporting
+    // only "Conflict" throws that away and leaves the reader with nowhere to go.
+    if status == 409 && value["detail"]["reason"] == "analysis_exists" {
+        if let Some(job) = value["detail"]["job_id"].as_str() {
+            return Ok(json!({"existing_job": job}));
+        }
+    }
+    success((status, value))
 }
 #[tauri::command]
 pub async fn cloud_cancel(
