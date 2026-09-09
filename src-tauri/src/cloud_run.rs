@@ -14,15 +14,33 @@ use std::time::Duration;
 #[serde(tag = "phase", rename_all = "lowercase")]
 pub enum Phase {
     Idle,
-    Packing { files: usize, bytes: u64 },
-    Uploading { files: usize, total: u64 },
+    Packing {
+        files: usize,
+        bytes: u64,
+    },
+    Uploading {
+        files: usize,
+        total: u64,
+    },
     Verifying,
     Quoting,
-    Quoted { job: String, ctu: i64, deadline: String },
-    Running { job: String },
-    Done { job: String },
-    Failed { reason: String },
-    Cancelled { spent: bool },
+    Quoted {
+        job: String,
+        ctu: i64,
+        deadline: String,
+    },
+    Running {
+        job: String,
+    },
+    Done {
+        job: String,
+    },
+    Failed {
+        reason: String,
+    },
+    Cancelled {
+        spent: bool,
+    },
 }
 
 /// One run at a time, its cancellation flag, and the archive it owns.
@@ -331,12 +349,7 @@ pub(crate) async fn confirm(
     for _ in 0..900 {
         if state.cancelled() {
             let _ = session
-                .request(
-                    Method::POST,
-                    &format!("/jobs/{id}/cancel"),
-                    Some(org),
-                    None,
-                )
+                .request(Method::POST, &format!("/jobs/{id}/cancel"), Some(org), None)
                 .await;
             state.set(Phase::Cancelled { spent: true });
             return Err("Cancelled".into());
@@ -405,15 +418,15 @@ mod tests {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::sync::mpsc;
 
-    const UPLOAD_AUTHORISED: &str =
-        r#"{"upload_id":"u1","put_url":"{BASE}/put","expires_at":"2030-01-01T00:00:00Z","max_bytes":1048576}"#;
-    const UPLOAD_TINY_LIMIT: &str =
-        r#"{"upload_id":"u1","put_url":"{BASE}/put","expires_at":"2030-01-01T00:00:00Z","max_bytes":10}"#;
+    const UPLOAD_AUTHORISED: &str = r#"{"upload_id":"u1","put_url":"{BASE}/put","expires_at":"2030-01-01T00:00:00Z","max_bytes":1048576}"#;
+    const UPLOAD_TINY_LIMIT: &str = r#"{"upload_id":"u1","put_url":"{BASE}/put","expires_at":"2030-01-01T00:00:00Z","max_bytes":10}"#;
     const VERIFYING: &str = r#"{"upload_id":"u1","state":"verifying"}"#;
     const READY: &str = r#"{"upload_id":"u1","state":"verified","input_id":"in-1"}"#;
-    const REJECTED: &str = r#"{"upload_id":"u1","state":"rejected","reject_reason":"too many files"}"#;
+    const REJECTED: &str =
+        r#"{"upload_id":"u1","state":"rejected","reject_reason":"too many files"}"#;
     const CREATED_JOB: &str = r#"{"id":"job-1","status":"preparing_input","created_at":"2026-01-01T00:00:00Z","runs":[]}"#;
-    const QUOTING_JOB: &str = r#"{"id":"job-1","status":"quoting","created_at":"2026-01-01T00:00:00Z","runs":[]}"#;
+    const QUOTING_JOB: &str =
+        r#"{"id":"job-1","status":"quoting","created_at":"2026-01-01T00:00:00Z","runs":[]}"#;
     const QUOTED_JOB: &str = r#"{"id":"job-1","status":"awaiting_confirmation","created_at":"2026-01-01T00:00:00Z","runs":[],"quote_id":"q1","reserved_ctu":4000,"confirm_deadline":"2030-01-01T00:00:00Z"}"#;
 
     /// A platform that answers a scripted list of replies in order and records
@@ -504,7 +517,9 @@ mod tests {
             (200, READY),
         ]);
         let (_dir, packed) = tiny_archive();
-        let input = upload(&mut stub.session(), "alpha", &packed, None).await.unwrap();
+        let input = upload(&mut stub.session(), "alpha", &packed, None)
+            .await
+            .unwrap();
         assert_eq!(input, "in-1");
         assert_eq!(
             stub.seen(),
@@ -527,7 +542,10 @@ mod tests {
             (200, ""),
             (202, VERIFYING),
             (200, r#"{"upload_id":"u1","state":"completed"}"#),
-            (200, r#"{"upload_id":"u1","state":"verified","input_id":"in-7"}"#),
+            (
+                200,
+                r#"{"upload_id":"u1","state":"verified","input_id":"in-7"}"#,
+            ),
         ]);
         let (_dir, packed) = tiny_archive();
         let input = upload(&mut stub.session(), "alpha", &packed, None)
@@ -626,7 +644,9 @@ mod tests {
             .await
             .unwrap();
         match state.phase() {
-            Phase::Quoted { ctu, .. } => assert_eq!(ctu, 4000, "the priced total, not the empty one"),
+            Phase::Quoted { ctu, .. } => {
+                assert_eq!(ctu, 4000, "the priced total, not the empty one")
+            }
             other => panic!("phase = {other:?}"),
         }
     }
@@ -639,7 +659,10 @@ mod tests {
             (202, VERIFYING),
             (200, READY),
             (201, CREATED_JOB),
-            (200, r#"{"id":"job-1","status":"rejected","rejection_reason":"insufficient CTU","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
+            (
+                200,
+                r#"{"id":"job-1","status":"rejected","rejection_reason":"insufficient CTU","created_at":"2026-01-01T00:00:00Z","runs":[]}"#,
+            ),
         ]);
         let state = RunState::default();
         let (_dir, root) = workspace();
@@ -668,9 +691,18 @@ mod tests {
         // Waiting for a "succeeded" the platform never sends would have polled
         // for half an hour after the user had already paid.
         let stub = stub_platform(vec![
-            (200, r#"{"id":"job-1","status":"queued","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
-            (200, r#"{"id":"job-1","status":"running","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
-            (200, r#"{"id":"job-1","status":"completed","conclusion":"findings","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
+            (
+                200,
+                r#"{"id":"job-1","status":"queued","created_at":"2026-01-01T00:00:00Z","runs":[]}"#,
+            ),
+            (
+                200,
+                r#"{"id":"job-1","status":"running","created_at":"2026-01-01T00:00:00Z","runs":[]}"#,
+            ),
+            (
+                200,
+                r#"{"id":"job-1","status":"completed","conclusion":"findings","created_at":"2026-01-01T00:00:00Z","runs":[]}"#,
+            ),
         ]);
         let state = RunState::default();
         *state.job.lock().unwrap() = Some("job-1".into());
@@ -687,10 +719,7 @@ mod tests {
     async fn a_second_run_is_refused_while_one_is_going() {
         let state = RunState::default();
         let _guard = state.begin().unwrap();
-        assert_eq!(
-            state.begin().unwrap_err(),
-            "An analysis is already running"
-        );
+        assert_eq!(state.begin().unwrap_err(), "An analysis is already running");
     }
 
     #[tokio::test]
@@ -719,10 +748,9 @@ mod tests {
         let (_dir, root) = workspace();
         let _ = start(&state, &mut stub.session(), root, "alpha", vec![]).await;
         match state.phase() {
-            Phase::Failed { reason } => assert!(
-                reason.contains("Storage unavailable"),
-                "reason = {reason}"
-            ),
+            Phase::Failed { reason } => {
+                assert!(reason.contains("Storage unavailable"), "reason = {reason}")
+            }
             other => panic!("phase = {other:?}"),
         }
     }
