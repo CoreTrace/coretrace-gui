@@ -2,8 +2,13 @@ import type { Finding, Job, Limits } from "./types";
 
 export const terminal = (job: Job) =>
   ["completed", "cancelled", "rejected"].includes(job.status);
+/**
+ * What a job has cost. The listing carries no runs, so summing them reported
+ * zero for every past analysis; the platform now puts the total on the job and
+ * the runs are only a fallback for an older platform.
+ */
 export const billed = (job: Job) =>
-  job.runs.reduce((sum, run) => sum + run.billed_ctu, 0);
+  job.billed_ctu ?? job.runs.reduce((sum, run) => sum + run.billed_ctu, 0);
 const labels: Record<string, string> = {
   completed: "Terminée",
   clean: "Aucun problème",

@@ -61,6 +61,7 @@ export type CloudPhase =
   | { phase: "packing"; files: number; bytes: number }
   | { phase: "uploading"; files: number; total: number }
   | { phase: "verifying" }
+  | { phase: "quoting" }
   | { phase: "quoted"; job: string; ctu: number; deadline: string }
   | { phase: "running"; job: string }
   | { phase: "done"; job: string }
