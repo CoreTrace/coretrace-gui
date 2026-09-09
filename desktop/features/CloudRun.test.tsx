@@ -89,3 +89,22 @@ it("opens the results once when the run finishes", async () => {
   await new Promise((r) => setTimeout(r, 1100));
   expect(onFinished).toHaveBeenCalledTimes(1);
 });
+
+it("does not reopen a finished analysis every time the tab is revisited", async () => {
+  // Leaving the tab unmounts the panel while the run stays "done", so a guard
+  // held inside the component forgot and the list became unreachable.
+  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "done", job: "job-42" });
+  const onFinished = vi.fn();
+
+  const first = render(
+    <CloudRun workspace="C:/w" org="alpha" notify={vi.fn()} onFinished={onFinished} />,
+  );
+  await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1));
+  first.unmount();
+
+  render(
+    <CloudRun workspace="C:/w" org="alpha" notify={vi.fn()} onFinished={onFinished} />,
+  );
+  await new Promise((r) => setTimeout(r, 1100));
+  expect(onFinished).toHaveBeenCalledTimes(1);
+});

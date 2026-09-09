@@ -185,6 +185,9 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [active, setActive] = useState("");
     const [refresh, setRefresh] = useState(0);
+    // Folders the reader has collapsed. With several open, a long tree pushes
+    // the others off the screen.
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [saving, setSaving] = useState(false);
     const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const pendingLine = useRef<number | null>(null);
@@ -327,9 +330,23 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
           {(workspaces?.length ? workspaces : [workspace]).map((w) => (
             <section key={w.id} className="explorer-root">
               <div className="explorer-heading">
-                <span className={w.id === workspace.id ? "current" : undefined}>
-                  <FolderOpen size={14} /> {w.name}
-                </span>
+                <button
+                  className="explorer-toggle"
+                  aria-expanded={!collapsed[w.id]}
+                  aria-label={`${collapsed[w.id] ? "Déplier" : "Replier"} ${w.name}`}
+                  onClick={() =>
+                    setCollapsed((all) => ({ ...all, [w.id]: !all[w.id] }))
+                  }
+                >
+                  {collapsed[w.id] ? (
+                    <ChevronRight size={14} />
+                  ) : (
+                    <ChevronDown size={14} />
+                  )}
+                  <span className={w.id === workspace.id ? "current" : undefined}>
+                    <FolderOpen size={14} /> {w.name}
+                  </span>
+                </button>
                 {w.id === workspace.id && (
                   <button
                     className="icon"
@@ -340,6 +357,7 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                   </button>
                 )}
               </div>
+              {!collapsed[w.id] && (
               <Tree
                 workspace={w}
                 select={(path) => {
@@ -352,6 +370,7 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                 selected={w.id === workspace.id ? active : ""}
                 refresh={refresh}
               />
+              )}
             </section>
           ))}
         </aside>
