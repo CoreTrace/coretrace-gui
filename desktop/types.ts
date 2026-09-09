@@ -52,3 +52,15 @@ export type Page =
   | "repositories"
   | "workspace"
   | "settings";
+
+/** Where a cloud run has got to, as the Rust side reports it. */
+export type CloudPhase =
+  | { phase: "idle" }
+  | { phase: "packing"; files: number; bytes: number }
+  | { phase: "uploading"; files: number; total: number }
+  | { phase: "verifying" }
+  | { phase: "quoted"; job: string; ctu: number; deadline: string }
+  | { phase: "running"; job: string }
+  | { phase: "done"; job: string }
+  | { phase: "failed"; reason: string }
+  | { phase: "cancelled"; spent: boolean };

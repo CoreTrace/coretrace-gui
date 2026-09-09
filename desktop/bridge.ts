@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type {
+  CloudPhase,
   DeviceCode,
   Document,
   FileEntry,
@@ -24,6 +25,13 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 }
 export const desktop = {
   chooseWorkspace: () => call<Workspace | null>("choose_workspace"),
+  /** Starts a cloud run on the open folder; it stops at the quote. */
+  startCloudRun: (root: string, org: string, tools: string[] = []) =>
+    call<void>("cloud_run_start", { root, org, tools }),
+  cloudRunStatus: () => call<CloudPhase>("cloud_run_status"),
+  /** Approves the quote. This is the call that spends CTU. */
+  confirmCloudRun: (org: string) => call<void>("cloud_run_confirm", { org }),
+  cancelCloudRun: () => call<void>("cloud_run_cancel"),
   /** Where clones are kept, for Settings to show. */
   cloneLocation: () => call<string>("clone_location"),
   cloneRepository: (repository: string) =>
