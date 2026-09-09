@@ -59,6 +59,9 @@ export default function App() {
   const openTabs = useRef<Record<string, { paths: string[]; active: string }>>(
     {},
   );
+  // The folder in front right now. A closure captures the folder as it was when
+  // it started, and an analysis outlives that.
+  const activeWorkspace = useRef<string | undefined>(undefined);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
@@ -135,6 +138,7 @@ export default function App() {
       open.some((w) => w.id === next.id) ? open : [...open, next],
     );
     setWorkspace(next);
+    activeWorkspace.current = next.id;
     setDirty(false);
     setLocal(null);
     setPage("workspace");
@@ -145,6 +149,7 @@ export default function App() {
     if (!next || next.id === workspace?.id) return;
     if (!(await canSwitch())) return;
     setWorkspace(next);
+    activeWorkspace.current = next.id;
     setDirty(false);
   };
   const closeFolder = async (id: string) => {
@@ -154,7 +159,9 @@ export default function App() {
       delete openTabs.current[id];
       setWorkspaces(open);
       if (id === workspace?.id) {
-        setWorkspace(open[open.length - 1] ?? null);
+        const next = open[open.length - 1] ?? null;
+        setWorkspace(next);
+        activeWorkspace.current = next?.id;
         setDirty(false);
         setLocal(null);
         if (open.length === 0) setPage("home");
@@ -207,8 +214,12 @@ export default function App() {
     setLocalRunning(true);
     setLocal(null);
     setPage("analyses");
+    const ran = workspace.id;
     try {
-      setLocal(await desktop.analyseLocal(workspace.id, path));
+      const result = await desktop.analyseLocal(ran, path);
+      // An analysis takes seconds; the reader may have moved to another folder
+      // since, and its result is not theirs.
+      if (activeWorkspace.current === ran) setLocal(result);
     } catch (e) {
       setMessage(errorMessage(e));
     } finally {
