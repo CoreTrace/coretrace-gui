@@ -427,6 +427,7 @@ export default function App() {
               openFinding={openFinding}
               local={local}
               localRunning={localRunning}
+              workspaceRoot={workspace?.path}
               openWorkspace={() =>
                 workspace ? setPage("workspace") : void openFolder()
               }

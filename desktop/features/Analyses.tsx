@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { CloudRun } from "./CloudRun";
 import {
   ArrowLeft,
   FileCode2,
@@ -290,6 +291,7 @@ export function Analyses({
   local,
   localRunning,
   openWorkspace,
+  workspaceRoot,
 }: {
   cloud: CloudModel;
   selected: Job | null;
@@ -302,6 +304,8 @@ export function Analyses({
   local: LocalResult | null;
   localRunning: boolean;
   openWorkspace: () => void;
+  /** The folder open in the editor, when there is one: what a cloud run sends. */
+  workspaceRoot?: string;
 }) {
   const [repositoryId, setRepositoryId] = useState(initialRepository?.id ?? "");
   const [reference, setReference] = useState(
@@ -396,6 +400,9 @@ export function Analyses({
               Analyser un fichier local
             </button>
           </div>
+          {workspaceRoot && cloud.org && (
+            <CloudRun workspace={workspaceRoot} org={cloud.org} notify={notify} />
+          )}
           <section className="panel">
             <div className="section-heading">
               <h2>Nouvelle analyse cloud</h2>
