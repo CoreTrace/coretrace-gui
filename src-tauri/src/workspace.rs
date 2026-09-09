@@ -74,15 +74,57 @@ pub fn workspaces(state: tauri::State<'_, WorkspaceState>) -> Result<Vec<Workspa
     Ok(state.0.lock().map_err(|e| e.to_string())?.clone())
 }
 
+/// Reopens the folders the last session had, dropping any that have since been
+/// moved or deleted. Also reports the ctrace executable that was chosen.
+#[tauri::command]
+pub fn restore_session(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, WorkspaceState>,
+) -> Result<RestoredSession, String> {
+    let remembered = crate::settings::load(&app);
+    let mut open = Vec::new();
+    for path in remembered.workspaces {
+        if let Ok(workspace) = activate(&state, path) {
+            open.push(workspace);
+        }
+    }
+    Ok(RestoredSession {
+        workspaces: open,
+        analyser: remembered
+            .analyser
+            .filter(|p| p.is_file())
+            .map(|p| p.display().to_string()),
+    })
+}
+
+/// What the previous session left behind.
+#[derive(Serialize)]
+pub struct RestoredSession {
+    pub workspaces: Vec<Workspace>,
+    pub analyser: Option<String>,
+}
+
+/// Writes the open folders down so the next session finds them.
+pub fn remember(app: &tauri::AppHandle, state: &WorkspaceState) {
+    if let Ok(open) = state.0.lock() {
+        crate::settings::remember_workspaces(app, open.iter().map(|w| w.path.clone()).collect());
+    }
+}
+
 /// Closes one folder. The files on disk are untouched.
 #[tauri::command]
 pub fn close_workspace(
+    app: tauri::AppHandle,
     state: tauri::State<'_, WorkspaceState>,
     id: String,
 ) -> Result<Vec<Workspace>, String> {
-    let mut open = state.0.lock().map_err(|e| e.to_string())?;
-    open.retain(|w| w.id != id);
-    Ok(open.clone())
+    let remaining = {
+        let mut open = state.0.lock().map_err(|e| e.to_string())?;
+        open.retain(|w| w.id != id);
+        open.clone()
+    };
+    remember(&app, &state);
+    Ok(remaining)
 }
 pub fn resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative);
@@ -139,10 +181,11 @@ pub async fn choose_workspace(
     state: tauri::State<'_, WorkspaceState>,
 ) -> Result<Option<Workspace>, String> {
     match app.dialog().file().blocking_pick_folder() {
-        Some(path) => Ok(Some(activate(
-            &state,
-            path.into_path().map_err(|e| e.to_string())?,
-        )?)),
+        Some(path) => {
+            let workspace = activate(&state, path.into_path().map_err(|e| e.to_string())?)?;
+            remember(&app, &state);
+            Ok(Some(workspace))
+        }
         None => Ok(None),
     }
 }
@@ -297,7 +340,6 @@ mod tests {
         fs::write(dir.path().join("binary"), b"abc\0def").unwrap();
         assert!(read(&dir.path().join("binary")).is_err());
     }
-
 
     #[test]
     fn several_folders_stay_open_together() {

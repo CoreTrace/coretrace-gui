@@ -62,6 +62,25 @@ export default function App() {
   // The folder in front right now. A closure captures the folder as it was when
   // it started, and an analysis outlives that.
   const activeWorkspace = useRef<string | undefined>(undefined);
+  // What the previous session had open. Choosing the executable and reopening
+  // the same folders every time is work the reader already did once.
+  useEffect(() => {
+    if (!native) return;
+    void desktop
+      .restoreSession()
+      .then((session) => {
+        if (session.analyser) setAnalyser(session.analyser);
+        if (session.workspaces.length) {
+          setWorkspaces(session.workspaces);
+          const first = session.workspaces[0];
+          setWorkspace(first);
+          activeWorkspace.current = first.id;
+        }
+      })
+      .catch(() => {
+        // A session that cannot be restored is a first run, not a failure.
+      });
+  }, []);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
