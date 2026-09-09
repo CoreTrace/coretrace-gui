@@ -453,10 +453,10 @@ export default function App() {
             <button onClick={() => void cloud.refresh()}>Réessayer</button>
           </div>
         )}
-        {busy && (
+        {(busy || localRunning) && (
           <div className="operation" role="status">
             <LoaderCircle className="spin" size={16} />
-            {busy}
+            {busy || "Analyse locale en cours… ctrace examine le fichier."}
           </div>
         )}
         <main
@@ -525,6 +525,18 @@ export default function App() {
                   key={workspace.id}
                   ref={editor}
                   workspace={workspace}
+                  workspaces={workspaces}
+                  openIn={(id, path) => {
+                    // Opening a file from another folder brings that folder to
+                    // the front with the file already open, which is what
+                    // clicking it means.
+                    const remembered = openTabs.current[id];
+                    const paths = remembered?.paths.includes(path)
+                      ? remembered.paths
+                      : [...(remembered?.paths ?? []), path];
+                    openTabs.current[id] = { paths, active: path };
+                    void switchTo(id);
+                  }}
                   restore={openTabs.current[workspace.id]}
                   tabsChanged={(paths, active) => {
                     openTabs.current[workspace.id] = { paths, active };

@@ -35,11 +35,12 @@ export function JobRows({
             <GitBranch size={17} />
           </div>
           <div className="grow">
-            <strong>{job.source?.repo_full_name ?? "Sources importées"}</strong>
+            <strong>
+              {job.source?.repo_full_name ?? job.label ?? "Sources importées"}
+            </strong>
             <span className="muted small">
               {job.source?.ref ??
                 job.source?.commit_sha?.slice(0, 8) ??
-                job.label ??
                 "Analyse cloud"}{" "}
               · {date(job.created_at)}
             </span>

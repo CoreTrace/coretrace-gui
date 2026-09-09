@@ -458,14 +458,20 @@ pub async fn cloud_report(
     run: String,
 ) -> Result<String, String> {
     let mut s = cloud.0.lock().await;
-    let link = s
-        .request(
+    let (status, link) = s
+        .request_status(
             Method::GET,
             &format!("/jobs/{}/runs/{}/report", segment(&id)?, segment(&run)?),
             Some(segment(&org)?),
             None,
         )
         .await?;
+    // A tool can finish having written no report — nothing to say is a result,
+    // not a failure, and showing it in red as "Not found" is a lie about the run.
+    if status == 404 {
+        return Ok(r#"{"version":"2.1.0","runs":[]}"#.into());
+    }
+    let link = success((status, link))?;
     let uri = link["url"].as_str().ok_or("Missing report download link")?;
     validate_external(uri)?;
     if link["size"].as_u64().unwrap_or(u64::MAX) > 10 * 1024 * 1024 {
