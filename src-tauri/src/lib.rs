@@ -14,6 +14,8 @@ pub fn run() {
         .manage(cloud_run::RunState::default())
         .invoke_handler(tauri::generate_handler![
             workspace::choose_workspace,
+            workspace::workspaces,
+            workspace::close_workspace,
             workspace::list_files,
             workspace::read_file,
             workspace::save_file,

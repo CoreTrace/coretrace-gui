@@ -39,6 +39,7 @@ export function JobRows({
             <span className="muted small">
               {job.source?.ref ??
                 job.source?.commit_sha?.slice(0, 8) ??
+                job.label ??
                 "Analyse cloud"}{" "}
               · {date(job.created_at)}
             </span>

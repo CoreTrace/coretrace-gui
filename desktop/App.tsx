@@ -6,6 +6,7 @@ import {
   Code2,
   FolderGit2,
   FolderOpen,
+  FolderPlus,
   Home,
   LoaderCircle,
   PanelLeftClose,
@@ -51,6 +52,8 @@ export default function App() {
   const cloud = useCloud();
   const [page, setPage] = useState<Page>("home");
   const [collapsed, setCollapsed] = useState(false);
+  // Several folders can be open at once; `workspace` is the one being edited.
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
@@ -123,10 +126,36 @@ export default function App() {
   };
   const activate = (next: Workspace | null) => {
     if (!next) return;
+    setWorkspaces((open) =>
+      open.some((w) => w.id === next.id) ? open : [...open, next],
+    );
     setWorkspace(next);
     setDirty(false);
     setLocal(null);
     setPage("workspace");
+  };
+  /** Switches to a folder already open, guarding unsaved work as a change does. */
+  const switchTo = async (id: string) => {
+    const next = workspaces.find((w) => w.id === id);
+    if (!next || next.id === workspace?.id) return;
+    if (!(await canSwitch())) return;
+    setWorkspace(next);
+    setDirty(false);
+  };
+  const closeFolder = async (id: string) => {
+    if (id === workspace?.id && !(await canSwitch())) return;
+    try {
+      const open = await desktop.closeWorkspace(id);
+      setWorkspaces(open);
+      if (id === workspace?.id) {
+        setWorkspace(open[open.length - 1] ?? null);
+        setDirty(false);
+        setLocal(null);
+        if (open.length === 0) setPage("home");
+      }
+    } catch (e) {
+      setMessage(errorMessage(e));
+    }
   };
   const openFolder = async () => {
     if (!(await canSwitch())) return;
@@ -322,7 +351,35 @@ export default function App() {
             {page === "workspace" && workspace && (
               <>
                 <span>/</span>
-                {workspace.name}
+                {/* Several folders can be open; this is the one being edited. */}
+                <select
+                  aria-label="Dossier actif"
+                  className="folder-picker"
+                  value={workspace.id}
+                  onChange={(e) => void switchTo(e.target.value)}
+                >
+                  {workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="text-button"
+                  title="Ouvrir un autre dossier dans cet espace de travail"
+                  onClick={() => void openFolder()}
+                >
+                  <FolderPlus size={15} />
+                </button>
+                {workspaces.length > 1 && (
+                  <button
+                    className="text-button"
+                    title={`Fermer ${workspace.name}`}
+                    onClick={() => void closeFolder(workspace.id)}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
               </>
             )}
           </div>

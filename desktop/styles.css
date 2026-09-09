@@ -1394,3 +1394,18 @@ dialog label {
 .skeleton.line.short {
   width: 120px;
 }
+
+/* The folder being edited, when several are open. It sits in the breadcrumb, so
+   it borrows the bar's type rather than looking like a form control. */
+.folder-picker {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.folder-picker:hover {
+  background: #2a2a2a;
+}

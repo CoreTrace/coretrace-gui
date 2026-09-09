@@ -16,8 +16,11 @@ pub struct Workspace {
     pub name: String,
     pub path: PathBuf,
 }
+/// Every folder currently open. A project is often several directories — a
+/// library beside the application that uses it — and analysing one meant
+/// closing the other.
 #[derive(Default)]
-pub struct WorkspaceState(pub Mutex<Option<Workspace>>);
+pub struct WorkspaceState(pub Mutex<Vec<Workspace>>);
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
@@ -31,10 +34,16 @@ pub struct Document {
     revision: String,
 }
 
+/// Opens a folder, or returns the one already open at that path: asking for a
+/// folder twice means wanting to work in it, not wanting two of it.
 pub fn activate(state: &WorkspaceState, path: PathBuf) -> Result<Workspace, String> {
     let path = path.canonicalize().map_err(|e| e.to_string())?;
     if !path.is_dir() {
         return Err("Choose a folder".into());
+    }
+    let mut open = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(existing) = open.iter().find(|w| w.path == path) {
+        return Ok(existing.clone());
     }
     let workspace = Workspace {
         id: uuid::Uuid::new_v4().to_string(),
@@ -45,7 +54,7 @@ pub fn activate(state: &WorkspaceState, path: PathBuf) -> Result<Workspace, Stri
             .into(),
         path,
     };
-    *state.0.lock().map_err(|e| e.to_string())? = Some(workspace.clone());
+    open.push(workspace.clone());
     Ok(workspace)
 }
 pub fn root(state: &WorkspaceState, id: &str) -> Result<PathBuf, String> {
@@ -53,10 +62,27 @@ pub fn root(state: &WorkspaceState, id: &str) -> Result<PathBuf, String> {
         .0
         .lock()
         .map_err(|e| e.to_string())?
-        .as_ref()
-        .filter(|w| w.id == id)
+        .iter()
+        .find(|w| w.id == id)
         .map(|w| w.path.clone())
         .ok_or("Workspace changed; reopen the file".into())
+}
+
+/// The folders open now, in the order they were opened.
+#[tauri::command]
+pub fn workspaces(state: tauri::State<'_, WorkspaceState>) -> Result<Vec<Workspace>, String> {
+    Ok(state.0.lock().map_err(|e| e.to_string())?.clone())
+}
+
+/// Closes one folder. The files on disk are untouched.
+#[tauri::command]
+pub fn close_workspace(
+    state: tauri::State<'_, WorkspaceState>,
+    id: String,
+) -> Result<Vec<Workspace>, String> {
+    let mut open = state.0.lock().map_err(|e| e.to_string())?;
+    open.retain(|w| w.id != id);
+    Ok(open.clone())
 }
 pub fn resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative);
@@ -262,10 +288,55 @@ mod tests {
     fn stale_workspace_and_binary_are_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let state = WorkspaceState::default();
+        // A folder that is no longer open cannot be read through. It used to go
+        // stale by being replaced; now it goes stale by being closed, since
+        // opening a second folder no longer discards the first.
         let first = activate(&state, dir.path().into()).unwrap();
-        activate(&state, dir.path().into()).unwrap();
+        state.0.lock().unwrap().clear();
         assert!(root(&state, &first.id).is_err());
         fs::write(dir.path().join("binary"), b"abc\0def").unwrap();
         assert!(read(&dir.path().join("binary")).is_err());
+    }
+
+
+    #[test]
+    fn several_folders_stay_open_together() {
+        // A project is often more than one directory, and opening the second
+        // used to close the first.
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("engine");
+        let b = dir.path().join("tools");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+
+        let state = WorkspaceState::default();
+        let first = activate(&state, a.clone()).unwrap();
+        let second = activate(&state, b).unwrap();
+        assert_ne!(first.id, second.id);
+
+        // Both remain reachable by their own id.
+        assert!(root(&state, &first.id).is_ok());
+        assert!(root(&state, &second.id).is_ok());
+
+        // Opening the same folder again is the same folder, not a second copy.
+        assert_eq!(activate(&state, a).unwrap().id, first.id);
+        assert_eq!(state.0.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn closing_one_folder_leaves_the_others() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("engine");
+        let b = dir.path().join("tools");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+
+        let state = WorkspaceState::default();
+        let first = activate(&state, a).unwrap();
+        let second = activate(&state, b).unwrap();
+        state.0.lock().unwrap().retain(|w| w.id != first.id);
+
+        assert!(root(&state, &first.id).is_err());
+        assert!(root(&state, &second.id).is_ok());
     }
 }

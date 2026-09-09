@@ -1011,6 +1011,8 @@ export interface components {
             allow_partial?: boolean;
             auto_confirm?: boolean;
             idempotency_key?: string;
+            /** @description What is being analysed, for the history. Display only; the platform never interprets it. */
+            label?: string;
         };
         RejectedTool: {
             tool: string;
@@ -1069,6 +1071,8 @@ export interface components {
              * @description What the job has cost so far. The listing carries no runs, so this is the only cost it can show.
              */
             billed_ctu?: number;
+            /** @description What the job was run against, as the caller named it. An upload names no repository, so without it a history can only say "imported sources". */
+            label?: string;
             /** Format: date-time */
             confirm_deadline?: string;
             /** Format: date-time */
