@@ -76,6 +76,8 @@ export const desktop = {
     call<void>("cloud_cancel", { org, id }),
   report: (org: string, id: string, run: string) =>
     call<string>("cloud_report", { org, id, run }),
+  /** Opens GitHub's authorisation in the system browser; resolves with the URL. */
+  connectGitHub: () => call<string>("connect_github"),
   openAccount: (page: "device" | "dashboard" | "repositories" | "settings") =>
     call<void>("open_account", { page }),
 };
