@@ -5,6 +5,13 @@ import type { CloudPhase } from "../types";
 
 const IDLE: CloudPhase = { phase: "idle" };
 
+/**
+ * Runs whose results have already been opened. Outside the component on
+ * purpose: leaving the tab unmounts the panel, and a ref inside would forget,
+ * so returning re-opened the finished analysis and the list became unreachable.
+ */
+const opened = new Set<string>();
+
 /** Phases where something is happening and the user may want out. */
 function active(phase: CloudPhase): boolean {
   return (
@@ -49,9 +56,6 @@ export function CloudRun({
   const [phase, setPhase] = useState<CloudPhase>(IDLE);
   const [busy, setBusy] = useState(false);
   const polling = useRef<ReturnType<typeof setInterval>>(undefined);
-  // The job whose results have already been opened, so finishing opens them
-  // once rather than on every poll.
-  const opened = useRef<string>(undefined);
   // Animations may be switched off system-wide, and then nothing can turn. A
   // count that ticks every second is motion the reader can trust: it is the
   // real elapsed time, not decoration.
@@ -80,8 +84,8 @@ export function CloudRun({
   }, [phase]);
 
   useEffect(() => {
-    if (phase.phase === "done" && opened.current !== phase.job) {
-      opened.current = phase.job;
+    if (phase.phase === "done" && !opened.has(phase.job)) {
+      opened.add(phase.job);
       onFinished(phase.job);
     }
   }, [phase, onFinished]);

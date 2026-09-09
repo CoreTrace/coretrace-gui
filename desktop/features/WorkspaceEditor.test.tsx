@@ -169,3 +169,25 @@ it("reports an emptied folder so nothing stale is restored", async () => {
   );
   await waitFor(() => expect(tabsChanged).toHaveBeenCalledWith([], ""));
 });
+
+it("folds a folder away and back", async () => {
+  // With several folders open, one long tree pushes the others off the screen.
+  render(
+    <ConfirmProvider>
+      <WorkspaceEditor
+        workspace={{ id: "workspace-1", name: "project", path: "C:/project" }}
+        dirtyChanged={vi.fn()}
+        run={vi.fn()}
+        busy={false}
+        notify={vi.fn()}
+      />
+    </ConfirmProvider>,
+  );
+  expect(await screen.findByRole("button", { name: "main.ts" })).toBeDefined();
+
+  await userEvent.click(screen.getByRole("button", { name: "Replier project" }));
+  expect(screen.queryByRole("button", { name: "main.ts" })).toBeNull();
+
+  await userEvent.click(screen.getByRole("button", { name: "Déplier project" }));
+  expect(await screen.findByRole("button", { name: "main.ts" })).toBeDefined();
+});

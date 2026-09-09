@@ -1462,3 +1462,20 @@ dialog label {
   letter-spacing: 0.04em;
   font-size: 11px;
 }
+
+/* The folder's name is the control that folds it away. */
+.explorer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.explorer-toggle:hover {
+  background: #2a2a2a;
+}
