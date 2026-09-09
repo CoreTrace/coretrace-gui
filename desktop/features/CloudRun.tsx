@@ -102,17 +102,17 @@ export function CloudRun({
 
       {phase.phase === "packing" && (
         <p role="status">
-          <Loader2 size={14} /> Préparation de l’archive…
+          <Loader2 size={14} className="spin" /> Préparation de l’archive…
         </p>
       )}
       {phase.phase === "uploading" && (
         <p role="status">
-          <Loader2 size={14} /> Envoi de {phase.files} fichiers ({megabytes(phase.total)})…
+          <Loader2 size={14} className="spin" /> Envoi de {phase.files} fichiers ({megabytes(phase.total)})…
         </p>
       )}
       {phase.phase === "verifying" && (
         <p role="status">
-          <Loader2 size={14} /> Vérification par la plateforme…
+          <Loader2 size={14} className="spin" /> Vérification par la plateforme…
         </p>
       )}
 
@@ -133,7 +133,7 @@ export function CloudRun({
 
       {phase.phase === "running" && (
         <p role="status">
-          <Loader2 size={14} /> Analyse en cours dans le cloud…
+          <Loader2 size={14} className="spin" /> Analyse en cours dans le cloud…
         </p>
       )}
       {phase.phase === "done" && <p role="status">Analyse terminée. Résultats ci-dessous.</p>}

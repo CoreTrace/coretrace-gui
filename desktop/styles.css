@@ -1321,6 +1321,12 @@ dialog label {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+  /* A spinner that cannot turn reads as a hung application. The words beside it
+     already say what is happening, so the frozen circle goes rather than
+     staying to be misread. */
+  .spin {
+    display: none;
+  }
 }
 
 /* The GitHub connection, as a pill: one control whose shape says it is an

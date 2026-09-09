@@ -13,7 +13,10 @@ import { desktop } from "../bridge";
 import type { CloudModel } from "../useCloud";
 import type { LocalResult } from "../types";
 vi.mock("../bridge", () => ({
-  desktop: { analyseCloud: vi.fn() },
+  desktop: {
+    analyseCloud: vi.fn(),
+    readCloud: vi.fn(),
+  },
   errorMessage: (e: unknown) => String(e),
 }));
 afterEach(() => {
@@ -134,4 +137,24 @@ it("renders report messages as text and sends a location to the editor", async (
   expect(document.querySelector("img")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "src/main.c:14" }));
   expect(open).toHaveBeenCalledWith("src/main.c", 14);
+});
+
+it("opens the analysis that already covers the commit", async () => {
+  // The platform answers 409 naming the job that already exists. Reporting only
+  // "Conflict (HTTP 409)" threw that away and left the reader with nowhere to go.
+  const existing = { id: "job-9", status: "succeeded", created_at: "2026-01-01T00:00:00Z", runs: [] };
+  vi.mocked(desktop.analyseCloud).mockResolvedValue({ existing_job: "job-9" } as never);
+  vi.mocked(desktop.readCloud).mockResolvedValue(existing as never);
+  const { select, notify } = form();
+
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Lancer l’analyse" }));
+  await user.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Lancer l’analyse",
+    }),
+  );
+
+  await waitFor(() => expect(select).toHaveBeenCalledWith(existing));
+  expect(notify).toHaveBeenCalledWith(expect.stringContaining("déjà été analysé"));
 });
