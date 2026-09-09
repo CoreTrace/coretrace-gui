@@ -55,7 +55,12 @@ impl<W: Write> Write for HashingWriter<W> {
 ///
 /// The walk is iterative rather than recursive: a deep tree is a property of
 /// the user's project, not something to trust the call stack with.
-pub fn pack(root: &Path, into: &Path, cancel: &AtomicBool) -> Result<Packed, String> {
+pub fn pack(
+    root: &Path,
+    into: &Path,
+    cancel: &AtomicBool,
+    progress: &dyn Fn(usize, u64),
+) -> Result<Packed, String> {
     let file = std::fs::File::create(into).map_err(|e| format!("Cannot write the archive: {e}"))?;
     let writer = HashingWriter {
         inner: file,
@@ -65,6 +70,7 @@ pub fn pack(root: &Path, into: &Path, cancel: &AtomicBool) -> Result<Packed, Str
     let encoder = zstd::Encoder::new(writer, 3).map_err(|e| e.to_string())?;
     let mut builder = tar::Builder::new(encoder);
     let mut files = 0usize;
+    let mut bytes = 0u64;
     let mut folders = vec![root.to_path_buf()];
 
     let outcome = (|| -> Result<(), String> {
@@ -96,10 +102,17 @@ pub fn pack(root: &Path, into: &Path, cancel: &AtomicBool) -> Result<Packed, Str
                 let Ok(relative) = path.strip_prefix(root) else {
                     continue;
                 };
+                let added = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                 builder
                     .append_path_with_name(&path, relative)
                     .map_err(|e| format!("Cannot add {}: {e}", relative.display()))?;
                 files += 1;
+                bytes += added;
+                // Reporting every file would be noise on a large tree; every
+                // twentieth is often enough for the count to look alive.
+                if files.is_multiple_of(20) {
+                    progress(files, bytes);
+                }
             }
         }
         Ok(())
@@ -159,7 +172,7 @@ mod tests {
         std::fs::write(root.join(".git/config"), b"noise").unwrap();
 
         let out = dir.path().join("archive.tar.zst");
-        let packed = pack(&root, &out, &AtomicBool::new(false)).unwrap();
+        let packed = pack(&root, &out, &AtomicBool::new(false), &|_, _| {}).unwrap();
 
         assert_eq!(packed.files, 1, "only the source file belongs in the archive");
         assert_eq!(packed.size, std::fs::metadata(&out).unwrap().len());
@@ -181,7 +194,7 @@ mod tests {
         std::fs::write(root.join("a.c"), b"int a;").unwrap();
 
         let out = dir.path().join("archive.tar.zst");
-        let packed = pack(&root, &out, &AtomicBool::new(false)).unwrap();
+        let packed = pack(&root, &out, &AtomicBool::new(false), &|_, _| {}).unwrap();
 
         let bytes = std::fs::read(&out).unwrap();
         assert_eq!(packed.sha256, sha256_hex(&bytes));
@@ -196,7 +209,7 @@ mod tests {
         std::fs::write(root.join("a.c"), b"int a;").unwrap();
 
         let out = dir.path().join("archive.tar.zst");
-        assert!(pack(&root, &out, &AtomicBool::new(true)).is_err());
+        assert!(pack(&root, &out, &AtomicBool::new(true), &|_, _| {}).is_err());
         assert!(!out.exists(), "a cancelled pack must not leave a partial archive");
     }
 }
