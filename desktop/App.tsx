@@ -515,8 +515,8 @@ export default function App() {
           }}
         >
           <p>
-            Indiquez le dépôt, puis choisissez où le conserver sur votre
-            ordinateur.
+            Indiquez le dépôt. CoreTrace le range avec les autres ; le dossier
+            est indiqué dans les paramètres.
           </p>
           <label>
             Dépôt GitHub
@@ -542,7 +542,7 @@ export default function App() {
               disabled={!clone.trim() || !!busy}
               onClick={() => void cloneRepo()}
             >
-              {busy ? "Clonage…" : "Choisir le dossier et cloner"}
+              {busy ? "Clonage…" : "Cloner"}
             </button>
           </footer>
         </Dialog>

@@ -24,6 +24,8 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 }
 export const desktop = {
   chooseWorkspace: () => call<Workspace | null>("choose_workspace"),
+  /** Where clones are kept, for Settings to show. */
+  cloneLocation: () => call<string>("clone_location"),
   cloneRepository: (repository: string) =>
     call<Workspace | null>("clone_repository", { repository }),
   files: (workspaceId: string, path = "") =>
