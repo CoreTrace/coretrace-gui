@@ -1064,6 +1064,11 @@ export interface components {
              * @description What the quote reserves in total, so a client can show the cost before confirming.
              */
             reserved_ctu?: number;
+            /**
+             * Format: int64
+             * @description What the job has cost so far. The listing carries no runs, so this is the only cost it can show.
+             */
+            billed_ctu?: number;
             /** Format: date-time */
             confirm_deadline?: string;
             /** Format: date-time */

@@ -154,3 +154,13 @@ it("says which machine ran the tool", () => {
   expect(parseFindings(sarif, "ctrace", "cloud")[0].origin).toBe("cloud");
   expect(parseFindings(sarif, "ctrace", "local")[0].origin).toBe("local");
 });
+
+it("takes a job's cost from the job, not from runs the listing never sends", () => {
+  // jobs.List returns an empty runs array by design, so summing runs reported
+  // zero for every past analysis however much it had actually billed.
+  expect(billed({ runs: [], billed_ctu: 9026 } as unknown as Job)).toBe(9026);
+  // An older platform sends no total; the runs still answer.
+  expect(
+    billed({ runs: [{ billed_ctu: 40 }, { billed_ctu: 2 }] } as unknown as Job),
+  ).toBe(42);
+});

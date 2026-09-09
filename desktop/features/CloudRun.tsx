@@ -11,6 +11,7 @@ function active(phase: CloudPhase): boolean {
     phase.phase === "packing" ||
     phase.phase === "uploading" ||
     phase.phase === "verifying" ||
+    phase.phase === "quoting" ||
     phase.phase === "running"
   );
 }
@@ -113,6 +114,12 @@ export function CloudRun({
       {phase.phase === "verifying" && (
         <p role="status">
           <Loader2 size={14} className="spin" /> Vérification par la plateforme…
+        </p>
+      )}
+
+      {phase.phase === "quoting" && (
+        <p role="status">
+          <Loader2 size={14} className="spin" /> Calcul du coût…
         </p>
       )}
 

@@ -17,6 +17,7 @@ pub enum Phase {
     Packing { files: usize, bytes: u64 },
     Uploading { files: usize, total: u64 },
     Verifying,
+    Quoting,
     Quoted { job: String, ctu: i64, deadline: String },
     Running { job: String },
     Done { job: String },
@@ -259,15 +260,44 @@ async fn run_until_quote(
         .ok_or("The platform created no job")?
         .to_owned();
     *state.job.lock().unwrap() = Some(id.clone());
-    state.set(Phase::Quoted {
-        job: id,
-        ctu: job["reserved_ctu"].as_i64().unwrap_or(0),
-        deadline: job["confirm_deadline"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
-    });
-    Ok(())
+
+    // The job is created before it is priced: the meter runs, then the job
+    // parks at awaiting_confirmation carrying its quote. Reading the cost off
+    // the creation answer showed zero and invited approval of a real charge.
+    state.set(Phase::Quoting);
+    for _ in 0..150 {
+        if state.cancelled() {
+            return Err("Cancelled".into());
+        }
+        let job = session
+            .request(Method::GET, &format!("/jobs/{id}"), Some(org), None)
+            .await?;
+        match job["status"].as_str().unwrap_or_default() {
+            "awaiting_confirmation" => {
+                state.set(Phase::Quoted {
+                    job: id,
+                    ctu: job["reserved_ctu"].as_i64().unwrap_or(0),
+                    deadline: job["confirm_deadline"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                });
+                return Ok(());
+            }
+            "rejected" => {
+                return Err(job["rejection_reason"]
+                    .as_str()
+                    .unwrap_or("The platform refused the analysis.")
+                    .to_owned())
+            }
+            "completed" | "cancelled" => {
+                state.set(Phase::Done { job: id });
+                return Ok(());
+            }
+            _ => tokio::time::sleep(Duration::from_secs(2)).await,
+        }
+    }
+    Err("The platform has not priced this analysis yet.".into())
 }
 
 /// Approves the quote and follows the job to its conclusion. This is the call
@@ -373,6 +403,8 @@ mod tests {
     const VERIFYING: &str = r#"{"upload_id":"u1","state":"verifying"}"#;
     const READY: &str = r#"{"upload_id":"u1","state":"verified","input_id":"in-1"}"#;
     const REJECTED: &str = r#"{"upload_id":"u1","state":"rejected","reject_reason":"too many files"}"#;
+    const CREATED_JOB: &str = r#"{"id":"job-1","status":"preparing_input","created_at":"2026-01-01T00:00:00Z","runs":[]}"#;
+    const QUOTING_JOB: &str = r#"{"id":"job-1","status":"quoting","created_at":"2026-01-01T00:00:00Z","runs":[]}"#;
     const QUOTED_JOB: &str = r#"{"id":"job-1","status":"awaiting_confirmation","created_at":"2026-01-01T00:00:00Z","runs":[],"quote_id":"q1","reserved_ctu":4000,"confirm_deadline":"2030-01-01T00:00:00Z"}"#;
 
     /// A platform that answers a scripted list of replies in order and records
@@ -543,7 +575,9 @@ mod tests {
             (200, ""),
             (202, VERIFYING),
             (200, READY),
-            (201, QUOTED_JOB),
+            (201, CREATED_JOB),
+            (200, QUOTING_JOB),
+            (200, QUOTED_JOB),
         ]);
         let state = RunState::default();
         let (_dir, root) = workspace();
@@ -562,6 +596,48 @@ mod tests {
             !stub.seen().iter().any(|p| p.ends_with("/confirm")),
             "nothing was confirmed"
         );
+    }
+
+    #[tokio::test]
+    async fn the_cost_is_read_after_the_platform_has_priced_the_job() {
+        // A job is created before it is priced. Reading the cost off the
+        // creation answer showed 0 CTU and invited approval of a real charge.
+        let stub = stub_platform(vec![
+            (201, UPLOAD_AUTHORISED),
+            (200, ""),
+            (202, VERIFYING),
+            (200, READY),
+            (201, CREATED_JOB),
+            (200, QUOTING_JOB),
+            (200, QUOTED_JOB),
+        ]);
+        let state = RunState::default();
+        let (_dir, root) = workspace();
+        start(&state, &mut stub.session(), root, "alpha", vec![])
+            .await
+            .unwrap();
+        match state.phase() {
+            Phase::Quoted { ctu, .. } => assert_eq!(ctu, 4000, "the priced total, not the empty one"),
+            other => panic!("phase = {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_refused_analysis_says_why_instead_of_quoting_nothing() {
+        let stub = stub_platform(vec![
+            (201, UPLOAD_AUTHORISED),
+            (200, ""),
+            (202, VERIFYING),
+            (200, READY),
+            (201, CREATED_JOB),
+            (200, r#"{"id":"job-1","status":"rejected","rejection_reason":"insufficient CTU","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
+        ]);
+        let state = RunState::default();
+        let (_dir, root) = workspace();
+        let err = start(&state, &mut stub.session(), root, "alpha", vec![])
+            .await
+            .unwrap_err();
+        assert!(err.contains("insufficient CTU"), "err = {err}");
     }
 
     #[tokio::test]
