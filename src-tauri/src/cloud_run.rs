@@ -103,6 +103,7 @@ pub(crate) async fn upload(
     session: &mut Session,
     org: &str,
     packed: &Packed,
+    state: Option<&RunState>,
 ) -> Result<String, String> {
     let authorised = session
         .request(
@@ -156,6 +157,11 @@ pub(crate) async fn upload(
         )
         .await?;
 
+    // The bytes have gone; what follows is the platform checking them, and
+    // saying "sending" through that reads as a stalled upload.
+    if let Some(state) = state {
+        state.set(Phase::Verifying);
+    }
     for _ in 0..120 {
         let status = session
             .request(
@@ -165,13 +171,16 @@ pub(crate) async fn upload(
                 None,
             )
             .await?;
+        // The platform's states are authorized, completed, verified, rejected
+        // and expired; an input id appears once it is verified.
         match status["state"].as_str().unwrap_or_default() {
-            "ready" => {
+            "verified" | "consumed" => {
                 return status["input_id"]
                     .as_str()
                     .map(str::to_owned)
-                    .ok_or_else(|| "The upload is ready but names no input.".into())
+                    .ok_or_else(|| "The upload is verified but names no input.".into())
             }
+            "expired" => return Err("The upload expired before it was verified.".into()),
             "rejected" => {
                 // The platform's own words: it knows why, and rewording loses that.
                 return Err(status["reject_reason"]
@@ -229,12 +238,11 @@ async fn run_until_quote(
         files: packed.files,
         total: packed.size,
     });
-    let input = upload(session, org, &packed).await?;
+    let input = upload(session, org, &packed, Some(state)).await?;
 
     if state.cancelled() {
         return Err("Cancelled".into());
     }
-    state.set(Phase::Verifying);
     let mut body = json!({
         "input_id": input,
         "allow_partial": true,
@@ -297,8 +305,11 @@ pub(crate) async fn confirm(
         let job = session
             .request(Method::GET, &format!("/jobs/{id}"), Some(org), None)
             .await?;
+        // The statuses are preparing_input, quoting, awaiting_confirmation,
+        // queued, running, finalizing, completed, rejected and cancelled.
+        // "failed" is a conclusion, not a status, and "succeeded" is neither.
         match job["status"].as_str().unwrap_or_default() {
-            "succeeded" | "failed" | "cancelled" | "rejected" => {
+            "completed" | "rejected" | "cancelled" => {
                 state.set(Phase::Done { job: id });
                 return Ok(());
             }
@@ -360,7 +371,7 @@ mod tests {
     const UPLOAD_TINY_LIMIT: &str =
         r#"{"upload_id":"u1","put_url":"{BASE}/put","expires_at":"2030-01-01T00:00:00Z","max_bytes":10}"#;
     const VERIFYING: &str = r#"{"upload_id":"u1","state":"verifying"}"#;
-    const READY: &str = r#"{"upload_id":"u1","state":"ready","input_id":"in-1"}"#;
+    const READY: &str = r#"{"upload_id":"u1","state":"verified","input_id":"in-1"}"#;
     const REJECTED: &str = r#"{"upload_id":"u1","state":"rejected","reject_reason":"too many files"}"#;
     const QUOTED_JOB: &str = r#"{"id":"job-1","status":"awaiting_confirmation","created_at":"2026-01-01T00:00:00Z","runs":[],"quote_id":"q1","reserved_ctu":4000,"confirm_deadline":"2030-01-01T00:00:00Z"}"#;
 
@@ -452,7 +463,7 @@ mod tests {
             (200, READY),
         ]);
         let (_dir, packed) = tiny_archive();
-        let input = upload(&mut stub.session(), "alpha", &packed).await.unwrap();
+        let input = upload(&mut stub.session(), "alpha", &packed, None).await.unwrap();
         assert_eq!(input, "in-1");
         assert_eq!(
             stub.seen(),
@@ -466,10 +477,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_upload_is_finished_when_the_platform_says_verified() {
+        // The states are authorized, completed, verified, rejected and expired.
+        // Waiting for a "ready" that never comes cost two minutes and then
+        // failed an upload the platform had accepted in three seconds.
+        let stub = stub_platform(vec![
+            (201, UPLOAD_AUTHORISED),
+            (200, ""),
+            (202, VERIFYING),
+            (200, r#"{"upload_id":"u1","state":"completed"}"#),
+            (200, r#"{"upload_id":"u1","state":"verified","input_id":"in-7"}"#),
+        ]);
+        let (_dir, packed) = tiny_archive();
+        let input = upload(&mut stub.session(), "alpha", &packed, None)
+            .await
+            .unwrap();
+        assert_eq!(input, "in-7");
+    }
+
+    #[tokio::test]
+    async fn an_expired_upload_says_so_rather_than_waiting() {
+        let stub = stub_platform(vec![
+            (201, UPLOAD_AUTHORISED),
+            (200, ""),
+            (202, VERIFYING),
+            (200, r#"{"upload_id":"u1","state":"expired"}"#),
+        ]);
+        let (_dir, packed) = tiny_archive();
+        let err = upload(&mut stub.session(), "alpha", &packed, None)
+            .await
+            .unwrap_err();
+        assert!(err.contains("expired"), "err = {err}");
+    }
+
+    #[tokio::test]
     async fn an_archive_over_the_authorised_size_is_refused_before_it_travels() {
         let stub = stub_platform(vec![(201, UPLOAD_TINY_LIMIT)]);
         let (_dir, packed) = tiny_archive();
-        let err = upload(&mut stub.session(), "alpha", &packed)
+        let err = upload(&mut stub.session(), "alpha", &packed, None)
             .await
             .unwrap_err();
         assert!(err.contains("too large"), "err = {err}");
@@ -485,7 +530,7 @@ mod tests {
             (200, REJECTED),
         ]);
         let (_dir, packed) = tiny_archive();
-        let err = upload(&mut stub.session(), "alpha", &packed)
+        let err = upload(&mut stub.session(), "alpha", &packed, None)
             .await
             .unwrap_err();
         assert!(err.contains("too many files"), "err = {err}");
@@ -531,6 +576,26 @@ mod tests {
         assert_eq!(err, "Cancelled");
         assert_eq!(state.phase(), Phase::Cancelled { spent: false });
         assert!(stub.seen().is_empty(), "nothing reached the platform");
+    }
+
+    #[tokio::test]
+    async fn the_run_finishes_when_the_platform_says_completed() {
+        // Waiting for a "succeeded" the platform never sends would have polled
+        // for half an hour after the user had already paid.
+        let stub = stub_platform(vec![
+            (200, r#"{"id":"job-1","status":"queued","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
+            (200, r#"{"id":"job-1","status":"running","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
+            (200, r#"{"id":"job-1","status":"completed","conclusion":"findings","created_at":"2026-01-01T00:00:00Z","runs":[]}"#),
+        ]);
+        let state = RunState::default();
+        *state.job.lock().unwrap() = Some("job-1".into());
+        confirm(&state, &mut stub.session(), "alpha").await.unwrap();
+        assert_eq!(
+            state.phase(),
+            Phase::Done {
+                job: "job-1".into()
+            }
+        );
     }
 
     #[tokio::test]
