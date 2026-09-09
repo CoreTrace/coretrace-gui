@@ -32,6 +32,11 @@ export const desktop = {
   /** Approves the quote. This is the call that spends CTU. */
   confirmCloudRun: (org: string) => call<void>("cloud_run_confirm", { org }),
   cancelCloudRun: () => call<void>("cloud_run_cancel"),
+  /** The folders and ctrace executable the previous session left behind. */
+  restoreSession: () =>
+    call<{ workspaces: Workspace[]; analyser: string | null }>(
+      "restore_session",
+    ),
   /** Every folder open now, in the order they were opened. */
   workspaces: () => call<Workspace[]>("workspaces"),
   /** Closes one folder; the files on disk are untouched. */

@@ -69,7 +69,9 @@ pub async fn clone_repository(
     if destination.exists() {
         // Already cloned here: open it rather than refusing, which is what the
         // user asking to clone it again wants.
-        return Ok(Some(activate(&state, destination)?));
+        let workspace = activate(&state, destination)?;
+        crate::workspace::remember(&app, &state);
+        return Ok(Some(workspace));
     }
     let mut command = Command::new("git");
     command
@@ -98,7 +100,10 @@ pub async fn clone_repository(
     if !output.status.success() {
         return Err(format!("Git clone failed. For private repositories, sign in with Git Credential Manager or gh auth setup-git first. {}", String::from_utf8_lossy(&output.stderr)));
     }
-    Ok(Some(activate(&state, destination)?))
+    // A clone is a folder the reader opened; the next session should find it.
+    let workspace = activate(&state, destination)?;
+    crate::workspace::remember(&app, &state);
+    Ok(Some(workspace))
 }
 #[cfg(test)]
 mod tests {
@@ -112,7 +117,10 @@ mod tests {
             "https://github.com/CoreTrace/coretrace-gui.git"
         );
         let (_, owner, name) = repository_url("CoreTrace/coretrace-gui").unwrap();
-        assert_eq!((owner.as_str(), name.as_str()), ("CoreTrace", "coretrace-gui"));
+        assert_eq!(
+            (owner.as_str(), name.as_str()),
+            ("CoreTrace", "coretrace-gui")
+        );
     }
 
     #[test]

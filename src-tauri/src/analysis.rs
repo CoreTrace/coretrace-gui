@@ -269,6 +269,7 @@ pub async fn choose_analyser(
         return Err("Choose an installed ctrace executable".into());
     }
     let display = tool_path(&path).display().to_string();
+    crate::settings::remember_analyser(&app, path.clone());
     *state.executable.lock().map_err(|e| e.to_string())? = Some(path);
     let mut options = state.options.lock().map_err(|e| e.to_string())?;
     if options.config.is_none() {
