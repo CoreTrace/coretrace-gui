@@ -1,5 +1,6 @@
 mod analysis;
 mod cloud;
+mod cloud_run;
 mod github;
 mod pack;
 mod workspace;
@@ -10,6 +11,7 @@ pub fn run() {
         .manage(workspace::WorkspaceState::default())
         .manage(analysis::AnalysisState::default())
         .manage(cloud::Cloud::new().expect("invalid CoreTrace platform configuration"))
+        .manage(cloud_run::RunState::default())
         .invoke_handler(tauri::generate_handler![
             workspace::choose_workspace,
             workspace::list_files,
@@ -32,6 +34,10 @@ pub fn run() {
             cloud::cloud_cancel,
             cloud::cloud_report,
             cloud::connect_github,
+            cloud_run::cloud_run_start,
+            cloud_run::cloud_run_status,
+            cloud_run::cloud_run_confirm,
+            cloud_run::cloud_run_cancel,
             cloud::open_account,
         ])
         .run(tauri::generate_context!())
