@@ -467,6 +467,27 @@ fn validate_external(value: &str) -> Result<(), String> {
     }
     Ok(())
 }
+/// Starts attaching a GitHub account and opens the authorisation in the system
+/// browser. The desktop cannot host GitHub's consent screen itself, and the
+/// platform binds the flow to the signed-in session, so the browser is the only
+/// place it can finish. The caller then polls `me` until the identity appears.
+#[tauri::command]
+pub async fn connect_github(cloud: tauri::State<'_, Cloud>) -> Result<String, String> {
+    let value = cloud
+        .0
+        .lock()
+        .await
+        .request(Method::POST, "/me/identities/github", None, None)
+        .await?;
+    let url = value["authorize_url"]
+        .as_str()
+        .ok_or("The platform returned no authorisation link")?
+        .to_owned();
+    validate_external(&url)?;
+    open::that_detached(&url).map_err(|e| e.to_string())?;
+    Ok(url)
+}
+
 #[tauri::command]
 pub async fn open_account(cloud: tauri::State<'_, Cloud>, page: String) -> Result<(), String> {
     let s = cloud.0.lock().await;

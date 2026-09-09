@@ -1,5 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
+import { desktop } from "../bridge";
 import { Settings } from "./Settings";
 import type { CloudModel } from "../useCloud";
 vi.mock("../bridge", () => ({
@@ -9,6 +11,7 @@ vi.mock("../bridge", () => ({
       Promise.resolve({ config: null, compileCommands: null }),
     ),
     readCloud: vi.fn(() => Promise.resolve([])),
+    connectGitHub: vi.fn(() => Promise.resolve("https://github.com/login/oauth/authorize")),
   },
   errorMessage: (e: unknown) => String(e),
 }));
@@ -19,7 +22,7 @@ afterEach(() => {
 function show(me: unknown) {
   render(
     <Settings
-      cloud={{ org: "alpha", me } as unknown as CloudModel}
+      cloud={{ org: "alpha", me, reconnect: vi.fn() } as unknown as CloudModel}
       analyser=""
       setAnalyser={vi.fn()}
       login={vi.fn()}
@@ -42,4 +45,29 @@ it("identifies a signed-in user the platform gives no name", () => {
 it("says nothing is signed in when there is no session", () => {
   show(null);
   expect(screen.getByText("Non connecté")).toBeDefined();
+});
+
+it("offers a GitHub pill and opens the authorisation in the browser", async () => {
+  const connect = vi.mocked(desktop.connectGitHub);
+  connect.mockResolvedValue("https://github.com/login/oauth/authorize?client_id=Iv1");
+  show({
+    principal: { kind: "user" },
+    email: "cedric@example.test",
+    orgs: [{ slug: "alpha" }],
+    identities: ["https://accounts.google.com"],
+  });
+  const pill = screen.getByRole("button", { name: /Connecter GitHub/ });
+  await userEvent.click(pill);
+  expect(connect).toHaveBeenCalled();
+});
+
+it("says GitHub is connected instead of offering to connect it again", () => {
+  show({
+    principal: { kind: "user" },
+    email: "cedric@example.test",
+    orgs: [{ slug: "alpha" }],
+    identities: ["https://accounts.google.com", "https://github.com"],
+  });
+  expect(screen.getByText("GitHub connecté")).toBeDefined();
+  expect(screen.queryByRole("button", { name: /Connecter GitHub/ })).toBeNull();
 });

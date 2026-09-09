@@ -1322,3 +1322,16 @@ dialog label {
     scroll-behavior: auto !important;
   }
 }
+
+/* The GitHub connection, as a pill: one control whose shape says it is an
+   account link rather than an action on the page. */
+.pill {
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+.pill.connected {
+  color: #c9f5e4;
+  border-color: #2f6f5c;
+  background: #1d3b34;
+  cursor: default;
+}

@@ -1,4 +1,4 @@
-import { ArrowUpRight, LogOut, Settings2, Users } from "lucide-react";
+import { ArrowUpRight, Github, LogOut, Settings2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, errorMessage, native, type AnalysisOptions } from "../bridge";
 import type { CloudModel } from "../useCloud";
@@ -17,6 +17,30 @@ export function Settings({
   notify: (message: string) => void;
 }) {
   const [members, setMembers] = useState<Member[]>([]);
+  const [connectingGitHub, setConnectingGitHub] = useState(false);
+  const githubConnected =
+    cloud.me?.identities?.includes("https://github.com") ?? false;
+
+  /**
+   * GitHub's consent screen cannot be hosted here, and the platform binds the
+   * flow to the signed-in session, so it finishes in the browser. Poll the
+   * identity afterwards rather than asking the user to come back and refresh.
+   */
+  async function connectGitHub() {
+    setConnectingGitHub(true);
+    try {
+      await desktop.connectGitHub();
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await cloud.reconnect();
+        if (cloud.me?.identities?.includes("https://github.com")) break;
+      }
+    } catch (e) {
+      notify(errorMessage(e));
+    } finally {
+      setConnectingGitHub(false);
+    }
+  }
   const [memberError, setMemberError] = useState("");
   const [options, setOptions] = useState<AnalysisOptions>({
     config: null,
@@ -84,6 +108,33 @@ export function Settings({
             <button onClick={login}>Se connecter</button>
           )}
         </div>
+        {cloud.me && (
+          <div className="setting-row">
+            <div>
+              <strong>Compte GitHub</strong>
+              <p className="muted">
+                {githubConnected
+                  ? "CoreTrace retrouve les dépôts où l’application est déjà installée."
+                  : "Connectez GitHub pour retrouver vos dépôts sans réinstaller l’application."}
+              </p>
+            </div>
+            {githubConnected ? (
+              <span className="pill connected">
+                <Github size={15} />
+                GitHub connecté
+              </span>
+            ) : (
+              <button
+                className="pill"
+                disabled={connectingGitHub}
+                onClick={() => void connectGitHub()}
+              >
+                <Github size={15} />
+                {connectingGitHub ? "Terminez dans le navigateur…" : "Connecter GitHub"}
+              </button>
+            )}
+          </div>
+        )}
         <p className="muted small">
           Plateforme : {cloud.baseUrl || "Chargement…"}
         </p>

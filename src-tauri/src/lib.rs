@@ -29,6 +29,7 @@ pub fn run() {
             cloud::cloud_analyse,
             cloud::cloud_cancel,
             cloud::cloud_report,
+            cloud::connect_github,
             cloud::open_account,
         ])
         .run(tauri::generate_context!())

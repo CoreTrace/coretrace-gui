@@ -12,6 +12,7 @@ src-tauri/target/
 src-tauri/gen/
 coverage/
 *.tsbuildinfo
-# Rust build output from the native spikes: 12 GB, rebuildable, and next to sources that are not
-# ignored so they stay visible.
-native/target/
+# The native spikes: exploratory Rust/Floem work that has never been committed here, and 12 GB of
+# rebuildable build output beside it. Ignored whole, so `git add -A` cannot sweep the tree into a
+# commit about something else. Committing the spikes is a decision to take deliberately.
+native/
