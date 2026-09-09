@@ -13,7 +13,17 @@ pub fn clone_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_data_dir()
         .map_err(|e| format!("No application data directory: {e}"))?;
-    Ok(base.join("repositories"))
+    Ok(plain(base.join("repositories")))
+}
+
+/// Windows canonicalisation returns an extended-length path (\\?\C:\...).
+/// Git refuses to create a work tree at one, answering "Invalid argument", so
+/// the prefix comes off before any path reaches a command or the user.
+fn plain(path: PathBuf) -> PathBuf {
+    match path.to_str().and_then(|p| p.strip_prefix(r"\\?\")) {
+        Some(stripped) => PathBuf::from(stripped),
+        None => path,
+    }
 }
 
 /// The clone location, for Settings to show.
@@ -54,7 +64,7 @@ pub async fn clone_repository(
     let parent = clone_root(&app)?.join(owner);
     std::fs::create_dir_all(&parent)
         .map_err(|e| format!("Could not create the clone folder: {e}"))?;
-    let parent = parent.canonicalize().map_err(|e| e.to_string())?;
+    let parent = plain(parent.canonicalize().map_err(|e| e.to_string())?);
     let destination = parent.join(name);
     if destination.exists() {
         // Already cloned here: open it rather than refusing, which is what the
@@ -103,6 +113,21 @@ mod tests {
         );
         let (_, owner, name) = repository_url("CoreTrace/coretrace-gui").unwrap();
         assert_eq!((owner.as_str(), name.as_str()), ("CoreTrace", "coretrace-gui"));
+    }
+
+    #[test]
+    fn an_extended_length_path_is_made_plain() {
+        // Git answers "Invalid argument" when asked to create a work tree at a
+        // path carrying Windows' extended-length prefix, which is exactly what
+        // canonicalize returns.
+        let verbatim = PathBuf::from(r"\\?\C:\Users\me\repos");
+        assert_eq!(plain(verbatim), PathBuf::from(r"C:\Users\me\repos"));
+        let ordinary = PathBuf::from(r"C:\Users\me");
+        assert_eq!(plain(ordinary.clone()), ordinary);
+    }
+
+    #[test]
+    fn accepts_only_github_repository_names_bad_cases() {
         for bad in [
             "--upload-pack=sh",
             "https://evil.test/a/b",

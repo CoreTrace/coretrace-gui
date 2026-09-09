@@ -453,6 +453,16 @@ export default function App() {
                   workspace={workspace}
                   dirtyChanged={setDirty}
                   run={(path) => void runLocal(path)}
+                  runInCloud={
+                    cloud.org
+                      ? () => {
+                          // The panel that drives a cloud run lives with the
+                          // analyses; sending the reader there is what starting
+                          // one from the editor means.
+                          setPage("analyses");
+                        }
+                      : undefined
+                  }
                   busy={localRunning}
                   notify={setMessage}
                 />
@@ -516,18 +526,28 @@ export default function App() {
           }}
         >
           <p>
-            Indiquez le dépôt. CoreTrace le range avec les autres ; le dossier
-            est indiqué dans les paramètres.
+            Choisissez un dépôt connecté ou saisissez <code>propriétaire/dépôt</code>.
+            CoreTrace le clone et le range avec les autres ; le dossier est
+            indiqué dans les paramètres.
           </p>
           <label>
             Dépôt GitHub
             <input
               autoFocus
+              list="connected-repositories"
               value={clone}
               placeholder="CoreTrace/coretrace-gui"
               disabled={!!busy}
               onChange={(e) => setClone(e.target.value)}
             />
+            {/* The field looked like a search that did nothing. The repositories
+                already connected are the ones most likely wanted, so it suggests
+                them while still accepting any owner/repository. */}
+            <datalist id="connected-repositories">
+              {cloud.repositories.map((r) => (
+                <option key={r.id} value={r.full_name} />
+              ))}
+            </datalist>
           </label>
           <p className="muted small">
             Les dépôts privés utilisent votre connexion Git locale. Si

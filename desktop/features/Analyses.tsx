@@ -23,12 +23,23 @@ import type { CloudModel } from "../useCloud";
 import type { Finding, Job, LocalResult, Repository } from "../types";
 import { JobRows } from "./Dashboard";
 
+/** The letter and colour a level gets, as the web application shows them. */
+const MARK: Record<string, { letter: string; label: string }> = {
+  error: { letter: "E", label: "Erreur" },
+  warning: { letter: "W", label: "Avertissement" },
+  note: { letter: "N", label: "Note" },
+  info: { letter: "N", label: "Information" },
+};
+
 export function Findings({
   findings,
   open,
+  loading = false,
 }: {
   findings: Finding[];
   open: (path: string, line: number) => void;
+  /** Reports are fetched per run; placeholders stand in until they arrive. */
+  loading?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const filtered = findings.filter((f) =>
@@ -40,7 +51,14 @@ export function Findings({
     <section>
       <div className="section-heading">
         <h2>
-          Résultats <span className="muted">{findings.length}</span>
+          Résultats{" "}
+          <span className="muted">
+            {loading
+              ? "…"
+              : search.trim()
+                ? `${filtered.length} sur ${findings.length}`
+                : findings.length}
+          </span>
         </h2>
         <label className="search">
           <Search size={15} />
@@ -52,13 +70,30 @@ export function Findings({
           />
         </label>
       </div>
-      {filtered.map((f, i) => (
+      {loading &&
+        [0, 1, 2].map((i) => (
+          <article className="finding placeholder" key={`placeholder-${i}`} aria-hidden="true">
+            <div className="inline">
+              <span className="mark skeleton" />
+              <span className="skeleton line short" />
+            </div>
+            <p className="skeleton line" />
+          </article>
+        ))}
+      {!loading &&
+        filtered.map((f, i) => (
         <article
           className={`finding ${f.level}`}
           key={`${f.path}-${f.line}-${i}`}
         >
           <div className="inline">
-            <span className={`badge ${f.level}`}>{f.level}</span>
+            <span
+              className={`mark ${f.level}`}
+              title={MARK[f.level]?.label ?? f.level}
+              aria-label={MARK[f.level]?.label ?? f.level}
+            >
+              {MARK[f.level]?.letter ?? f.level.charAt(0).toUpperCase()}
+            </span>
             <span className="muted small">
               {f.tool} {f.rule}
             </span>
@@ -74,7 +109,7 @@ export function Findings({
             {f.path || "Sans emplacement"}:{f.line}
           </button>
         </article>
-      ))}
+        ))}
       {!filtered.length && (
         <p className="muted">
           {findings.length
@@ -249,17 +284,17 @@ function JobDetail({
           L’analyse est en cours. Les résultats seront chargés à sa fin.
         </div>
       )}
-      {loading && <p className="muted">Chargement des rapports…</p>}
+
       {reportErrors.map((error) => (
         <p className="error small" key={error}>
           {error}
         </p>
       ))}
       {finished &&
-        !loading &&
-        (findings.length > 0 ||
+        (loading ||
+          findings.length > 0 ||
           (!reportErrors.length && job.runs.length > 0)) && (
-          <Findings findings={findings} open={open} />
+          <Findings findings={findings} open={open} loading={loading} />
         )}
       <details className="tool-runs">
         <summary>Exécution des outils · {job.runs.length}</summary>

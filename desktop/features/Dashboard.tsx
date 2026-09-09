@@ -131,8 +131,8 @@ export function Dashboard({
           <span className="action-icon brand-accent">
             <GitBranch size={23} />
           </span>
-          <strong>Charger un dépôt GitHub</strong>
-          <span>Clonez un dépôt et commencez à explorer.</span>
+          <strong>Cloner un dépôt GitHub</strong>
+          <span>Copiez un dépôt sur cette machine pour l’ouvrir et l’analyser.</span>
           <ArrowRight size={18} />
         </button>
         <button className="action-card" onClick={() => navigate("analyses")}>

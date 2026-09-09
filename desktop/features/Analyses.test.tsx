@@ -158,3 +158,32 @@ it("opens the analysis that already covers the commit", async () => {
   await waitFor(() => expect(select).toHaveBeenCalledWith(existing));
   expect(notify).toHaveBeenCalledWith(expect.stringContaining("déjà été analysé"));
 });
+
+it("counts what the search actually shows", async () => {
+  // The heading counted every finding while the list showed the filtered ones,
+  // so searching left a number that described nothing on screen.
+  render(
+    <Findings
+      open={vi.fn()}
+      findings={[
+        { rule: "r1", level: "error", path: "a.c", line: 1, message: "buffer overflow" },
+        { rule: "r2", level: "warning", path: "b.c", line: 2, message: "unused variable" },
+        { rule: "r3", level: "note", path: "c.c", line: 3, message: "style" },
+      ]}
+    />,
+  );
+  expect(screen.getByRole("heading", { name: /Résultats 3/ })).toBeDefined();
+  await userEvent.type(screen.getByLabelText("Filtrer les résultats"), "overflow");
+  expect(screen.getByRole("heading", { name: /1 sur 3/ })).toBeDefined();
+});
+
+it("marks a level with its letter, not its name", () => {
+  render(
+    <Findings
+      open={vi.fn()}
+      findings={[{ rule: "r", level: "error", path: "a.c", line: 1, message: "m" }]}
+    />,
+  );
+  const mark = screen.getByLabelText("Erreur");
+  expect(mark.textContent).toBe("E");
+});
