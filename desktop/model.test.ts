@@ -142,3 +142,15 @@ describe("finding navigation", () => {
     }
   });
 });
+
+it("says which machine ran the tool", () => {
+  // A cloud finding and a local one are otherwise identical, and the reader
+  // cannot tell whether their own machine or the platform produced it.
+  const sarif = JSON.stringify({
+    findings: [
+      { rule_id: "r1", level: "warning", message: "m", location: { path: "a.c", line: 3 } },
+    ],
+  });
+  expect(parseFindings(sarif, "ctrace", "cloud")[0].origin).toBe("cloud");
+  expect(parseFindings(sarif, "ctrace", "local")[0].origin).toBe("local");
+});

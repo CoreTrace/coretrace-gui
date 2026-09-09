@@ -1059,6 +1059,11 @@ export interface components {
                 [key: string]: unknown;
             };
             quote_id?: string;
+            /**
+             * Format: int64
+             * @description What the quote reserves in total, so a client can show the cost before confirming.
+             */
+            reserved_ctu?: number;
             /** Format: date-time */
             confirm_deadline?: string;
             /** Format: date-time */
