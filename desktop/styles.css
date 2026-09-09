@@ -856,16 +856,25 @@ small,
   text-align: left;
 }
 .search {
+  display: flex;
   flex-direction: row;
   align-items: center;
+  gap: 10px;
   border: 1px solid #3a3a3a;
   border-radius: 8px;
-  padding: 0 10px;
+  padding: 8px 14px;
 }
 .search input {
   background: transparent;
   border: 0;
-  font-size: 11px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.search input:focus {
+  outline: none;
+}
+.search:focus-within {
+  border-color: #5a5a5a;
 }
 .tool-runs {
   border: 1px solid #3c3c3c;
@@ -1478,4 +1487,32 @@ dialog label {
 }
 .explorer-toggle:hover {
   background: #2a2a2a;
+}
+
+/* Scrollbars, everywhere. The platform default is a wide light bar that cuts
+   across a dark interface; this one is the same in every pane and stays out of
+   the way until the pointer is near it. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4e4e4e;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

@@ -24,7 +24,16 @@ import type { CloudModel } from "../useCloud";
 import type { Finding, Job, LocalResult, Repository } from "../types";
 import { JobRows } from "./Dashboard";
 
-/** The letter and colour a level gets, as the web application shows them. */
+/** The first line of a tool's output that looks like the reason it stopped. */
+function firstProblem(local: LocalResult): string | undefined {
+  const lines = [local.stderr ?? "", local.stdout ?? ""]
+    .join("\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.find((line) => /error|fatal|not found|cannot|failed/i.test(line));
+}
+
 /** Section titles when the findings are grouped by severity. */
 const GROUP: Record<string, string> = {
   error: "Erreurs",
@@ -37,6 +46,7 @@ const GROUP: Record<string, string> = {
 /** Reports of finished runs, which are immutable once written. */
 const reportCache = new Map<string, string>();
 
+/** The letter and colour a level gets, as the web application shows them. */
 const MARK: Record<string, { letter: string; label: string }> = {
   error: { letter: "E", label: "Erreur" },
   warning: { letter: "W", label: "Avertissement" },
@@ -532,13 +542,19 @@ export function Analyses({
                   }}
                 >
                   <option value="">Sélectionnez un dépôt</option>
-                  {cloud.repositories
-                    .filter((r) => r.enabled)
-                    .map((repo) => (
-                      <option key={repo.id} value={repo.id}>
-                        {repo.full_name}
-                      </option>
-                    ))}
+                  {/* Every connected repository, not only the enabled ones:
+                      hiding the rest looked like they were missing. The
+                      platform refuses a disabled one, so it says why here. */}
+                  {cloud.repositories.map((repo) => (
+                    <option
+                      key={repo.id}
+                      value={repo.id}
+                      disabled={!repo.enabled}
+                    >
+                      {repo.full_name}
+                      {repo.enabled ? "" : " — analyse désactivée"}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -628,9 +644,14 @@ export function Analyses({
               {local.report && !localReport.error ? (
                 <Findings findings={localReport.findings} open={openFinding} />
               ) : (
-                <p className="muted">
-                  Aucun rapport structuré produit. Consultez la sortie de
-                  l’outil.
+                <p className="notice" role="status">
+                  ctrace n’a produit aucun rapport
+                  {local.exitCode !== 0 && local.exitCode !== undefined
+                    ? ` (code de sortie ${local.exitCode})`
+                    : ""}
+                  .{" "}
+                  {firstProblem(local) ??
+                    "Vérifiez le programme ctrace et la base de compilation dans les paramètres."}
                 </p>
               )}
               {localReport.error && (

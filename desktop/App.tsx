@@ -383,10 +383,20 @@ export default function App() {
             onClick={() => (cloud.me ? setPage("settings") : setLogin(true))}
           >
             <span className="avatar">
-              {cloud.me?.principal.name?.slice(0, 2).toUpperCase() || "CT"}
+              {/* The platform names API keys only, so a signed-in human has no
+                  principal name; the e-mail is the identity to show. */}
+              {(cloud.me?.principal.name ?? cloud.me?.email)
+                ?.slice(0, 2)
+                .toUpperCase() || "CT"}
             </span>
             <span>
-              <strong>{cloud.me?.principal.name || "Se connecter"}</strong>
+              <strong>
+                {cloud.me
+                  ? (cloud.me.principal.name ??
+                    cloud.me.email ??
+                    "Compte connecté")
+                  : "Se connecter"}
+              </strong>
               <small>
                 {cloud.me ? "Compte personnel" : "Accéder à CoreTrace Cloud"}
               </small>
