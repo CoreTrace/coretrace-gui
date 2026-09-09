@@ -1,6 +1,7 @@
 mod analysis;
 mod cloud;
 mod github;
+mod pack;
 mod workspace;
 
 pub fn run() {
