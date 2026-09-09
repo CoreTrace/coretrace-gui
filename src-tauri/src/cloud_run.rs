@@ -15,7 +15,7 @@ use std::time::Duration;
 pub enum Phase {
     Idle,
     Packing { files: usize, bytes: u64 },
-    Uploading { total: u64 },
+    Uploading { files: usize, total: u64 },
     Verifying,
     Quoted { job: String, ctu: i64, deadline: String },
     Running { job: String },
@@ -225,7 +225,10 @@ async fn run_until_quote(
     if state.cancelled() {
         return Err("Cancelled".into());
     }
-    state.set(Phase::Uploading { total: packed.size });
+    state.set(Phase::Uploading {
+        files: packed.files,
+        total: packed.size,
+    });
     let input = upload(session, org, &packed).await?;
 
     if state.cancelled() {
