@@ -85,7 +85,9 @@ pub fn pack(
                     return Err("Cancelled".into());
                 }
                 let path = entry.path();
-                let Ok(kind) = entry.file_type() else { continue };
+                let Ok(kind) = entry.file_type() else {
+                    continue;
+                };
                 // Symbolic links are not followed: a link out of the workspace
                 // would send files the user never opened.
                 if kind.is_symlink() {
@@ -134,7 +136,11 @@ pub fn pack(
     drop(inner);
     Ok(Packed {
         path: into.to_path_buf(),
-        sha256: hasher.finalize().iter().map(|b| format!("{b:02x}")).collect(),
+        sha256: hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect(),
         size: written,
         files,
     })
@@ -157,7 +163,11 @@ mod tests {
     fn sha256_hex(bytes: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(bytes);
-        hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+        hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 
     #[test]
@@ -174,12 +184,18 @@ mod tests {
         let out = dir.path().join("archive.tar.zst");
         let packed = pack(&root, &out, &AtomicBool::new(false), &|_, _| {}).unwrap();
 
-        assert_eq!(packed.files, 1, "only the source file belongs in the archive");
+        assert_eq!(
+            packed.files, 1,
+            "only the source file belongs in the archive"
+        );
         assert_eq!(packed.size, std::fs::metadata(&out).unwrap().len());
         assert_eq!(packed.sha256.len(), 64);
 
         let names = entry_names(&out);
-        assert!(names.iter().any(|n| n.ends_with("main.c")), "names = {names:?}");
+        assert!(
+            names.iter().any(|n| n.ends_with("main.c")),
+            "names = {names:?}"
+        );
         assert!(!names.iter().any(|n| n.contains("node_modules")));
         assert!(!names.iter().any(|n| n.contains(".git")));
     }
@@ -210,6 +226,9 @@ mod tests {
 
         let out = dir.path().join("archive.tar.zst");
         assert!(pack(&root, &out, &AtomicBool::new(true), &|_, _| {}).is_err());
-        assert!(!out.exists(), "a cancelled pack must not leave a partial archive");
+        assert!(
+            !out.exists(),
+            "a cancelled pack must not leave a partial archive"
+        );
     }
 }
