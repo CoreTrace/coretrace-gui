@@ -43,7 +43,14 @@ export function Dialog({
     </dialog>
   );
 }
-type Ask = (title: string, detail: string, action?: string) => Promise<boolean>;
+/** Resolves true for the action, "alternative" for the second way when one
+    is offered, false for Annuler. */
+type Ask = (
+  title: string,
+  detail: string,
+  action?: string,
+  alternative?: string,
+) => Promise<boolean | "alternative">;
 const ConfirmContext = createContext<Ask>(async () => false);
 export const useConfirm = () => useContext(ConfirmContext);
 export function ConfirmProvider({ children }: { children: ReactNode }) {
@@ -51,14 +58,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     title: string;
     detail: string;
     action: string;
-    resolve: (answer: boolean) => void;
+    alternative?: string;
+    resolve: (answer: boolean | "alternative") => void;
   } | null>(null);
   const ask: Ask = useCallback(
-    (title, detail, action = "Continuer") =>
-      new Promise((resolve) => setRequest({ title, detail, action, resolve })),
+    (title, detail, action = "Continuer", alternative) =>
+      new Promise((resolve) =>
+        setRequest({ title, detail, action, alternative, resolve }),
+      ),
     [],
   );
-  const finish = (answer: boolean) => {
+  const finish = (answer: boolean | "alternative") => {
     request?.resolve(answer);
     setRequest(null);
   };
@@ -70,6 +80,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           <p>{request.detail}</p>
           <footer>
             <button onClick={() => finish(false)}>Annuler</button>
+            {request.alternative && (
+              <button onClick={() => finish("alternative")}>
+                {request.alternative}
+              </button>
+            )}
             <button className="primary" onClick={() => finish(true)}>
               {request.action}
             </button>
