@@ -86,7 +86,7 @@ label {
   flex-direction: column;
   gap: 8px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 13px;
 }
 h1,
 h2,
@@ -127,14 +127,14 @@ pre {
   overflow-wrap: anywhere;
   max-height: 400px;
   overflow: auto;
-  font-size: 12px;
+  font-size: 13px;
   background: var(--bg-deep);
   padding: 16px;
   border-radius: 8px;
 }
 small,
 .small {
-  font-size: 12px;
+  font-size: 13px;
 }
 .muted {
   color: var(--muted);
@@ -169,7 +169,7 @@ small,
   border-color: transparent;
   padding: 5px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 13px;
 }
 .status-dot {
   display: inline-block;
@@ -183,7 +183,7 @@ small,
   background: var(--muted);
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 1.6px;
   color: var(--muted);
   display: flex;
@@ -233,7 +233,7 @@ small,
   display: block;
   color: var(--muted);
   letter-spacing: 2.4px;
-  font-size: 8px;
+  font-size: 11px;
   margin-top: 3px;
 }
 .collapse-button {
@@ -244,7 +244,7 @@ small,
   margin: 0 1px 27px;
   background: var(--surface);
   justify-content: flex-start;
-  font-size: 12px;
+  font-size: 13px;
   padding: 11px;
   border-color: var(--line-strong);
   border-radius: 7px;
@@ -253,7 +253,7 @@ small,
   padding: 0 11px;
   color: var(--muted);
   letter-spacing: 1.3px;
-  font-size: 9px;
+  font-size: 11px;
   margin-bottom: 11px;
 }
 .sidebar nav {
@@ -268,7 +268,7 @@ small,
   color: var(--text-2);
   justify-content: flex-start;
   padding: 11px 12px;
-  font-size: 12px;
+  font-size: 13px;
   gap: 12px;
   min-height: 39px;
 }
@@ -282,7 +282,7 @@ small,
 .nav-count {
   margin-left: auto;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -306,15 +306,15 @@ small,
   border-radius: 50%;
   width: 32px;
   height: 32px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .profile strong {
-  font-size: 11px;
+  font-size: 12px;
   display: block;
 }
 .profile small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   display: block;
   margin-top: 4px;
 }
@@ -335,7 +335,7 @@ small,
   gap: 12px;
 }
 .breadcrumbs {
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -358,7 +358,7 @@ small,
 .org-picker select {
   background: transparent;
   border: 0;
-  font-size: 11px;
+  font-size: 12px;
   max-width: 175px;
 }
 .main-content {
@@ -381,7 +381,7 @@ small,
   align-items: center;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 .app-status > span {
   display: flex;
@@ -392,12 +392,12 @@ small,
   background: var(--surface-2);
   color: var(--text-2);
   padding: 7px 25px;
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 .operation {
   padding: 10px 25px;
-  font-size: 12px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -407,7 +407,7 @@ small,
   padding: 12px 25px;
   color: var(--text-2);
   background: var(--surface-2);
-  font-size: 12px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   gap: 15px;
@@ -424,7 +424,7 @@ small,
 }
 .page-heading p {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 9px;
 }
 .section-heading {
@@ -459,7 +459,7 @@ small,
 }
 .hero p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   margin-top: 10px;
 }
 .hero-mark {
@@ -483,17 +483,17 @@ small,
   margin-bottom: 26px;
 }
 .connection-banner strong {
-  font-size: 12px;
+  font-size: 13px;
 }
 .connection-banner p {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 4px;
 }
 .connection-banner button {
   flex-shrink: 0;
   background: #472525;
-  font-size: 11px;
+  font-size: 12px;
   border-color: #794040;
 }
 .action-grid {
@@ -532,10 +532,10 @@ small,
   background: #472525;
 }
 .action-card strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 .action-card > span:not(.action-icon) {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   color: var(--muted);
   max-width: 92%;
@@ -564,19 +564,19 @@ small,
   border-left: 1px solid var(--line);
 }
 .metrics article > span:first-child {
-  font-size: 11px;
+  font-size: 12px;
 }
 .metrics strong {
   font-size: 29px;
   letter-spacing: -0.8px;
 }
 .metrics strong small {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--muted);
 }
 .metrics .small {
-  font-size: 10px;
+  font-size: 11px;
   display: flex;
   gap: 5px;
   align-items: center;
@@ -631,16 +631,16 @@ small,
   gap: 6px;
 }
 .job-row strong {
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .job-row .small {
-  font-size: 10px;
+  font-size: 11px;
 }
 .cost {
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 12px;
   min-width: 65px;
   text-align: right;
 }
@@ -649,7 +649,7 @@ small,
   align-items: center;
   gap: 5px;
   width: fit-content;
-  font-size: 10px;
+  font-size: 11px;
   border: 1px solid var(--line-strong);
   border-radius: 5px;
   padding: 4px 7px;
@@ -712,7 +712,7 @@ small,
 }
 .empty p {
   max-width: 450px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .empty > svg {
   color: #ed6865;
@@ -747,7 +747,7 @@ small,
   flex-direction: row;
   align-items: center;
   margin: 18px 0 4px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .notice {
   background: var(--surface-2);
@@ -755,12 +755,12 @@ small,
   border-radius: 7px;
   padding: 13px 16px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 13px;
   margin: 17px 0;
 }
 .error {
   color: #ffaaa7;
-  font-size: 12px;
+  font-size: 13px;
   padding: 10px 0;
   overflow-wrap: anywhere;
 }
@@ -795,7 +795,7 @@ small,
   margin-top: 24px;
 }
 .repository-card button {
-  font-size: 11px;
+  font-size: 12px;
 }
 .repository-card p {
   display: flex;
@@ -811,7 +811,7 @@ small,
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 13px;
   flex-wrap: wrap;
   margin-bottom: 25px;
 }
@@ -831,7 +831,7 @@ small,
   color: inherit;
 }
 .finding p {
-  font-size: 12px;
+  font-size: 13px;
   padding: 12px 0;
 }
 .finding .text-button {
@@ -851,7 +851,7 @@ small,
 .search input {
   background: transparent;
   border: 0;
-  font-size: 12px;
+  font-size: 13px;
   padding: 2px 0;
 }
 .search input:focus {
@@ -868,7 +868,7 @@ small,
 }
 summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
 }
 .tool-run {
@@ -878,7 +878,7 @@ summary {
   padding: 15px 0;
   border-top: 1px solid var(--line-strong);
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .tool-run p {
   width: 100%;
@@ -895,15 +895,15 @@ summary {
   border-bottom: 1px solid var(--line-strong);
 }
 .setting-row p {
-  font-size: 12px;
+  font-size: 13px;
   margin-top: 5px;
 }
 .path-value {
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .setting-row code {
-  font-size: 11px;
+  font-size: 12px;
 }
 .settings > .panel > .inline {
   margin-bottom: 12px;
@@ -935,7 +935,7 @@ summary {
   justify-content: space-between;
   padding: 12px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 12px;
   border-bottom: 1px solid var(--line);
   height: 43px;
 }
@@ -954,7 +954,7 @@ summary {
   border: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   padding-top: 7px;
   padding-bottom: 7px;
   gap: 6px;
@@ -992,13 +992,13 @@ summary {
   display: flex;
   border-right: 1px solid var(--line);
   padding: 0 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .editor-tab > button:not(.icon) {
   border: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .editor-tab.active {
@@ -1011,7 +1011,7 @@ summary {
   justify-content: space-between;
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 11px;
   gap: 10px;
   flex-shrink: 0;
 }
@@ -1022,7 +1022,7 @@ summary {
   white-space: nowrap;
 }
 .editor-toolbar button {
-  font-size: 10px;
+  font-size: 11px;
   padding: 6px 9px;
 }
 .editor-area > section {
@@ -1035,7 +1035,7 @@ summary {
   align-items: center;
   justify-content: space-between;
   padding: 0 15px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
   border-top: 1px solid var(--line);
   flex-shrink: 0;
@@ -1056,7 +1056,7 @@ summary {
   max-width: 700px;
   min-width: 320px;
   z-index: 30;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
 }
 .toast > span {
@@ -1082,7 +1082,7 @@ dialog header {
   margin-bottom: 18px;
 }
 dialog p {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   margin: 14px 0;
 }
@@ -1171,10 +1171,10 @@ dialog label {
     padding: 17px 13px;
   }
   .action-card strong {
-    font-size: 12px;
+    font-size: 13px;
   }
   .action-card > span:not(.action-icon) {
-    font-size: 10px;
+    font-size: 11px;
   }
   .web-link {
     display: none;
@@ -1276,7 +1276,7 @@ dialog label {
     padding: 0 15px;
   }
   .breadcrumbs {
-    font-size: 10px;
+    font-size: 11px;
   }
   .page-heading {
     align-items: flex-start;
@@ -1337,7 +1337,7 @@ dialog label {
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
 }
@@ -1417,7 +1417,7 @@ dialog label {
   border-bottom: 1px solid #3a5f52;
   background: #1d3b34;
   color: #c9f5e4;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* The count belongs at the far end of the search field, not against the
@@ -1441,7 +1441,7 @@ dialog label {
   margin: 0 0 6px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* The folder's name is the control that folds it away. */
@@ -1531,7 +1531,7 @@ dialog label {
 }
 .menu button small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* A notice that asks for a decision rather than reporting one. Two of them can
@@ -1551,7 +1551,7 @@ dialog label {
 }
 .toast.decision small {
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Progress, not a decision: it goes above the decisions, which are the ones
