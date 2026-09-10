@@ -32,6 +32,31 @@ pub fn clone_location(app: tauri::AppHandle) -> Result<String, String> {
     Ok(clone_root(&app)?.display().to_string())
 }
 
+/// Repositories already cloned, as "owner/name". A card can then say "open"
+/// rather than "clone" for a copy that is already on this machine.
+#[tauri::command]
+pub fn cloned_repositories(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let root = clone_root(&app)?;
+    let mut found = Vec::new();
+    let Ok(owners) = std::fs::read_dir(&root) else {
+        return Ok(found);
+    };
+    for owner in owners.flatten().filter(|e| e.path().is_dir()) {
+        let Ok(repos) = std::fs::read_dir(owner.path()) else {
+            continue;
+        };
+        for repo in repos.flatten().filter(|e| e.path().join(".git").is_dir()) {
+            found.push(format!(
+                "{}/{}",
+                owner.file_name().to_string_lossy(),
+                repo.file_name().to_string_lossy()
+            ));
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
 pub fn repository_url(value: &str) -> Result<(String, String, String), String> {
     let value = value.trim().trim_end_matches('/').trim_end_matches(".git");
     let name = value.strip_prefix("https://github.com/").unwrap_or(value);

@@ -135,6 +135,48 @@ fn generated_database(root: &Path, input: &Path, destination: &Path) -> Result<P
     Ok(database)
 }
 
+/// Whether a tool ctrace calls can be found on this machine.
+#[derive(Serialize)]
+pub struct ToolStatus {
+    pub name: String,
+    pub found: bool,
+}
+
+/// Looks for the external tools ctrace runs. A run that reports "0 findings"
+/// because three of its tools are missing looks like a clean file; saying
+/// which tools are absent, before the first run, is the difference.
+#[tauri::command]
+pub async fn probe_tools() -> Vec<ToolStatus> {
+    async fn found(program: &str, args: &[&str]) -> bool {
+        let mut command = Command::new(program);
+        command
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        command.creation_flags(0x08000000);
+        matches!(
+            tokio::time::timeout(Duration::from_secs(5), command.status()).await,
+            Ok(Ok(status)) if status.success()
+        )
+    }
+    let locate = if cfg!(windows) { "where.exe" } else { "which" };
+    let mut statuses = Vec::new();
+    for tool in ["cppcheck", "tscancode", "ikos"] {
+        statuses.push(ToolStatus {
+            name: tool.into(),
+            found: found(locate, &[tool]).await,
+        });
+    }
+    // pip installs flawfinder as a module; that is how ctrace looks for it.
+    let python = if cfg!(windows) { "python" } else { "python3" };
+    statuses.push(ToolStatus {
+        name: "flawfinder".into(),
+        found: found(python, &["-m", "flawfinder", "--version"]).await,
+    });
+    statuses
+}
+
 #[tauri::command]
 pub fn analysis_options(state: tauri::State<'_, AnalysisState>) -> Result<AnalysisOptions, String> {
     Ok(state.options.lock().map_err(|e| e.to_string())?.clone())
@@ -200,6 +242,27 @@ pub struct ResultView {
     report: Option<String>,
     cancelled: bool,
     warnings: Vec<String>,
+}
+
+impl ResultView {
+    /// What the history keeps of this run.
+    fn as_history(
+        &self,
+        started_at: u64,
+        label: String,
+        files: usize,
+    ) -> crate::settings::LocalRun {
+        crate::settings::LocalRun {
+            id: uuid::Uuid::new_v4().to_string(),
+            started_at,
+            label,
+            files,
+            exit_code: self.exit_code,
+            cancelled: self.cancelled,
+            warnings: self.warnings.clone(),
+            report: self.report.clone(),
+        }
+    }
 }
 
 fn execution_warnings(stdout: &str, stderr: &str, has_report: bool) -> Vec<String> {
@@ -326,6 +389,7 @@ async fn capture(mut reader: impl AsyncRead + Unpin) -> String {
 }
 #[tauri::command]
 pub async fn analyse_local(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AnalysisState>,
     workspace: tauri::State<'_, WorkspaceState>,
     workspace_id: String,
@@ -356,7 +420,10 @@ pub async fn analyse_local(
         *active = Some(sender);
     }
     let options = state.options.lock().map_err(|e| e.to_string())?.clone();
-    run_analysis(&executable, &root, &input, &options, receiver).await
+    let started_at = crate::settings::now_unix();
+    let view = run_analysis(&executable, &root, &input, &options, receiver).await?;
+    crate::settings::remember_local_run(&app, &root, view.as_history(started_at, path, 1));
+    Ok(view)
 }
 
 async fn stop_process(child: &mut tokio::process::Child) -> Result<(), String> {
@@ -550,6 +617,7 @@ fn merge_reports(reports: &[String]) -> Option<String> {
 /// be in front of them.
 #[tauri::command]
 pub async fn analyse_local_folder(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AnalysisState>,
     workspace: tauri::State<'_, WorkspaceState>,
     workspace_id: String,
@@ -574,6 +642,7 @@ pub async fn analyse_local_folder(
     }
     let _running = Running(&state);
     let options = state.options.lock().map_err(|e| e.to_string())?.clone();
+    let started_at = crate::settings::now_unix();
 
     let mut reports = Vec::new();
     let mut output = String::new();
@@ -625,14 +694,24 @@ pub async fn analyse_local_folder(
         0,
         format!("{analysed} fichier(s) analysé(s) sur {}.", files.len()),
     );
-    Ok(ResultView {
+    let view = ResultView {
         exit_code,
         stdout: output,
         stderr: errors,
         report: merge_reports(&reports),
         cancelled,
         warnings,
-    })
+    };
+    let label = root
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    crate::settings::remember_local_run(
+        &app,
+        &root,
+        view.as_history(started_at, label, files.len()),
+    );
+    Ok(view)
 }
 
 #[tauri::command]
