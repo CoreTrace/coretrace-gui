@@ -9,6 +9,22 @@ const { loadBackendSettings } = require('./backendSettingsHandlers');
 
 const DEBUG_BACKEND_REQUESTS = process.env.CTRACE_GUI_DEBUG_BACKEND === '1' || process.env.NODE_ENV === 'development';
 
+// TEMPORARY: the packaged coretrace release currently ships without the
+// flawfinder/ assets its FlawfinderToolImplementation needs at runtime, so
+// invoking it (or falling back to "run every tool" when --invoke is omitted)
+// crashes analysis. Drop it from the tool set until upstream fixes the
+// release packaging. Remove this once flawfinder is bundled again.
+const DISABLED_TOOLS = ['flawfinder'];
+const DEFAULT_INVOKE_TOOLS = ['cppcheck', 'ikos', 'tscancode', 'ctrace_stack_analyzer'];
+
+// Tool names the backend accepts for --invoke (per `ctrace --help` and its
+// own CLI-mode "Unknown tool" error). The HTTP /api run_analysis path the
+// GUI actually talks to does NOT validate this itself: an unrecognized name
+// is silently dropped (empty outputs, status "ok"), unlike CLI mode which
+// fails fast with this same message. Validate here so the GUI surfaces the
+// same failure CLI mode does instead of reporting a false "no issues found".
+const ALLOWED_INVOKE_TOOLS = ['ikos', 'cppcheck', 'tscancode', 'ctrace_stack_analyzer'];
+
 function parseBoolean(value) {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return Boolean(value);
@@ -106,6 +122,8 @@ function isLikelyExecutionFailureLine(line) {
     /unknown tool/i,
     /failed to run/i,
     /tool execution failed/i,
+    /unsupported input file type/i,
+    /failed to analyze/i,
     /\bexception\b/i,
     /\btraceback\b/i
   ];
@@ -191,6 +209,14 @@ function describeToolExecutionFailure(message, toolName) {
       kind: 'tool-unavailable',
       summary: `${normalizedTool} was requested but is not available in this backend.`,
       suggestion: `Check the requested tool name and confirm that ${normalizedTool} is installed and enabled.`
+    };
+  }
+
+  if (/unsupported input file type/i.test(msg) || /failed to analyze/i.test(msg)) {
+    return {
+      kind: 'unsupported-input',
+      summary: `${normalizedTool} does not support this file's type and could not analyze it.`,
+      suggestion: `Choose a source file type ${normalizedTool} supports, or remove it from the tools invoked for this file.`
     };
   }
 
@@ -617,6 +643,31 @@ function setupCtraceHandlers() {
 
     try {
       const params = argsToRunAnalysisParams(args);
+
+      if (Array.isArray(params.invoke)) {
+        const unknownTool = params.invoke.find((tool) => !ALLOWED_INVOKE_TOOLS.includes(tool));
+        if (unknownTool) {
+          return {
+            success: false,
+            error: `Unknown tool '${unknownTool}'. Allowed tools: [${ALLOWED_INVOKE_TOOLS.join(',')}]`
+          };
+        }
+      }
+
+      if (Array.isArray(params.invoke)) {
+        params.invoke = params.invoke.filter((tool) => !DISABLED_TOOLS.includes(tool));
+      } else {
+        params.invoke = DEFAULT_INVOKE_TOOLS;
+      }
+
+      // The backend's static_analysis=true mode runs every static tool and
+      // ignores `invoke` entirely (verified against v0.74.0), so flawfinder
+      // still crashes even once excluded above. Drop static_analysis and
+      // rely on the explicit invoke list instead, which the backend does
+      // honor — this still runs all the other static tools.
+      if (params.static_analysis) {
+        delete params.static_analysis;
+      }
 
       if (DEBUG_BACKEND_REQUESTS) {
         console.log('[ctrace debug] run-ctrace args:', JSON.stringify(args));

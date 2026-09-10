@@ -564,6 +564,18 @@ class TabManager {
   }
 
   /**
+   * Refresh the missing-file flag for a tab against disk right now, rather
+   * than relying on the last check (which only runs on tab switch — a file
+   * deleted while its tab stays focused would otherwise go undetected until
+   * the user switches away and back).
+   * @returns {Promise<boolean>} True if the file is missing after the check.
+   */
+  async refreshFileMissingState(tabId, filePath) {
+    await this._recheckFileExists(tabId, filePath);
+    return this.isTabFileMissing(tabId);
+  }
+
+  /**
    * Show or hide the missing-file banner based on the tab's current missing state.
    */
   _syncMissingBanner(tabId, filePath) {
