@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { translateError } from "./errors";
 import type {
   CloudPhase,
   DeviceCode,
@@ -116,5 +117,5 @@ export const desktop = {
     call<void>("open_account", { page }),
 };
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return translateError(error instanceof Error ? error.message : String(error));
 }

@@ -4,11 +4,20 @@ import {
   FolderOpen,
   GitBranch,
   ShieldCheck,
+  Play,
   Sparkles,
 } from "lucide-react";
 import type { CloudModel } from "../useCloud";
 import type { Job, Page, Workspace } from "../types";
-import { billed, date, number, outcome, usage } from "../model";
+import {
+  accessLabel,
+  billed,
+  date,
+  number,
+  outcome,
+  roleLabel,
+  usage,
+} from "../model";
 
 export function JobRows({
   jobs,
@@ -97,9 +106,12 @@ export function Dashboard({
           </h1>
           <p>Ouvrez votre code. Lancez une analyse. Comprenez chaque résultat.</p>
         </div>
-        <div className="hero-mark">
-          <ShieldCheck size={52} strokeWidth={1.2} />
-        </div>
+        {workspace && (
+          <button className="primary" onClick={analyse}>
+            <Play size={16} />
+            Nouvelle analyse
+          </button>
+        )}
       </div>
       {!cloud.me && (
         <div className="connection-banner">
@@ -115,36 +127,6 @@ export function Dashboard({
           </button>
         </div>
       )}
-      <div className="action-grid">
-        <button className="action-card" onClick={openFolder}>
-          <span className="action-icon brand-accent">
-            <FolderOpen size={23} />
-          </span>
-          <strong>Ouvrir un dossier</strong>
-          <span>Travaillez sur votre code local dans l’IDE intégré.</span>
-          <ArrowRight size={18} />
-        </button>
-        <button className="action-card" onClick={clone}>
-          <span className="action-icon brand-accent">
-            <GitBranch size={23} />
-          </span>
-          <strong>Cloner un dépôt GitHub</strong>
-          <span>Copiez un dépôt sur cette machine pour l’ouvrir et l’analyser.</span>
-          <ArrowRight size={18} />
-        </button>
-        <button className="action-card" onClick={analyse}>
-          <span className="action-icon brand-accent">
-            <Sparkles size={23} />
-          </span>
-          <strong>Lancer une analyse</strong>
-          <span>
-            {workspace
-              ? "Analysez le dossier ouvert avec vos CTU, ou sur cette machine."
-              : "Choisissez un dossier, puis analysez-le."}
-          </span>
-          <ArrowRight size={18} />
-        </button>
-      </div>
       {cloud.me && (
         <>
           <div className="section-heading">
@@ -184,7 +166,7 @@ export function Dashboard({
               <span className="small muted">
                 <Building2 size={13} />{" "}
                 {member
-                  ? `${member.role} · ${member.access_state}`
+                  ? `${roleLabel(member.role)} · ${accessLabel(member.access_state)}`
                   : "Aucune organisation sélectionnée"}
               </span>
             </article>
@@ -197,6 +179,40 @@ export function Dashboard({
                 organisation avant de relancer une analyse.
               </div>
             )}
+        </>
+      )}
+      {!workspace && (
+        <>
+      <div className="action-grid">
+        <button className="action-card" onClick={openFolder}>
+          <span className="action-icon brand-accent">
+            <FolderOpen size={23} />
+          </span>
+          <strong>Ouvrir un dossier</strong>
+          <span>Travaillez sur votre code local dans l’IDE intégré.</span>
+          <ArrowRight size={18} />
+        </button>
+        <button className="action-card" onClick={clone}>
+          <span className="action-icon brand-accent">
+            <GitBranch size={23} />
+          </span>
+          <strong>Cloner un dépôt GitHub</strong>
+          <span>Copiez un dépôt sur cette machine pour l’ouvrir et l’analyser.</span>
+          <ArrowRight size={18} />
+        </button>
+        <button className="action-card" onClick={analyse}>
+          <span className="action-icon brand-accent">
+            <Sparkles size={23} />
+          </span>
+          <strong>Lancer une analyse</strong>
+          <span>
+            {workspace
+              ? "Analysez le dossier ouvert avec vos CTU, ou sur cette machine."
+              : "Choisissez un dossier, puis analysez-le."}
+          </span>
+          <ArrowRight size={18} />
+        </button>
+      </div>
         </>
       )}
       {workspace && (

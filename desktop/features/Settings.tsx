@@ -2,6 +2,7 @@ import { ArrowUpRight, Github, LogOut, Settings2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, errorMessage, native, type AnalysisOptions } from "../bridge";
 import type { CloudModel } from "../useCloud";
+import { roleLabel } from "../model";
 import type { Member, ToolStatus } from "../types";
 export function Settings({
   cloud,
@@ -286,8 +287,10 @@ export function Settings({
           {memberError && <p className="error">{memberError}</p>}
           {members.map((member) => (
             <div className="setting-row" key={member.user_id}>
-              <code>{member.user_id}</code>
-              <span className="badge">{member.role}</span>
+              <code title="Identifiant du membre sur la plateforme">
+                {member.user_id}
+              </code>
+              <span className="badge">{roleLabel(member.role)}</span>
             </div>
           ))}
         </section>
