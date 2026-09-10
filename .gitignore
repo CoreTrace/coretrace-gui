@@ -8,3 +8,11 @@ node_modules
 .claw-logs
 ctrace-report.txt
 bundle.js
+src-tauri/target/
+src-tauri/gen/
+coverage/
+*.tsbuildinfo
+# The native spikes: exploratory Rust/Floem work that has never been committed here, and 12 GB of
+# rebuildable build output beside it. Ignored whole, so `git add -A` cannot sweep the tree into a
+# commit about something else. Committing the spikes is a decision to take deliberately.
+native/

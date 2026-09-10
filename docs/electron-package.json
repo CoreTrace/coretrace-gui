@@ -1,0 +1,103 @@
+{
+  "name": "ctrace-gui",
+  "version": "5.1.0",
+  "description": "A modern Electron-based GUI for CTrace static analysis tool",
+  "main": "src/main.js",
+  "scripts": {
+    "build:renderer": "node scripts/build-renderer-bundle.js",
+    "build:renderer:dev": "node scripts/build-renderer-bundle.js --dev",
+    "prestart": "npm run build:renderer:dev",
+    "predist": "npm run build:renderer",
+    "predist:publish": "npm run build:renderer",
+    "predist:win": "npm run build:renderer",
+    "predist:mac": "npm run build:renderer",
+    "predist:linux": "npm run build:renderer",
+    "test": "node --test",
+    "test:wsl": "node src/main/utils/wslTest.js",
+    "start": "electron .",
+    "release:ship": "bash ./scripts/release.sh",
+    "dist": "electron-builder",
+    "dist:publish": "electron-builder --publish always",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "build:verify": "./scripts/build-verify.sh",
+    "docs": "jsdoc -c jsdoc.conf.json",
+    "docs:watch": "jsdoc -c jsdoc.conf.json --watch",
+    "postinstall": "node scripts/patch-node-pty-spectre.js"
+  },
+  "keywords": [
+    "ctrace",
+    "static-analysis",
+    "cpp",
+    "c",
+    "development",
+    "gui",
+    "electron"
+  ],
+  "author": "CTrace GUI Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "electron-updater": "^6.8.9",
+    "ignore": "^7.0.5",
+    "monaco-editor": "^0.52.2",
+    "node-llama-cpp": "^3.18.1",
+    "node-pty": "^1.1.0",
+    "tar": "^7.5.22",
+    "uuid": "^14.0.0",
+    "@coretrace/cli-core": "file:../coretrace-cli/packages/cli-core"
+  },
+  "devDependencies": {
+    "electron": "^41.10.7",
+    "electron-builder": "^26.8.1",
+    "electron-reload": "^2.0.0-alpha.1",
+    "esbuild": "^0.28.0",
+    "jsdoc": "^4.0.4"
+  },
+  "build": {
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "CoreTrace",
+        "repo": "coretrace-gui",
+        "releaseType": "release"
+      }
+    ],
+    "asar": true,
+    "extraResources": [
+      {
+        "from": "bin/ctrace",
+        "to": "bin/ctrace"
+      }
+    ],
+    "asarUnpack": [],
+    "afterPack": "./scripts/remove-locales.js",
+    "appId": "com.coretrace.ctracegui",
+    "compression": "normal",
+    "productName": "CtraceGUI",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/ctrace.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/ctrace.icns",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "notarize": false
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/ctrace.png",
+      "category": "Development",
+      "synopsis": "Static analysis tool for C/C++ code",
+      "description": "A modern Electron-based GUI application that provides an intuitive interface for running CTrace static analysis on C/C++ code."
+    }
+  }
+}
