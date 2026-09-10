@@ -69,7 +69,7 @@ select {
   min-width: 0;
   background: var(--bg);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: 8px;
   color: inherit;
   padding: 10px 12px;
 }
@@ -247,7 +247,7 @@ small,
   font-size: 13px;
   padding: 11px;
   border-color: var(--line-strong);
-  border-radius: 7px;
+  border-radius: 8px;
 }
 .nav-label {
   padding: 0 11px;
@@ -474,7 +474,7 @@ small,
 .connection-banner {
   padding: 16px 19px;
   border: 1px solid #603030;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #321d1d66;
   display: flex;
   align-items: center;
@@ -510,7 +510,7 @@ small,
   text-align: left;
   padding: 21px 19px 20px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(140deg, var(--surface-2), var(--surface));
   min-height: 181px;
   gap: 12px;
@@ -524,7 +524,7 @@ small,
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 8px;
   margin-bottom: 3px;
 }
 .brand-accent {
@@ -551,7 +551,7 @@ small,
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface);
 }
 .metrics article {
@@ -586,7 +586,7 @@ small,
 }
 .meter {
   height: 3px;
-  border-radius: 2px;
+  border-radius: 4px;
   background: var(--surface-3);
   overflow: hidden;
   margin-top: -3px;
@@ -598,7 +598,7 @@ small,
 }
 .job-rows {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--surface);
 }
@@ -651,7 +651,7 @@ small,
   width: fit-content;
   font-size: 11px;
   border: 1px solid var(--line-strong);
-  border-radius: 5px;
+  border-radius: 4px;
   padding: 4px 7px;
   white-space: nowrap;
   color: var(--text-2);
@@ -699,7 +699,7 @@ small,
   padding: 34px 24px;
   text-align: center;
   border: 1px dashed var(--line-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--muted);
   display: flex;
   flex-direction: column;
@@ -727,7 +727,7 @@ small,
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 12px;
   padding: 23px;
   margin: 22px 0;
 }
@@ -752,7 +752,7 @@ small,
 .notice {
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: 8px;
   padding: 13px 16px;
   color: var(--text-2);
   font-size: 13px;
@@ -777,7 +777,7 @@ small,
 }
 .repository-card {
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface);
   padding: 22px;
 }
@@ -809,7 +809,7 @@ small,
   background: var(--surface);
   padding: 13px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: 8px;
   color: var(--text-2);
   font-size: 13px;
   flex-wrap: wrap;
@@ -821,7 +821,7 @@ small,
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-left: 3px solid var(--muted);
-  border-radius: 7px;
+  border-radius: 8px;
 }
 .finding.warning {
   border-left-color: var(--muted);
@@ -1051,7 +1051,7 @@ summary {
   border: 1px solid var(--line-hover);
   background: var(--surface-2);
   padding: 14px 16px;
-  border-radius: 9px;
+  border-radius: 8px;
   box-shadow: 0 10px 35px #0008;
   max-width: 700px;
   min-width: 320px;
@@ -1066,7 +1066,7 @@ dialog {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--line-hover);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 25px;
   width: min(510px, 90vw);
   box-shadow: 0 25px 90px #0008;
@@ -1104,7 +1104,7 @@ dialog label {
   padding: 25px;
   background: var(--bg);
   border: 1px solid var(--line-hover);
-  border-radius: 9px;
+  border-radius: 8px;
   margin-top: 20px;
 }
 .sidebar-collapsed {
@@ -1333,7 +1333,7 @@ dialog label {
   width: 20px;
   height: 20px;
   flex: none;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
   color: var(--text-2);
@@ -1365,7 +1365,7 @@ dialog label {
 }
 .skeleton {
   background: var(--surface-2);
-  border-radius: 6px;
+  border-radius: 4px;
   color: transparent;
 }
 .skeleton.line {
@@ -1385,7 +1385,7 @@ dialog label {
   color: inherit;
   font: inherit;
   padding: 2px 4px;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
 }
 .folder-picker:hover {
@@ -1455,7 +1455,7 @@ dialog label {
   color: inherit;
   font: inherit;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 .explorer-toggle:hover {
   background: var(--surface-2);
@@ -1503,7 +1503,7 @@ dialog label {
   min-width: 240px;
   padding: 6px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface);
   box-shadow: 0 12px 28px #00000066;
 }
@@ -1514,7 +1514,7 @@ dialog label {
   width: 100%;
   padding: 9px 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   text-align: left;
 }
