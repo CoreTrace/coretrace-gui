@@ -25,6 +25,9 @@ pub struct LocalRun {
     pub cancelled: bool,
     pub warnings: Vec<String>,
     pub report: Option<String>,
+    /// Whether a report of this run was sent to the team.
+    #[serde(default)]
+    pub reported: bool,
 }
 
 /// What the application remembers between sessions. Choosing the ctrace
@@ -51,6 +54,17 @@ pub fn remember_local_run(app: &tauri::AppHandle, folder: &Path, run: LocalRun) 
     let runs = settings.local_runs.entry(folder_key(folder)).or_default();
     runs.insert(0, run);
     runs.truncate(LOCAL_RUNS_KEPT);
+    save(app, &settings);
+}
+
+/// Marks a run as reported, so the button says so after a restart too.
+pub fn remember_reported(app: &tauri::AppHandle, folder: &Path, run_id: &str) {
+    let mut settings = load(app);
+    if let Some(runs) = settings.local_runs.get_mut(&folder_key(folder)) {
+        for run in runs.iter_mut().filter(|r| r.id == run_id) {
+            run.reported = true;
+        }
+    }
     save(app, &settings);
 }
 

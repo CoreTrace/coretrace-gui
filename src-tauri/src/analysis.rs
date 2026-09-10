@@ -236,6 +236,8 @@ impl Drop for Running<'_> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultView {
+    /// The history entry this result became; a report refers to it.
+    run_id: String,
     exit_code: Option<i32>,
     stdout: String,
     stderr: String,
@@ -261,6 +263,7 @@ impl ResultView {
             cancelled: self.cancelled,
             warnings: self.warnings.clone(),
             report: self.report.clone(),
+            reported: false,
         }
     }
 }
@@ -421,8 +424,10 @@ pub async fn analyse_local(
     }
     let options = state.options.lock().map_err(|e| e.to_string())?.clone();
     let started_at = crate::settings::now_unix();
-    let view = run_analysis(&executable, &root, &input, &options, receiver).await?;
-    crate::settings::remember_local_run(&app, &root, view.as_history(started_at, path, 1));
+    let mut view = run_analysis(&executable, &root, &input, &options, receiver).await?;
+    let history = view.as_history(started_at, path, 1);
+    view.run_id = history.id.clone();
+    crate::settings::remember_local_run(&app, &root, history);
     Ok(view)
 }
 
@@ -532,6 +537,7 @@ async fn run_analysis(
         .or_else(|| sarif_from_output(&stdout_text, &stderr_text));
     let warnings = execution_warnings(&stdout_text, &stderr_text, report.is_some());
     Ok(ResultView {
+        run_id: String::new(),
         exit_code: status.code(),
         stdout: stdout_text,
         stderr: stderr_text,
@@ -695,6 +701,7 @@ pub async fn analyse_local_folder(
         format!("{analysed} fichier(s) analysé(s) sur {}.", files.len()),
     );
     let view = ResultView {
+        run_id: String::new(),
         exit_code,
         stdout: output,
         stderr: errors,
@@ -706,11 +713,10 @@ pub async fn analyse_local_folder(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    crate::settings::remember_local_run(
-        &app,
-        &root,
-        view.as_history(started_at, label, files.len()),
-    );
+    let history = view.as_history(started_at, label, files.len());
+    let mut view = view;
+    view.run_id = history.id.clone();
+    crate::settings::remember_local_run(&app, &root, history);
     Ok(view)
 }
 
