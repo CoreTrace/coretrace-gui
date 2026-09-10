@@ -1635,3 +1635,31 @@ button.finding:disabled {
 .tool-probe .found {
   color: #c9f5e4;
 }
+
+/* The report dialog's file list: one row per file, the total underneath. */
+.report-files {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.report-files legend {
+  color: var(--text-2);
+  font-size: 12px;
+  padding: 0 4px;
+}
+.report-files button {
+  align-self: flex-start;
+}
+dialog textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: inherit;
+  padding: 8px 10px;
+  font: inherit;
+}

@@ -7,6 +7,7 @@ import {
   Play,
   Search,
   Square,
+  Send,
 } from "lucide-react";
 import { desktop, errorMessage } from "../bridge";
 import { useConfirm } from "../components/Dialog";
@@ -30,6 +31,7 @@ import type {
   Repository,
 } from "../types";
 import { JobRows } from "./Dashboard";
+import { ReportDialog } from "./ReportDialog";
 
 /** The first line of a tool's output that looks like the reason it stopped. */
 function firstProblem(local: LocalResult): string | undefined {
@@ -399,6 +401,10 @@ export function Analyses({
   cloudRun,
   localHistory,
   showLocalRun,
+  workspaceId,
+  reportedRuns,
+  markReported,
+  login,
 }: {
   cloud: CloudModel;
   selected: Job | null;
@@ -421,6 +427,12 @@ export function Analyses({
   localHistory: LocalRun[];
   /** Opens one of them where the last local result is shown. */
   showLocalRun: (run: LocalRun) => void;
+  workspaceId?: string;
+  /** Runs whose failure has already been reported to the team. */
+  reportedRuns: Set<string>;
+  markReported: (runId: string) => void;
+  /** Opens the sign-in; a report needs a signed-in person. */
+  login: () => void;
   /** The one cloud run, owned above the pages. */
   cloudRun: CloudRunModel;
 }) {
@@ -434,6 +446,7 @@ export function Analyses({
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
   const confirm = useConfirm();
+  const [reporting, setReporting] = useState(false);
   const localReport = useMemo(() => {
     try {
       return {
@@ -648,6 +661,22 @@ export function Analyses({
                         ? "Terminée"
                         : "Échouée"}
                 </span>
+                {(local.warnings?.length || local.exitCode !== 0) &&
+                  (cloud.me ? (
+                    <button
+                      disabled={reportedRuns.has(local.runId)}
+                      onClick={() => setReporting(true)}
+                    >
+                      <Send size={14} />
+                      {reportedRuns.has(local.runId)
+                        ? "Rapport envoyé"
+                        : "Envoyer un rapport"}
+                    </button>
+                  ) : (
+                    <button onClick={login}>
+                      Connectez-vous pour envoyer un rapport
+                    </button>
+                  ))}
               </div>
               {local.warnings?.map((warning) => (
                 <p className="notice" role="alert" key={warning}>
@@ -680,6 +709,18 @@ export function Analyses({
                   {local.stderr}
                 </pre>
               </details>
+              {reporting && workspaceId && (
+                <ReportDialog
+                  workspaceId={workspaceId}
+                  local={local}
+                  onClose={() => setReporting(false)}
+                  onSent={() => {
+                    setReporting(false);
+                    markReported(local.runId);
+                    notify("Rapport envoyé, merci.");
+                  }}
+                />
+              )}
             </section>
           )}
           {localHistory.length > 0 && (

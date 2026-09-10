@@ -114,6 +114,12 @@ export default function App() {
   // What ran on this machine in the open folder, newest first. Reloaded when
   // the folder changes and when a run finishes, which are the times it moves.
   const [localHistory, setLocalHistory] = useState<LocalRun[]>([]);
+  // Runs reported this session, on top of what the history remembers.
+  const [reportedNow, setReportedNow] = useState<Set<string>>(new Set());
+  const reportedRuns = new Set([
+    ...localHistory.filter((r) => r.reported).map((r) => r.id),
+    ...reportedNow,
+  ]);
   useEffect(() => {
     if (!native || !workspace) {
       setLocalHistory([]);
@@ -623,9 +629,16 @@ export default function App() {
               workspaceName={workspace?.name}
               cloudRun={cloudRun}
               localHistory={localHistory}
+              workspaceId={workspace?.id}
+              reportedRuns={reportedRuns}
+              markReported={(id) =>
+                setReportedNow((old) => new Set([...old, id]))
+              }
+              login={() => setLogin(true)}
               showLocalRun={(run) =>
                 // The output was not kept; the report and its verdict were.
                 setLocal({
+                  runId: run.id,
                   exitCode: run.exitCode,
                   stdout: "",
                   stderr: "",
