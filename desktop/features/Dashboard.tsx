@@ -109,7 +109,7 @@ export function Dashboard({
         {workspace && (
           <button className="primary" onClick={analyse}>
             <Play size={16} />
-            Nouvelle analyse
+            Analyser {workspace.name}
           </button>
         )}
       </div>
@@ -205,11 +205,7 @@ export function Dashboard({
             <Sparkles size={23} />
           </span>
           <strong>Lancer une analyse</strong>
-          <span>
-            {workspace
-              ? "Analysez le dossier ouvert avec vos CTU, ou sur cette machine."
-              : "Choisissez un dossier, puis analysez-le."}
-          </span>
+          <span>Choisissez un dossier, puis analysez-le.</span>
           <ArrowRight size={18} />
         </button>
       </div>

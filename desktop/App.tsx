@@ -334,10 +334,26 @@ export default function App() {
   // One entry point, owned here so the sidebar, the home page and the
   // analyses page all do the same thing when they say "Nouvelle analyse".
   const [starting, setStarting] = useState(false);
-  const newAnalysis = async () => {
+  const newAnalysis = async (askFirst = false) => {
     if (!workspace) {
       await openFolder();
       return;
+    }
+    // From the sidebar nothing on screen names the folder, so the button
+    // would act on one the reader may not have in mind. Ask, naming it, and
+    // offer the other thing "new" can mean.
+    if (askFirst) {
+      const answer = await confirm(
+        `Analyser ${workspace.name} ?`,
+        `Le dossier ouvert (${workspace.path}) sera analysé avec vos CTU si possible, sinon sur cette machine.`,
+        `Analyser ${workspace.name}`,
+        "Ouvrir un autre dossier",
+      );
+      if (answer === "alternative") {
+        await openFolder();
+        return;
+      }
+      if (!answer) return;
     }
     setStarting(true);
     try {
@@ -404,7 +420,7 @@ export default function App() {
         <button
           className="new-analysis"
           disabled={starting || localRunning || running(cloudRun.phase)}
-          onClick={() => void newAnalysis()}
+          onClick={() => void newAnalysis(true)}
         >
           <Plus size={17} />
           <span>Nouvelle analyse</span>
@@ -604,6 +620,7 @@ export default function App() {
               localRunning={localRunning}
               workspaceRoot={workspace?.path}
               newAnalysis={() => void newAnalysis()}
+              workspaceName={workspace?.name}
               cloudRun={cloudRun}
               localHistory={localHistory}
               showLocalRun={(run) =>

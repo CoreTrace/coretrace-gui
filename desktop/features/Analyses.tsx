@@ -394,6 +394,7 @@ export function Analyses({
   localRunning,
   openWorkspace,
   workspaceRoot,
+  workspaceName,
   newAnalysis,
   cloudRun,
   localHistory,
@@ -412,6 +413,7 @@ export function Analyses({
   openWorkspace: () => void;
   /** The folder open in the editor, when there is one: what a cloud run sends. */
   workspaceRoot?: string;
+  workspaceName?: string;
   /** Starts an analysis of the open folder: cloud when possible, this machine
       otherwise. Owned by the application, so every button does the same. */
   newAnalysis: () => void;
@@ -531,7 +533,7 @@ export function Analyses({
               onClick={newAnalysis}
             >
               <Play size={16} />
-              Nouvelle analyse
+              {workspaceName ? `Analyser ${workspaceName}` : "Nouvelle analyse"}
             </button>
           </div>
           {workspaceRoot && cloud.org && (
