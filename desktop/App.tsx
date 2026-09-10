@@ -705,7 +705,7 @@ export default function App() {
                 <button
                   className="text-button"
                   disabled={cloudRun.busy}
-                  onClick={() => void cloudRun.cancel()}
+                  onClick={() => void cloudRun.cancel(cloud.org)}
                 >
                   Annuler
                 </button>
@@ -755,7 +755,7 @@ export default function App() {
           >
             Lancer l’analyse
           </button>
-          <button disabled={cloudRun.busy} onClick={() => void cloudRun.cancel()}>
+          <button disabled={cloudRun.busy} onClick={() => void cloudRun.cancel(cloud.org)}>
             Refuser
           </button>
         </div>

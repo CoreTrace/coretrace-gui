@@ -34,7 +34,8 @@ export const desktop = {
   cloudRunStatus: () => call<CloudPhase>("cloud_run_status"),
   /** Approves the quote. This is the call that spends CTU. */
   confirmCloudRun: (org: string) => call<void>("cloud_run_confirm", { org }),
-  cancelCloudRun: () => call<void>("cloud_run_cancel"),
+  /** Stops a run, or refuses its quote; the organisation names the job. */
+  cancelCloudRun: (org?: string) => call<void>("cloud_run_cancel", { org }),
   /** The folders and ctrace executable the previous session left behind. */
   restoreSession: () =>
     call<{ workspaces: Workspace[]; analyser: string | null }>(
