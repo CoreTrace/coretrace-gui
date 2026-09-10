@@ -7,6 +7,7 @@ import type {
   Job,
   LocalResult,
   LocalRun,
+  ToolStatus,
   Workspace,
 } from "./types";
 
@@ -71,6 +72,10 @@ export const desktop = {
   /** Every file of the folder, relative, for finding one by name. */
   allFiles: (workspaceId: string) =>
     call<string[]>("list_all_files", { workspaceId }),
+  /** Which of ctrace's external tools this machine has. */
+  probeTools: () => call<ToolStatus[]>("probe_tools"),
+  /** Repositories already cloned here, as owner/name. */
+  clonedRepositories: () => call<string[]>("cloned_repositories"),
   cancelLocal: () => call<void>("cancel_local"),
   status: () =>
     native

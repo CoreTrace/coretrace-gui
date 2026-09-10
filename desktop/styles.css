@@ -1622,3 +1622,16 @@ button.finding:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Which tools are here. A missing one is the reason a run found nothing. */
+.tool-probe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.tool-probe .absent {
+  color: #ffaaa7;
+}
+.tool-probe .found {
+  color: #c9f5e4;
+}
