@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { desktop, errorMessage, native } from "./bridge";
 import { Dialog, useConfirm } from "./components/Dialog";
-import { useCloudRun } from "./useCloudRun";
+import { describe, running, useCloudRun } from "./useCloudRun";
 import { Login } from "./components/Login";
 import { Dashboard } from "./features/Dashboard";
 import { Repositories } from "./features/Repositories";
@@ -27,7 +27,7 @@ import { Analyses } from "./features/Analyses";
 import { Settings } from "./features/Settings";
 import type { EditorHandle } from "./features/WorkspaceEditor";
 import { useCloud } from "./useCloud";
-import { workspaceRelativePath } from "./model";
+import { typicalSeconds, workspaceRelativePath } from "./model";
 import type { Job, LocalResult, Page, Repository, Workspace } from "./types";
 const WorkspaceEditor = lazy(() =>
   import("./features/WorkspaceEditor").then((module) => ({
@@ -623,7 +623,7 @@ export default function App() {
                       ? () => void cloudRun.start(workspace.path, cloud.org)
                       : undefined
                   }
-                  busy={localRunning}
+                  busy={localRunning || running(cloudRun.phase)}
                   notify={setMessage}
                 />
               </Suspense>
@@ -663,6 +663,31 @@ export default function App() {
           </span>
         </footer>
       </div>
+      {/* A run in progress has to be seen to be believed. From the editor the
+          panel that reports it is a tab away, and a button that seems to do
+          nothing for thirty seconds reads as broken. */}
+      {running(cloudRun.phase) && (
+        <div className="toast progress" role="status">
+          <LoaderCircle size={16} className="spin" />
+          <span>{describe(cloudRun.phase, cloudRun.seconds, typicalSeconds(cloud.jobs))}</span>
+          <button disabled={cloudRun.busy} onClick={() => void cloudRun.cancel()}>
+            Annuler
+          </button>
+        </div>
+      )}
+      {localRunning && page !== "analyses" && (
+        <div className="toast progress" role="status">
+          <LoaderCircle size={16} className="spin" />
+          <span>Analyse locale en cours · {waited} s</span>
+          <button
+            onClick={() =>
+              void desktop.cancelLocal().catch((e) => setMessage(errorMessage(e)))
+            }
+          >
+            Arrêter
+          </button>
+        </div>
+      )}
       {/* A quote is a decision, not news: nothing is spent until it is taken,
           so it is offered wherever the reader happens to be. */}
       {cloudRun.phase.phase === "quoted" && (
