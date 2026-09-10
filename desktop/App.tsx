@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { desktop, errorMessage, native } from "./bridge";
 import { Dialog, useConfirm } from "./components/Dialog";
+import { useCloudRun } from "./useCloudRun";
 import { Login } from "./components/Login";
 import { Dashboard } from "./features/Dashboard";
 import { Repositories } from "./features/Repositories";
@@ -107,6 +108,16 @@ export default function App() {
     );
     return () => clearInterval(tick);
   }, [busy, localRunning]);
+  // A cloud run started from the editor is still the reader's run when they
+  // move to another tab, so it is owned here and reports itself in notices.
+  const [finishedJob, setFinishedJob] = useState("");
+  const cloudRun = useCloudRun({
+    notify: setMessage,
+    onFinished: (job) => {
+      setFinishedJob(job);
+      void cloud.refresh();
+    },
+  });
   const editor = useRef<EditorHandle>(null);
   const confirm = useConfirm();
   const orgRef = useRef(cloud.org);
@@ -565,6 +576,7 @@ export default function App() {
               workspaceRoot={workspace?.path}
               workspaceId={workspace?.id}
               analyseFolder={() => void runLocalFolder()}
+              cloudRun={cloudRun}
               openWorkspace={() =>
                 workspace ? setPage("workspace") : void openFolder()
               }
@@ -607,13 +619,8 @@ export default function App() {
                   dirtyChanged={setDirty}
                   run={(path) => void runLocal(path)}
                   runInCloud={
-                    cloud.org
-                      ? () => {
-                          // The panel that drives a cloud run lives with the
-                          // analyses; sending the reader there is what starting
-                          // one from the editor means.
-                          setPage("analyses");
-                        }
+                    cloud.org && workspace
+                      ? () => void cloudRun.start(workspace.path, cloud.org)
                       : undefined
                   }
                   busy={localRunning}
@@ -656,6 +663,59 @@ export default function App() {
           </span>
         </footer>
       </div>
+      {/* A quote is a decision, not news: nothing is spent until it is taken,
+          so it is offered wherever the reader happens to be. */}
+      {cloudRun.phase.phase === "quoted" && (
+        <div className="toast decision" role="alert">
+          <span>
+            <strong>
+              {cloudRun.phase.ctu.toLocaleString("fr-FR")} CTU seront débités
+            </strong>
+            <small>Rien n’a encore été débité pour cette analyse.</small>
+          </span>
+          <button
+            className="primary"
+            disabled={cloudRun.busy}
+            onClick={() => void cloudRun.approve(cloud.org)}
+          >
+            Lancer l’analyse
+          </button>
+          <button disabled={cloudRun.busy} onClick={() => void cloudRun.cancel()}>
+            Refuser
+          </button>
+        </div>
+      )}
+      {finishedJob && (
+        <div className="toast decision" role="status">
+          <span>
+            <strong>Analyse terminée</strong>
+            <small>Ses résultats sont prêts.</small>
+          </span>
+          <button
+            className="primary"
+            onClick={() => {
+              const job = finishedJob;
+              setFinishedJob("");
+              void (async () => {
+                try {
+                  selectJob(await desktop.readCloud<Job>("job", cloud.org, job));
+                } catch (e) {
+                  setMessage(errorMessage(e));
+                }
+              })();
+            }}
+          >
+            Voir les résultats
+          </button>
+          <button
+            className="icon"
+            aria-label="Fermer la notification"
+            onClick={() => setFinishedJob("")}
+          >
+            <X size={17} />
+          </button>
+        </div>
+      )}
       {message && (
         <div className="toast" role="alert">
           <span>{message}</span>

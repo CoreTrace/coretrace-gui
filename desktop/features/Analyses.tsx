@@ -21,6 +21,7 @@ import {
   typicalSeconds,
 } from "../model";
 import type { CloudModel } from "../useCloud";
+import type { CloudRunModel } from "../useCloudRun";
 import type { Finding, Job, LocalResult, Repository } from "../types";
 import { JobRows } from "./Dashboard";
 
@@ -388,6 +389,7 @@ export function Analyses({
   workspaceRoot,
   workspaceId,
   analyseFolder,
+  cloudRun,
 }: {
   cloud: CloudModel;
   selected: Job | null;
@@ -405,6 +407,8 @@ export function Analyses({
   workspaceId?: string;
   /** Analyses that folder on this machine, file by file. */
   analyseFolder: () => void;
+  /** The one cloud run, owned above the pages. */
+  cloudRun: CloudRunModel;
 }) {
   const [repositoryId, setRepositoryId] = useState(initialRepository?.id ?? "");
   const [reference, setReference] = useState(
@@ -431,7 +435,7 @@ export function Analyses({
     try {
       if (cloud.me && cloud.org) {
         try {
-          await desktop.startCloudRun(workspaceRoot, cloud.org);
+          await cloudRun.start(workspaceRoot, cloud.org);
           return;
         } catch (e) {
           notify(
@@ -552,24 +556,11 @@ export function Analyses({
           </div>
           {workspaceRoot && cloud.org && (
             <CloudRun
+              run={cloudRun}
               workspace={workspaceRoot}
               org={cloud.org}
-              notify={notify}
               typical={typicalSeconds(cloud.jobs)}
               showStart={false}
-              onFinished={(id) => {
-                void (async () => {
-                  try {
-                    // The analysis first, the history afterwards: refreshing
-                    // every list before showing the result is what made the
-                    // reader wait after being told it was ready.
-                    select(await desktop.readCloud<Job>("job", cloud.org, id));
-                  } catch (e) {
-                    notify(errorMessage(e));
-                  }
-                  void cloud.refresh();
-                })();
-              }}
             />
           )}
           {(initialRepository || rerun) && (

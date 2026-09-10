@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { desktop } from "../bridge";
 import { CloudRun } from "./CloudRun";
+import { useCloudRun } from "../useCloudRun";
 
 vi.mock("../bridge", () => ({
   native: true,
@@ -20,15 +21,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** The panel with the run that drives it, as the application assembles them. */
+function Harness({
+  onFinished,
+  workspace = "C:/work/app",
+}: {
+  onFinished: (job: string) => void;
+  workspace?: string;
+}) {
+  const run = useCloudRun({ notify: vi.fn(), onFinished });
+  return <CloudRun run={run} workspace={workspace} org="alpha" />;
+}
+
 function show(onFinished = vi.fn()) {
-  render(
-    <CloudRun
-      workspace="C:/work/app"
-      org="alpha"
-      notify={vi.fn()}
-      onFinished={onFinished}
-    />,
-  );
+  render(<Harness onFinished={onFinished} />);
   return onFinished;
 }
 
@@ -90,21 +96,13 @@ it("opens the results once when the run finishes", async () => {
   expect(onFinished).toHaveBeenCalledTimes(1);
 });
 
-it("does not reopen a finished analysis every time the tab is revisited", async () => {
-  // Leaving the tab unmounts the panel while the run stays "done", so a guard
-  // held inside the component forgot and the list became unreachable.
+it("announces a finished run once however long it keeps reporting itself", async () => {
+  // The status stays "done" and is polled every second. Announcing it each time
+  // would reopen the analysis under the reader as they worked.
   vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "done", job: "job-42" });
   const onFinished = vi.fn();
-
-  const first = render(
-    <CloudRun workspace="C:/w" org="alpha" notify={vi.fn()} onFinished={onFinished} />,
-  );
+  render(<Harness onFinished={onFinished} />);
   await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1));
-  first.unmount();
-
-  render(
-    <CloudRun workspace="C:/w" org="alpha" notify={vi.fn()} onFinished={onFinished} />,
-  );
-  await new Promise((r) => setTimeout(r, 1100));
+  await new Promise((r) => setTimeout(r, 2200));
   expect(onFinished).toHaveBeenCalledTimes(1);
 });

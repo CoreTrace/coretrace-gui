@@ -11,6 +11,7 @@ import { Analyses, Findings } from "./Analyses";
 import { ConfirmProvider } from "../components/Dialog";
 import { desktop } from "../bridge";
 import type { CloudModel } from "../useCloud";
+import type { CloudRunModel } from "../useCloudRun";
 import type { LocalResult } from "../types";
 vi.mock("../bridge", () => ({
   desktop: {
@@ -44,6 +45,15 @@ const repo = {
   external_repo_id: "1",
   summary_comments: false,
 };
+/** A cloud run with nothing happening, which is most of the time. */
+const idleRun = {
+  phase: { phase: "idle" },
+  seconds: 0,
+  busy: false,
+  start: vi.fn(),
+  approve: vi.fn(),
+  cancel: vi.fn(),
+} as unknown as CloudRunModel;
 const cloud = {
   org: "alpha",
   me: { principal: { kind: "user" } },
@@ -69,6 +79,7 @@ function form(local: LocalResult | null = null) {
         localRunning={false}
         openWorkspace={vi.fn()}
         analyseFolder={vi.fn()}
+        cloudRun={idleRun}
       />
     </ConfirmProvider>,
   );
@@ -238,6 +249,7 @@ it("loads the reports of a job opened from the history", async () => {
         localRunning={false}
         openWorkspace={vi.fn()}
         analyseFolder={vi.fn()}
+        cloudRun={idleRun}
       />
     </ConfirmProvider>,
   );
@@ -248,6 +260,7 @@ it("loads the reports of a job opened from the history", async () => {
 
 it("spends CTU when it can, and analyses on this machine when it cannot", async () => {
   const analyseFolder = vi.fn();
+  const start = vi.fn().mockResolvedValue(undefined);
   const render_ = (signedIn: boolean) =>
     render(
       <ConfirmProvider>
@@ -268,16 +281,14 @@ it("spends CTU when it can, and analyses on this machine when it cannot", async 
           workspaceRoot="/work"
           workspaceId="w1"
           analyseFolder={analyseFolder}
+          cloudRun={{ ...idleRun, start }}
         />
       </ConfirmProvider>,
     );
 
-  vi.mocked(desktop.startCloudRun).mockResolvedValue(undefined as never);
   render_(true);
   await userEvent.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
-  await waitFor(() =>
-    expect(desktop.startCloudRun).toHaveBeenCalledWith("/work", "alpha"),
-  );
+  await waitFor(() => expect(start).toHaveBeenCalledWith("/work", "alpha"));
   expect(analyseFolder).not.toHaveBeenCalled();
   cleanup();
 
@@ -285,5 +296,5 @@ it("spends CTU when it can, and analyses on this machine when it cannot", async 
   render_(false);
   await userEvent.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
   await waitFor(() => expect(analyseFolder).toHaveBeenCalled());
-  expect(desktop.startCloudRun).toHaveBeenCalledTimes(1);
+  expect(start).toHaveBeenCalledTimes(1);
 });
