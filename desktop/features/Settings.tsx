@@ -2,7 +2,7 @@ import { ArrowUpRight, Github, LogOut, Settings2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, errorMessage, native, type AnalysisOptions } from "../bridge";
 import type { CloudModel } from "../useCloud";
-import type { Member } from "../types";
+import type { Member, ToolStatus } from "../types";
 export function Settings({
   cloud,
   analyser,
@@ -43,6 +43,24 @@ export function Settings({
     }
   }
   const [memberError, setMemberError] = useState("");
+  // Which of the tools ctrace calls are actually here. A run that finds
+  // nothing because three tools are missing looks exactly like a clean file.
+  const [tools, setTools] = useState<ToolStatus[] | null>(null);
+  useEffect(() => {
+    if (!native) return;
+    let live = true;
+    void desktop
+      .probeTools()
+      .then((found) => {
+        if (live) setTools(found);
+      })
+      .catch(() => {
+        if (live) setTools(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [analyser]);
   const [options, setOptions] = useState<AnalysisOptions>({
     config: null,
     compileCommands: null,
@@ -191,25 +209,45 @@ export function Settings({
           </button>
         </div>
         <p className="muted small">
-          Le lancement est explicite depuis le fichier actif de l’IDE. Le choix
-          vaut pour cette session.
+          Le choix est conservé d’une session à l’autre.
         </p>
+        {tools && (
+          <p className="muted small tool-probe" role="status">
+            {tools.map((tool) => (
+              <span key={tool.name} className={tool.found ? "found" : "absent"}>
+                {tool.found ? "✓" : "✗"} {tool.name}
+              </span>
+            ))}
+            {tools.some((tool) => !tool.found) && (
+              <span>
+                — les outils absents ne produisent aucun résultat.
+              </span>
+            )}
+          </p>
+        )}
         {(
           [
-            ["config", "Configuration des outils", "Choisir la configuration"],
+            [
+              "config",
+              "Configuration des outils",
+              "Choisir la configuration",
+              "Sans fichier, tous les outils statiques sont lancés.",
+            ],
             [
               "compileCommands",
               "Compilation du projet",
               "Choisir compile_commands.json",
+              "Sans sélection, CoreTrace cherche une base contenant le fichier, puis en génère une minimale.",
             ],
           ] as const
-        ).map(([kind, label, button]) => (
+        ).map(([kind, label, button, hint]) => (
           <div className="setting-row" key={kind}>
             <div>
               <strong>{label}</strong>
               <p className="path-value">
                 {options[kind] || "Aucun fichier sélectionné"}
               </p>
+              <p className="muted small">{hint}</p>
             </div>
             <div className="inline">
               <button
@@ -238,15 +276,6 @@ export function Settings({
             </div>
           </div>
         ))}
-        <p className="muted small">
-          La configuration choisie définit les outils à lancer. Sans fichier,
-          tous les outils statiques sont demandés. La base de compilation
-          fournit les options C/C++ et les chemins d’inclusion. Sans sélection,
-          CoreTrace cherche une base contenant le fichier actif, puis en génère
-          une minimale. Les distributions CoreTrace configurent automatiquement
-          leurs outils. Les outils absents doivent être installés ou retirés de
-          votre configuration.
-        </p>
       </section>
       {cloud.me && (
         <section className="panel">
@@ -263,7 +292,7 @@ export function Settings({
           ))}
         </section>
       )}
-      <p className="muted small">CoreTrace 6.0.0-beta.1 · Tauri + React</p>
+      <p className="muted small">CoreTrace 6.0.0-beta.1</p>
     </div>
   );
 }

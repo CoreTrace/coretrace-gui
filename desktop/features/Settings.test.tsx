@@ -13,6 +13,12 @@ vi.mock("../bridge", () => ({
     readCloud: vi.fn(() => Promise.resolve([])),
     connectGitHub: vi.fn(() => Promise.resolve("https://github.com/login/oauth/authorize")),
     cloneLocation: vi.fn(() => Promise.resolve("/home/me/.local/share/CoreTrace/repositories")),
+    probeTools: vi.fn(() =>
+      Promise.resolve([
+        { name: "cppcheck", found: true },
+        { name: "flawfinder", found: false },
+      ]),
+    ),
   },
   errorMessage: (e: unknown) => String(e),
 }));
@@ -80,4 +86,14 @@ it("says where cloned repositories are kept", async () => {
   expect(
     await screen.findByText("/home/me/.local/share/CoreTrace/repositories"),
   ).toBeDefined();
+});
+
+it("names the tools that are missing before the first run", async () => {
+  // Four tools absent read as "0 results" until yesterday; the reader had no
+  // way to know the run had barely happened.
+  show(null);
+  const probe = await screen.findByRole("status");
+  expect(probe.textContent).toContain("✓ cppcheck");
+  expect(probe.textContent).toContain("✗ flawfinder");
+  expect(probe.textContent).toContain("aucun résultat");
 });

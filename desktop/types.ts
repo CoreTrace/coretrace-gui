@@ -42,6 +42,11 @@ export interface LocalResult {
   report: string | null;
   cancelled: boolean;
 }
+/** Whether a tool ctrace calls can be found on this machine. */
+export interface ToolStatus {
+  name: string;
+  found: boolean;
+}
 export interface DeviceCode {
   userCode: string;
   verificationUri: string;

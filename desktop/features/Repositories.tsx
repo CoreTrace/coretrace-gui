@@ -1,11 +1,11 @@
 import { ArrowUpRight, FolderGit2, GitBranch, Search } from "lucide-react";
-import { desktop, errorMessage } from "../bridge";
+import { desktop, errorMessage, native } from "../bridge";
 import type { CloudModel } from "../useCloud";
 import type { Repository } from "../types";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /** Repository cards shown at once, and added per "Afficher plus". */
-const PAGE = 4;
+const PAGE = 6;
 
 export function Repositories({
   cloud,
@@ -22,6 +22,16 @@ export function Repositories({
   // An organisation can have hundreds of repositories, and a wall of cards is
   // not a list anyone reads. Show a handful and let the reader ask for more.
   const [limit, setLimit] = useState(PAGE);
+  // Which repositories are already on this machine: their card can say
+  // "open" instead of promising a download that will not happen.
+  const [cloned, setCloned] = useState<string[]>([]);
+  useEffect(() => {
+    if (!native) return;
+    void desktop
+      .clonedRepositories()
+      .then(setCloned)
+      .catch(() => setCloned([]));
+  }, []);
   const needle = search.trim().toLowerCase();
   const matching = needle
     ? cloud.repositories.filter((r) =>
@@ -97,16 +107,33 @@ export function Repositories({
                 <GitBranch size={13} /> {repo.default_branch}
               </p>
               <footer>
-                <button onClick={() => clone(repo.full_name)}>
-                  Ouvrir dans l’IDE
-                </button>
                 <button
-                  className="primary"
-                  disabled={!repo.enabled}
-                  onClick={() => analyse(repo)}
+                  title={
+                    cloned.includes(repo.full_name)
+                      ? "Déjà cloné sur cette machine"
+                      : "Télécharge une copie sur cette machine, puis l’ouvre"
+                  }
+                  onClick={() => clone(repo.full_name)}
                 >
-                  Analyser
+                  {cloned.includes(repo.full_name) ? "Ouvrir" : "Cloner et ouvrir"}
                 </button>
+                {repo.enabled ? (
+                  <button className="primary" onClick={() => analyse(repo)}>
+                    Analyser
+                  </button>
+                ) : (
+                  // Enabling happens on the web; a disabled button here only
+                  // said no without saying where yes was.
+                  <button
+                    onClick={() =>
+                      void desktop
+                        .openAccount("repositories")
+                        .catch((e) => notify(errorMessage(e)))
+                    }
+                  >
+                    Activer sur le web <ArrowUpRight size={14} />
+                  </button>
+                )}
               </footer>
             </article>
           ))}
