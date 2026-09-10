@@ -27,6 +27,7 @@ pub fn run() {
             analysis::analysis_options,
             analysis::choose_analysis_file,
             analysis::analyse_local,
+            analysis::analyse_local_folder,
             analysis::cancel_local,
             cloud::cloud_status,
             cloud::login_start,

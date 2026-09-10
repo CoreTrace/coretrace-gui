@@ -16,8 +16,12 @@ vi.mock("../bridge", () => ({
   desktop: {
     analyseCloud: vi.fn(),
     readCloud: vi.fn(),
+    startCloudRun: vi.fn(),
+    cloudRunStatus: vi.fn().mockResolvedValue({ phase: "idle" }),
   },
   errorMessage: (e: unknown) => String(e),
+  // CloudRun only polls the platform when it is running natively.
+  native: false,
 }));
 afterEach(() => {
   cleanup();
@@ -64,6 +68,7 @@ function form(local: LocalResult | null = null) {
         local={local}
         localRunning={false}
         openWorkspace={vi.fn()}
+        analyseFolder={vi.fn()}
       />
     </ConfirmProvider>,
   );
@@ -186,4 +191,99 @@ it("marks a level with its letter, not its name", () => {
   );
   const mark = screen.getByLabelText("Erreur");
   expect(mark.textContent).toBe("E");
+});
+
+it("loads the reports of a job opened from the history", async () => {
+  // The listing carries no runs, so a job picked from the history arrives with
+  // an empty run list and the detail follows a moment later. Fetching reports
+  // only on the first render left every past analysis reading "Résultats 0".
+  const listed = {
+    id: "job-1",
+    status: "completed",
+    conclusion: "findings",
+    created_at: "2026-09-01T10:00:00Z",
+    runs: [],
+  };
+  const detailed = {
+    ...listed,
+    runs: [{ id: "run-1", tool: "ctrace", execution_status: "finished" }],
+  };
+  vi.mocked(desktop.readCloud).mockResolvedValue(detailed as never);
+  const report = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      findings: [
+        {
+          rule_id: "uninitvar",
+          level: "warning",
+          message: "Uninitialized variable: name",
+          location: { path: "src/main.c", line: 11 },
+        },
+      ],
+    }),
+  );
+  (desktop as unknown as { report: unknown }).report = report;
+
+  render(
+    <ConfirmProvider>
+      <Analyses
+        cloud={cloud}
+        selected={listed as never}
+        select={vi.fn()}
+        initialRepository={repo}
+        initialRef=""
+        clearDraft={vi.fn()}
+        notify={vi.fn()}
+        openFinding={vi.fn()}
+        local={null}
+        localRunning={false}
+        openWorkspace={vi.fn()}
+        analyseFolder={vi.fn()}
+      />
+    </ConfirmProvider>,
+  );
+
+  await waitFor(() => expect(report).toHaveBeenCalledWith("alpha", "job-1", "run-1"));
+  await screen.findByText("Uninitialized variable: name");
+});
+
+it("spends CTU when it can, and analyses on this machine when it cannot", async () => {
+  const analyseFolder = vi.fn();
+  const render_ = (signedIn: boolean) =>
+    render(
+      <ConfirmProvider>
+        <Analyses
+          cloud={
+            signedIn ? cloud : ({ ...cloud, me: null, org: "" } as CloudModel)
+          }
+          selected={null}
+          select={vi.fn()}
+          initialRepository={null}
+          initialRef=""
+          clearDraft={vi.fn()}
+          notify={vi.fn()}
+          openFinding={vi.fn()}
+          local={null}
+          localRunning={false}
+          openWorkspace={vi.fn()}
+          workspaceRoot="/work"
+          workspaceId="w1"
+          analyseFolder={analyseFolder}
+        />
+      </ConfirmProvider>,
+    );
+
+  vi.mocked(desktop.startCloudRun).mockResolvedValue(undefined as never);
+  render_(true);
+  await userEvent.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
+  await waitFor(() =>
+    expect(desktop.startCloudRun).toHaveBeenCalledWith("/work", "alpha"),
+  );
+  expect(analyseFolder).not.toHaveBeenCalled();
+  cleanup();
+
+  // Signed out: there are no CTU to spend, so the folder is analysed here.
+  render_(false);
+  await userEvent.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
+  await waitFor(() => expect(analyseFolder).toHaveBeenCalled());
+  expect(desktop.startCloudRun).toHaveBeenCalledTimes(1);
 });

@@ -216,6 +216,7 @@ function JobDetail({
     };
   }, [initial.id, cloud.org]);
   const finished = terminal(job);
+  const runKey = job.runs.map((run) => run.id).join(",");
   useEffect(() => {
     if (!finished) return;
     let active = true;
@@ -250,7 +251,10 @@ function JobDetail({
     return () => {
       active = false;
     };
-  }, [finished, job.id, cloud.org]);
+    // The runs matter, not just the job: the listing carries none, so a job
+    // opened from the history starts with an empty run list and its reports
+    // would never be fetched once the detail arrived.
+  }, [finished, job.id, cloud.org, runKey]);
   const repository = cloud.repositories.find(
     (r) => r.full_name === job.source?.repo_full_name,
   );
@@ -382,6 +386,8 @@ export function Analyses({
   localRunning,
   openWorkspace,
   workspaceRoot,
+  workspaceId,
+  analyseFolder,
 }: {
   cloud: CloudModel;
   selected: Job | null;
@@ -396,6 +402,9 @@ export function Analyses({
   openWorkspace: () => void;
   /** The folder open in the editor, when there is one: what a cloud run sends. */
   workspaceRoot?: string;
+  workspaceId?: string;
+  /** Analyses that folder on this machine, file by file. */
+  analyseFolder: () => void;
 }) {
   const [repositoryId, setRepositoryId] = useState(initialRepository?.id ?? "");
   const [reference, setReference] = useState(
@@ -406,7 +415,35 @@ export function Analyses({
   const [running, setRunning] = useState(false);
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
+  const [starting, setStarting] = useState(false);
   const confirm = useConfirm();
+  /**
+   * One way in. The platform analyses the folder with the reader's CTU when
+   * they have an organisation to spend them from; otherwise, and whenever the
+   * cloud will not take the run, the same folder is analysed on this machine.
+   */
+  const newAnalysis = async () => {
+    if (!workspaceRoot || !workspaceId) {
+      openWorkspace();
+      return;
+    }
+    setStarting(true);
+    try {
+      if (cloud.me && cloud.org) {
+        try {
+          await desktop.startCloudRun(workspaceRoot, cloud.org);
+          return;
+        } catch (e) {
+          notify(
+            `Analyse cloud impossible (${errorMessage(e)}). Analyse sur cette machine à la place.`,
+          );
+        }
+      }
+      analyseFolder();
+    } finally {
+      setStarting(false);
+    }
+  };
   const localReport = useMemo(() => {
     try {
       return {
@@ -495,9 +532,22 @@ export function Analyses({
               <h1>Analyses</h1>
               <p>Exécutez les outils CoreTrace et retrouvez leurs résultats.</p>
             </div>
-            <button onClick={openWorkspace}>
-              <FileCode2 size={16} />
-              Analyser un dossier de cette machine
+            <button
+              className="primary"
+              disabled={starting || localRunning}
+              title={
+                cloud.me && cloud.org
+                  ? "Analyse le dossier ouvert avec vos CTU, ou sur cette machine si le cloud est indisponible"
+                  : "Analyse le dossier ouvert sur cette machine"
+              }
+              onClick={() => void newAnalysis()}
+            >
+              {starting ? (
+                <LoaderCircle size={16} className="spin" />
+              ) : (
+                <Play size={16} />
+              )}
+              Nouvelle analyse
             </button>
           </div>
           {workspaceRoot && cloud.org && (
@@ -506,6 +556,7 @@ export function Analyses({
               org={cloud.org}
               notify={notify}
               typical={typicalSeconds(cloud.jobs)}
+              showStart={false}
               onFinished={(id) => {
                 void (async () => {
                   try {
@@ -521,9 +572,10 @@ export function Analyses({
               }}
             />
           )}
+          {(initialRepository || rerun) && (
           <section className="panel">
             <div className="section-heading">
-              <h2>Nouvelle analyse cloud</h2>
+              <h2>Analyser un dépôt</h2>
               <span className="badge">{cloud.org || "Connexion requise"}</span>
             </div>
             <div className="run-form">
@@ -607,6 +659,7 @@ export function Analyses({
               </p>
             )}
           </section>
+          )}
           {localRunning && (
             <div className="notice inline">
               <LoaderCircle size={16} className="spin" />
