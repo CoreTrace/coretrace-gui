@@ -4,6 +4,7 @@ mod cloud_run;
 mod github;
 mod pack;
 mod settings;
+mod support;
 mod workspace;
 
 pub fn run() {
@@ -29,6 +30,10 @@ pub fn run() {
             analysis::analyse_local,
             analysis::analyse_local_folder,
             analysis::probe_tools,
+            support::support_candidates,
+            support::support_read_file,
+            support::support_send,
+            support::support_mark_reported,
             settings::local_history,
             workspace::list_all_files,
             github::cloned_repositories,
