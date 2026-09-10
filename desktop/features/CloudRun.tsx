@@ -39,7 +39,7 @@ export function CloudRun({
 }) {
   const { phase, seconds, busy } = run;
   const startRun = () => void run.start(workspace, org);
-  const stop = () => void run.cancel();
+  const stop = () => void run.cancel(org);
 
   // Nothing has happened and this panel cannot start anything: showing an
   // empty box headed "Analyser dans le cloud" only competes with the button

@@ -407,9 +407,36 @@ pub async fn cloud_run_confirm(
     outcome
 }
 
+/// Refuses a quote. While the run is packing, uploading or executing, a loop
+/// reads the cancellation flag and stops; parked on its quote, nothing is
+/// running to read it, so the refusal has to cancel the job itself. Nothing
+/// was spent: the confirmation is what spends.
+pub(crate) async fn refuse(
+    state: &RunState,
+    session: &mut Session,
+    org: &str,
+) -> Result<(), String> {
+    let id = state.job().ok_or("No run is waiting for approval")?;
+    session
+        .request(Method::POST, &format!("/jobs/{id}/cancel"), Some(org), None)
+        .await?;
+    state.set(Phase::Cancelled { spent: false });
+    Ok(())
+}
+
 #[tauri::command]
-pub fn cloud_run_cancel(run: tauri::State<'_, RunState>) {
+pub async fn cloud_run_cancel(
+    cloud: tauri::State<'_, Cloud>,
+    run: tauri::State<'_, RunState>,
+    org: Option<String>,
+) -> Result<(), String> {
     run.request_cancel();
+    if let Phase::Quoted { .. } = run.phase() {
+        let org = org.ok_or("Choose an organisation")?;
+        let mut session = cloud.0.lock().await;
+        refuse(&run, &mut session, &org).await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -619,6 +646,48 @@ mod tests {
             }
             other => panic!("phase = {other:?}"),
         }
+        assert!(
+            !stub.seen().iter().any(|p| p.ends_with("/confirm")),
+            "nothing was confirmed"
+        );
+    }
+
+    #[tokio::test]
+    async fn refusing_a_quote_cancels_the_job_and_spends_nothing() {
+        // Refuser did nothing: the cancellation flag was raised and, with the
+        // run parked on its quote, nothing was running to read it. The notice
+        // stayed and the job waited on the platform until its deadline.
+        let stub = stub_platform(vec![
+            (201, UPLOAD_AUTHORISED),
+            (200, ""),
+            (202, VERIFYING),
+            (200, READY),
+            (201, CREATED_JOB),
+            (200, QUOTING_JOB),
+            (200, QUOTED_JOB),
+            (200, ""),
+        ]);
+        let state = RunState::default();
+        let (_dir, root) = workspace();
+        start(&state, &mut stub.session(), root, "alpha", vec![])
+            .await
+            .unwrap();
+        assert!(matches!(state.phase(), Phase::Quoted { .. }));
+
+        refuse(&state, &mut stub.session(), "alpha").await.unwrap();
+
+        assert!(
+            matches!(state.phase(), Phase::Cancelled { spent: false }),
+            "phase = {:?}",
+            state.phase()
+        );
+        assert!(
+            stub.seen()
+                .iter()
+                .any(|p| p.ends_with("/jobs/job-1/cancel")),
+            "the platform was told: {:?}",
+            stub.seen()
+        );
         assert!(
             !stub.seen().iter().any(|p| p.ends_with("/confirm")),
             "nothing was confirmed"

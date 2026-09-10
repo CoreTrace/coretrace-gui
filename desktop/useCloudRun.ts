@@ -24,7 +24,7 @@ export type CloudRunModel = {
       for a refusal has already been shown. */
   start: (workspace: string, org: string) => Promise<boolean>;
   approve: (org: string) => Promise<boolean>;
-  cancel: () => Promise<boolean>;
+  cancel: (org?: string) => Promise<boolean>;
 };
 
 /**
@@ -114,7 +114,7 @@ export function useCloudRun({
     start: (workspace, org) =>
       guard(() => desktop.startCloudRun(workspace, org)),
     approve: (org) => guard(() => desktop.confirmCloudRun(org)),
-    cancel: () => guard(() => desktop.cancelCloudRun()),
+    cancel: (org) => guard(() => desktop.cancelCloudRun(org)),
   };
 }
 
