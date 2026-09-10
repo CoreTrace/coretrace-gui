@@ -38,6 +38,8 @@ jobs:
       - run: npm ci
       - name: Verify release versions
         run: node scripts/check-desktop-version.cjs
+      - name: Verify bundle icons
+        run: node scripts/check-bundle-icons.cjs
       - run: npm run check
       - run: npm run format:check
       - name: Show what Prettier would change
@@ -98,6 +100,8 @@ jobs:
       - run: npm ci
       - name: Verify release versions
         run: node scripts/check-desktop-version.cjs
+      - name: Verify bundle icons
+        run: node scripts/check-bundle-icons.cjs
       - name: Release notes
         id: notes
         shell: bash
