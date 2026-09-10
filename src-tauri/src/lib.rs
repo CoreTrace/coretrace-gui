@@ -16,7 +16,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             workspace::choose_workspace,
             workspace::workspaces,
-            workspace::restore_session,
+            settings::restore_session,
             workspace::close_workspace,
             workspace::list_files,
             workspace::read_file,

@@ -1,3 +1,5 @@
+use crate::analysis::{adopt_analyser, AnalysisState};
+use crate::workspace::{activate, Workspace, WorkspaceState};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::Manager;
@@ -57,4 +59,39 @@ pub fn remember_workspaces(app: &tauri::AppHandle, workspaces: Vec<PathBuf>) {
     let mut settings = load(app);
     settings.workspaces = workspaces;
     save(app, &settings);
+}
+
+/// What the previous session left behind.
+#[derive(Serialize)]
+pub struct RestoredSession {
+    pub workspaces: Vec<Workspace>,
+    pub analyser: Option<String>,
+}
+
+/// Reopens the folders the last session had and makes the analyser it chose
+/// the one a run will use. Anything that has since been moved or deleted is
+/// dropped: a remembered path is a convenience, never a requirement.
+///
+/// The executable is adopted here, not merely reported. Handing the interface
+/// a path while leaving the analysis state empty showed the reader a
+/// configured analyser that every run then refused to find.
+#[tauri::command]
+pub fn restore_session(
+    app: tauri::AppHandle,
+    workspace: tauri::State<'_, WorkspaceState>,
+    analysis: tauri::State<'_, AnalysisState>,
+) -> Result<RestoredSession, String> {
+    let remembered = load(&app);
+    let mut open = Vec::new();
+    for path in remembered.workspaces {
+        if let Ok(restored) = activate(&workspace, path) {
+            open.push(restored);
+        }
+    }
+    Ok(RestoredSession {
+        workspaces: open,
+        analyser: remembered
+            .analyser
+            .and_then(|path| adopt_analyser(&analysis, path).ok()),
+    })
 }
