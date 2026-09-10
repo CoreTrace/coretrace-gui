@@ -260,6 +260,30 @@ export default function App() {
       setLocalRunning(false);
     }
   };
+  /** Analyses the whole open folder locally: what a cloud run does to a
+      workspace, done on this machine when the cloud is not available. */
+  const runLocalFolder = async () => {
+    if (!workspace || localRunning) return;
+    if (!analyser) {
+      setPage("settings");
+      setMessage(
+        "Sélectionnez le programme ctrace avant de lancer une analyse locale.",
+      );
+      return;
+    }
+    setLocalRunning(true);
+    setLocal(null);
+    setPage("analyses");
+    const ran = workspace.id;
+    try {
+      const result = await desktop.analyseLocalFolder(ran);
+      if (activeWorkspace.current === ran) setLocal(result);
+    } catch (e) {
+      setMessage(errorMessage(e));
+    } finally {
+      setLocalRunning(false);
+    }
+  };
   const openFinding = (path: string, line: number) => {
     if (!workspace || !editor.current) {
       setMessage(
@@ -367,17 +391,9 @@ export default function App() {
           </div>
         )}
         <div className="sidebar-bottom">
-          <div className="cloud-card">
-            <span className="inline">
-              <span className={`status-dot ${cloud.me ? "" : "offline"}`} />
-              {cloud.me ? "CoreTrace Cloud" : "Mode local"}
-            </span>
-            <p>
-              {cloud.me
-                ? cloud.org || "Aucune organisation"
-                : "Votre code reste à portée de main."}
-            </p>
-          </div>
+          {/* The organisation already has a picker in the header and the
+              account its own button below; repeating the slug here said
+              nothing the reader could act on. */}
           <button
             className="profile"
             onClick={() => (cloud.me ? setPage("settings") : setLogin(true))}
@@ -547,6 +563,8 @@ export default function App() {
               local={local}
               localRunning={localRunning}
               workspaceRoot={workspace?.path}
+              workspaceId={workspace?.id}
+              analyseFolder={() => void runLocalFolder()}
               openWorkspace={() =>
                 workspace ? setPage("workspace") : void openFolder()
               }

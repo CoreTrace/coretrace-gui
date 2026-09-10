@@ -21,6 +21,9 @@ pub struct AnalysisState {
     options: Mutex<AnalysisOptions>,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
     running: AtomicBool,
+    /// Set when the reader stops a run. A folder is many child processes in
+    /// turn, and stopping one of them is not stopping the analysis.
+    stopped: AtomicBool,
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,6 +187,7 @@ impl Drop for Running<'_> {
         if let Ok(mut cancel) = self.0.cancel.lock() {
             *cancel = None;
         }
+        self.0.stopped.store(false, Ordering::Release);
         self.0.running.store(false, Ordering::Release);
     }
 }
@@ -469,8 +473,173 @@ async fn run_analysis(
         warnings,
     })
 }
+/// Extensions ctrace reads. A workspace holds far more than sources, and
+/// handing the tool a README costs a process launch to be told so.
+fn analysable(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "c" | "cc" | "cpp" | "cxx" | "c++" | "h" | "hh" | "hpp" | "hxx"
+            )
+        })
+}
+
+/// Every source file in the folder, in a stable order so two runs of the same
+/// workspace report their findings the same way round.
+///
+/// The walk is iterative: depth is a property of the reader's project, not
+/// something to trust the call stack with.
+fn source_files(root: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut folders = vec![root.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if kind.is_dir() {
+                if !crate::pack::excluded(&name) {
+                    folders.push(path);
+                }
+            } else if analysable(&path) {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Merges the reports of several files into the one shape the interface reads.
+/// A report that cannot be parsed is dropped rather than sinking the whole
+/// batch: one unreadable file should not hide the findings of the rest.
+fn merge_reports(reports: &[String]) -> Option<String> {
+    let mut findings = Vec::new();
+    for report in reports {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(report) else {
+            continue;
+        };
+        if let Some(list) = value["findings"].as_array() {
+            findings.extend(list.iter().cloned());
+        } else if let Some(runs) = value["runs"].as_array() {
+            for run in runs {
+                if let Some(results) = run["results"].as_array() {
+                    findings.extend(results.iter().cloned());
+                }
+            }
+        }
+    }
+    (!findings.is_empty()).then(|| serde_json::json!({ "findings": findings }).to_string())
+}
+
+/// Analyses every source file in the open folder, one after another.
+///
+/// This is what a cloud analysis does to a whole workspace, done locally: the
+/// reader asked for the folder to be analysed, not whichever file happened to
+/// be in front of them.
+#[tauri::command]
+pub async fn analyse_local_folder(
+    state: tauri::State<'_, AnalysisState>,
+    workspace: tauri::State<'_, WorkspaceState>,
+    workspace_id: String,
+) -> Result<ResultView, String> {
+    let root = root(&workspace, &workspace_id)?;
+    let executable = state
+        .executable
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or("Choose the installed ctrace executable in Settings first")?;
+    let files = source_files(&root);
+    if files.is_empty() {
+        return Err("This folder holds no C or C++ source files to analyse".into());
+    }
+    if state
+        .running
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Err("An analysis is already running".into());
+    }
+    let _running = Running(&state);
+    let options = state.options.lock().map_err(|e| e.to_string())?.clone();
+
+    let mut reports = Vec::new();
+    let mut output = String::new();
+    let mut errors = String::new();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut exit_code = Some(0);
+    let mut analysed = 0usize;
+
+    for file in &files {
+        if state.stopped.load(Ordering::Acquire) {
+            break;
+        }
+        let (sender, receiver) = oneshot::channel();
+        {
+            let mut active = state.cancel.lock().map_err(|e| e.to_string())?;
+            *active = Some(sender);
+        }
+        let result = run_analysis(&executable, &root, file, &options, receiver).await?;
+        analysed += 1;
+        let name = file
+            .strip_prefix(&root)
+            .unwrap_or(file)
+            .display()
+            .to_string();
+        if !result.stdout.is_empty() {
+            output.push_str(&format!("=== {name} ===\n{}\n", result.stdout));
+        }
+        if !result.stderr.is_empty() {
+            errors.push_str(&format!("=== {name} ===\n{}\n", result.stderr));
+        }
+        if let Some(report) = result.report {
+            reports.push(report);
+        }
+        for warning in result.warnings {
+            if !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
+        if result.exit_code.unwrap_or(0) != 0 {
+            exit_code = result.exit_code;
+        }
+        if result.cancelled {
+            break;
+        }
+    }
+
+    let cancelled = state.stopped.load(Ordering::Acquire);
+    warnings.insert(
+        0,
+        format!("{analysed} fichier(s) analysé(s) sur {}.", files.len()),
+    );
+    Ok(ResultView {
+        exit_code,
+        stdout: output,
+        stderr: errors,
+        report: merge_reports(&reports),
+        cancelled,
+        warnings,
+    })
+}
+
 #[tauri::command]
 pub async fn cancel_local(state: tauri::State<'_, AnalysisState>) -> Result<(), String> {
+    // Recorded before the current child is stopped: a folder analysis reads it
+    // between files and would otherwise start the next one.
+    state.stopped.store(true, Ordering::Release);
     if let Some(sender) = state.cancel.lock().map_err(|e| e.to_string())?.take() {
         let _ = sender.send(());
     }
@@ -628,6 +797,43 @@ mod tests {
         assert!(state.executable.lock().unwrap().is_some());
         assert!(adopt_analyser(&state, dir.path().join("absent.exe")).is_err());
     }
+    #[test]
+    fn a_folder_analysis_reads_sources_and_skips_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules/x")).unwrap();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::write(root.join("src/main.c"), "int main(void){return 0;}").unwrap();
+        std::fs::write(root.join("src/util.hpp"), "#pragma once").unwrap();
+        std::fs::write(root.join("README.md"), "not source").unwrap();
+        std::fs::write(root.join("node_modules/x/a.c"), "int a;").unwrap();
+        std::fs::write(root.join(".git/config"), "int b;").unwrap();
+
+        let found = source_files(root);
+        let names: Vec<String> = found
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["main.c", "util.hpp"], "{names:?}");
+    }
+
+    #[test]
+    fn merging_keeps_every_finding_and_survives_an_unreadable_report() {
+        let merged = merge_reports(&[
+            r#"{"findings":[{"message":"one"}]}"#.into(),
+            "not json at all".into(),
+            r#"{"runs":[{"results":[{"message":{"text":"two"}}]}]}"#.into(),
+            r#"{"findings":[{"message":"three"}]}"#.into(),
+        ])
+        .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(value["findings"].as_array().unwrap().len(), 3);
+        // Nothing to report is not a report.
+        assert!(merge_reports(&[r#"{"findings":[]}"#.into()]).is_none());
+        assert!(merge_reports(&[]).is_none());
+    }
+
     #[tokio::test]
     async fn the_analyser_runs_from_the_path_settings_actually_stores() {
         // Settings canonicalises the chosen executable, and on Windows that

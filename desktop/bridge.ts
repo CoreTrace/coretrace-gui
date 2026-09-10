@@ -59,6 +59,9 @@ export const desktop = {
   analysisOptions: () => call<AnalysisOptions>("analysis_options"),
   chooseAnalysisFile: (kind: keyof AnalysisOptions, clear = false) =>
     call<AnalysisOptions>("choose_analysis_file", { kind, clear }),
+  /** Analyses every source file in the open folder, one after another. */
+  analyseLocalFolder: (workspaceId: string) =>
+    call<LocalResult>("analyse_local_folder", { workspaceId }),
   analyseLocal: (workspaceId: string, path: string) =>
     call<LocalResult>("analyse_local", { workspaceId, path }),
   cancelLocal: () => call<void>("cancel_local"),

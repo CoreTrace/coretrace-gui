@@ -47,6 +47,7 @@ export function CloudRun({
   notify,
   onFinished,
   typical,
+  showStart = true,
 }: {
   workspace: string;
   org: string;
@@ -56,6 +57,10 @@ export function CloudRun({
   /** Seconds a cloud analysis usually takes here, measured from finished jobs.
       Undefined when too few have run to say anything. */
   typical?: number;
+  /** Whether this panel offers its own way to start a run. When the page has
+      one button for every kind of analysis, this panel only reports progress
+      and stays out of sight until there is some. */
+  showStart?: boolean;
 }) {
   const [phase, setPhase] = useState<CloudPhase>(IDLE);
   const [busy, setBusy] = useState(false);
@@ -134,15 +139,22 @@ export function CloudRun({
     await poll();
   }
 
+  // Nothing has happened and this panel cannot start anything: showing an
+  // empty box headed "Analyser dans le cloud" only competes with the button
+  // that does.
+  if (!showStart && phase.phase === "idle") return null;
+
   return (
     <section className="panel">
       <h2>Analyser dans le cloud</h2>
-      <p className="muted">
-        Le dossier ouvert est envoyé à la plateforme et analysé avec vos CTU.
-        Rien n’est débité tant que vous n’avez pas accepté le devis.
-      </p>
+      {showStart && (
+        <p className="muted">
+          Le dossier ouvert est envoyé à la plateforme et analysé avec vos CTU.
+          Rien n’est débité tant que vous n’avez pas accepté le devis.
+        </p>
+      )}
 
-      {phase.phase === "idle" && (
+      {showStart && phase.phase === "idle" && (
         <button className="primary" disabled={busy || !org} onClick={() => void startRun()}>
           <CloudUpload size={15} />
           {busy ? "Préparation…" : "Analyser dans le cloud"}
