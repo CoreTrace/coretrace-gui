@@ -22,7 +22,13 @@ import {
 } from "../model";
 import type { CloudModel } from "../useCloud";
 import type { CloudRunModel } from "../useCloudRun";
-import type { Finding, Job, LocalResult, Repository } from "../types";
+import type {
+  Finding,
+  Job,
+  LocalResult,
+  LocalRun,
+  Repository,
+} from "../types";
 import { JobRows } from "./Dashboard";
 
 /** The first line of a tool's output that looks like the reason it stopped. */
@@ -130,9 +136,12 @@ export function Findings({
                 {GROUP[level] ?? level} · {group.length}
               </h3>
               {group.map((f, i) => (
-        <article
+        <button
           className={`finding ${f.level}`}
           key={`${f.path}-${f.line}-${i}`}
+          disabled={!f.path}
+          title={f.path ? "Ouvrir dans l’éditeur" : "Aucun emplacement"}
+          onClick={() => open(f.path, f.line)}
         >
           <div className="inline">
             <span
@@ -142,21 +151,19 @@ export function Findings({
             >
               {MARK[f.level]?.letter ?? f.level.charAt(0).toUpperCase()}
             </span>
+            {/* Where, first: the reader reads the message and jumps to the
+                code, so the place to jump to is the row's leading element. */}
+            <strong className="location">
+              <FileCode2 size={13} />
+              {f.path || "Sans emplacement"}:{f.line}
+            </strong>
             <span className="muted small">
               {f.tool} {f.rule}
             </span>
             {f.origin === "cloud" && <span className="badge">cloud</span>}
           </div>
           <p>{f.message}</p>
-          <button
-            className="text-button"
-            disabled={!f.path}
-            onClick={() => open(f.path, f.line)}
-          >
-            <FileCode2 size={13} />
-            {f.path || "Sans emplacement"}:{f.line}
-          </button>
-        </article>
+        </button>
               ))}
             </div>
           ))}
@@ -389,6 +396,8 @@ export function Analyses({
   workspaceRoot,
   newAnalysis,
   cloudRun,
+  localHistory,
+  showLocalRun,
 }: {
   cloud: CloudModel;
   selected: Job | null;
@@ -406,6 +415,10 @@ export function Analyses({
   /** Starts an analysis of the open folder: cloud when possible, this machine
       otherwise. Owned by the application, so every button does the same. */
   newAnalysis: () => void;
+  /** Local runs of the open folder, newest first. */
+  localHistory: LocalRun[];
+  /** Opens one of them where the last local result is shown. */
+  showLocalRun: (run: LocalRun) => void;
   /** The one cloud run, owned above the pages. */
   cloudRun: CloudRunModel;
 }) {
@@ -628,8 +641,10 @@ export function Analyses({
                   {local.cancelled
                     ? "Annulée"
                     : local.warnings?.length
-                      ? "Analyse incomplète"
-                      : `Code de sortie ${local.exitCode ?? "inconnu"}`}
+                      ? "Terminée avec avertissements"
+                      : local.exitCode === 0
+                        ? "Terminée"
+                        : "Échouée"}
                 </span>
               </div>
               {local.warnings?.map((warning) => (
@@ -664,6 +679,50 @@ export function Analyses({
                 </pre>
               </details>
             </section>
+          )}
+          {localHistory.length > 0 && (
+            <>
+              <div className="section-heading">
+                <h2>Sur cette machine</h2>
+                <span className="muted small">
+                  {localHistory.length} analyse
+                  {localHistory.length > 1 ? "s" : ""} locale
+                  {localHistory.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="job-rows">
+                {localHistory.map((run) => (
+                  <button
+                    className="job-row"
+                    key={run.id}
+                    onClick={() => showLocalRun(run)}
+                  >
+                    <div className="job-symbol">
+                      <FileCode2 size={17} />
+                    </div>
+                    <div className="grow">
+                      <strong>{run.label}</strong>
+                      <span className="muted small">
+                        {run.files} fichier{run.files > 1 ? "s" : ""} ·{" "}
+                        {date(new Date(run.startedAt * 1000).toISOString())}
+                      </span>
+                    </div>
+                    <span
+                      className={`badge ${run.cancelled ? "cancelled" : run.warnings.length ? "warning" : run.exitCode === 0 ? "clean" : "failed"}`}
+                    >
+                      {run.cancelled
+                        ? "Annulée"
+                        : run.warnings.length
+                          ? "Avertissements"
+                          : run.exitCode === 0
+                            ? "Terminée"
+                            : "Échouée"}
+                    </span>
+                    <span className="badge">local</span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
           <div className="section-heading">
             <h2>Historique de l’organisation</h2>

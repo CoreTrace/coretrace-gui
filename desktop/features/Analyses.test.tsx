@@ -80,6 +80,8 @@ function form(local: LocalResult | null = null) {
         openWorkspace={vi.fn()}
         newAnalysis={vi.fn()}
         cloudRun={idleRun}
+        localHistory={[]}
+        showLocalRun={vi.fn()}
       />
     </ConfirmProvider>,
   );
@@ -94,7 +96,7 @@ it("shows incomplete execution even when ctrace exits successfully", () => {
     cancelled: false,
     warnings: ["Outil indisponible"],
   });
-  expect(screen.getByText("Analyse incomplète")).toBeTruthy();
+  expect(screen.getByText("Terminée avec avertissements")).toBeTruthy();
   expect(screen.getByRole("alert").textContent).toContain("Outil indisponible");
   expect(
     screen.getByText("Sortie de ctrace").parentElement?.hasAttribute("open"),
@@ -151,7 +153,8 @@ it("renders report messages as text and sends a location to the editor", async (
     />,
   );
   expect(document.querySelector("img")).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "src/main.c:14" }));
+  // The whole row is the target now; its name carries the location first.
+  await userEvent.click(screen.getByRole("button", { name: /src\/main\.c:14/ }));
   expect(open).toHaveBeenCalledWith("src/main.c", 14);
 });
 
@@ -250,6 +253,8 @@ it("loads the reports of a job opened from the history", async () => {
         openWorkspace={vi.fn()}
         newAnalysis={vi.fn()}
         cloudRun={idleRun}
+        localHistory={[]}
+        showLocalRun={vi.fn()}
       />
     </ConfirmProvider>,
   );
@@ -277,6 +282,8 @@ it("the one button starts whatever analysis the application decides", async () =
         workspaceRoot="/work"
         newAnalysis={newAnalysis}
         cloudRun={idleRun}
+        localHistory={[]}
+        showLocalRun={vi.fn()}
       />
     </ConfirmProvider>,
   );

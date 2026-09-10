@@ -23,6 +23,17 @@ export interface Document {
   content: string;
   revision: string;
 }
+/** A local run as the history keeps it: what ran, when, and its report. */
+export interface LocalRun {
+  id: string;
+  startedAt: number;
+  label: string;
+  files: number;
+  exitCode: number | null;
+  cancelled: boolean;
+  warnings: string[];
+  report: string | null;
+}
 export interface LocalResult {
   warnings?: string[];
   exitCode: number | null;

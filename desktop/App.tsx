@@ -29,7 +29,14 @@ import { Settings } from "./features/Settings";
 import type { EditorHandle } from "./features/WorkspaceEditor";
 import { useCloud } from "./useCloud";
 import { typicalSeconds, workspaceRelativePath } from "./model";
-import type { Job, LocalResult, Page, Repository, Workspace } from "./types";
+import type {
+  Job,
+  LocalResult,
+  LocalRun,
+  Page,
+  Repository,
+  Workspace,
+} from "./types";
 const WorkspaceEditor = lazy(() =>
   import("./features/WorkspaceEditor").then((module) => ({
     default: module.WorkspaceEditor,
@@ -96,6 +103,27 @@ export default function App() {
   const [analyser, setAnalyser] = useState("");
   const [local, setLocal] = useState<LocalResult | null>(null);
   const [localRunning, setLocalRunning] = useState(false);
+  // What ran on this machine in the open folder, newest first. Reloaded when
+  // the folder changes and when a run finishes, which are the times it moves.
+  const [localHistory, setLocalHistory] = useState<LocalRun[]>([]);
+  useEffect(() => {
+    if (!native || !workspace) {
+      setLocalHistory([]);
+      return;
+    }
+    let live = true;
+    void desktop
+      .localHistory(workspace.id)
+      .then((runs) => {
+        if (live) setLocalHistory(runs);
+      })
+      .catch(() => {
+        if (live) setLocalHistory([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [workspace, localRunning]);
   useEffect(() => {
     if (!busy && !localRunning) {
       setWaited(0);
@@ -569,6 +597,18 @@ export default function App() {
               workspaceRoot={workspace?.path}
               newAnalysis={() => void newAnalysis()}
               cloudRun={cloudRun}
+              localHistory={localHistory}
+              showLocalRun={(run) =>
+                // The output was not kept; the report and its verdict were.
+                setLocal({
+                  exitCode: run.exitCode,
+                  stdout: "",
+                  stderr: "",
+                  report: run.report,
+                  cancelled: run.cancelled,
+                  warnings: run.warnings,
+                })
+              }
               openWorkspace={() =>
                 workspace ? setPage("workspace") : void openFolder()
               }

@@ -38,8 +38,9 @@ function show(onFinished = vi.fn()) {
   return onFinished;
 }
 
-it("shows the cost and spends nothing until the user approves", async () => {
-  // The platform quotes the run and parks it; approving is what spends CTU.
+it("shows the cost and leaves the decision to the notice", async () => {
+  // The platform quotes the run and parks it. The panel says what it costs;
+  // the one place to accept or refuse is the notice, so nothing here spends.
   vi.mocked(desktop.cloudRunStatus).mockResolvedValue({
     phase: "quoted",
     job: "job-1",
@@ -47,10 +48,10 @@ it("shows the cost and spends nothing until the user approves", async () => {
     deadline: "2030-01-01T00:00:00Z",
   });
   show();
-  expect(await screen.findByText(/4\s?000 CTU/)).toBeDefined();
+  const price = await screen.findByText(/4\s?000 CTU/);
+  expect(price.textContent).toContain("notification");
+  expect(screen.queryByRole("button", { name: /Lancer/ })).toBeNull();
   expect(desktop.confirmCloudRun).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole("button", { name: /Lancer/ }));
-  expect(desktop.confirmCloudRun).toHaveBeenCalledWith("alpha");
 });
 
 it("can be cancelled while it is packing", async () => {
