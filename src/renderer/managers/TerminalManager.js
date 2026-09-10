@@ -307,6 +307,16 @@ class TerminalManager {
         }
         break;
       }
+      case 'd': {
+        // Mirrors a real shell's Ctrl+D-on-empty-line EOF: closes the
+        // terminal. Only fires at an idle, empty prompt so it can't wipe an
+        // in-progress command line or interrupt a running one.
+        if (e.ctrlKey && !term.running && !e.target.value) {
+          e.preventDefault();
+          this.closeTerminal(id);
+        }
+        break;
+      }
     }
   }
 
@@ -367,6 +377,14 @@ class TerminalManager {
     if (/^(clear|cls)$/i.test(command)) {
       const out = document.getElementById(`terminal-out-${id}`);
       if (out) out.innerHTML = '';
+      return;
+    }
+
+    // Handle `exit` / `quit` — a real shell would close the terminal on this,
+    // but each command here runs as its own one-shot subprocess rather than
+    // a persistent shell, so there's no exiting process to actually close it.
+    if (/^(exit|quit)(\s+\d+)?$/i.test(command)) {
+      this.closeTerminal(id);
       return;
     }
 
