@@ -785,7 +785,10 @@ export default function App() {
           >
             Lancer l’analyse
           </button>
-          <button disabled={cloudRun.busy} onClick={() => void cloudRun.cancel(cloud.org)}>
+          <button
+            disabled={cloudRun.busy}
+            onClick={() => void cloudRun.cancel(cloud.org)}
+          >
             Refuser
           </button>
         </div>
@@ -803,7 +806,9 @@ export default function App() {
               setFinishedJob("");
               void (async () => {
                 try {
-                  selectJob(await desktop.readCloud<Job>("job", cloud.org, job));
+                  selectJob(
+                    await desktop.readCloud<Job>("job", cloud.org, job),
+                  );
                 } catch (e) {
                   setMessage(errorMessage(e));
                 }
@@ -849,9 +854,9 @@ export default function App() {
           }}
         >
           <p>
-            Choisissez un dépôt connecté ou saisissez <code>propriétaire/dépôt</code>.
-            CoreTrace le clone et le range avec les autres ; le dossier est
-            indiqué dans les paramètres.
+            Choisissez un dépôt connecté ou saisissez{" "}
+            <code>propriétaire/dépôt</code>. CoreTrace le clone et le range avec
+            les autres ; le dossier est indiqué dans les paramètres.
           </p>
           <label>
             Dépôt GitHub

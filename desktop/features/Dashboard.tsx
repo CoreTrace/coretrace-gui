@@ -104,7 +104,9 @@ export function Dashboard({
             <br />
             <span>Que souhaitez-vous analyser ?</span>
           </h1>
-          <p>Ouvrez votre code. Lancez une analyse. Comprenez chaque résultat.</p>
+          <p>
+            Ouvrez votre code. Lancez une analyse. Comprenez chaque résultat.
+          </p>
         </div>
         {workspace && (
           <button className="primary" onClick={analyse}>
@@ -131,7 +133,10 @@ export function Dashboard({
         <>
           <div className="section-heading">
             <h2>Votre organisation</h2>
-            <button className="text-button" onClick={() => navigate("settings")}>
+            <button
+              className="text-button"
+              onClick={() => navigate("settings")}
+            >
               {cloud.org || "Choisir une organisation"} <ArrowRight size={14} />
             </button>
           </div>
@@ -183,32 +188,34 @@ export function Dashboard({
       )}
       {!workspace && (
         <>
-      <div className="action-grid">
-        <button className="action-card" onClick={openFolder}>
-          <span className="action-icon brand-accent">
-            <FolderOpen size={23} />
-          </span>
-          <strong>Ouvrir un dossier</strong>
-          <span>Travaillez sur votre code local dans l’IDE intégré.</span>
-          <ArrowRight size={18} />
-        </button>
-        <button className="action-card" onClick={clone}>
-          <span className="action-icon brand-accent">
-            <GitBranch size={23} />
-          </span>
-          <strong>Cloner un dépôt GitHub</strong>
-          <span>Copiez un dépôt sur cette machine pour l’ouvrir et l’analyser.</span>
-          <ArrowRight size={18} />
-        </button>
-        <button className="action-card" onClick={analyse}>
-          <span className="action-icon brand-accent">
-            <Sparkles size={23} />
-          </span>
-          <strong>Lancer une analyse</strong>
-          <span>Choisissez un dossier, puis analysez-le.</span>
-          <ArrowRight size={18} />
-        </button>
-      </div>
+          <div className="action-grid">
+            <button className="action-card" onClick={openFolder}>
+              <span className="action-icon brand-accent">
+                <FolderOpen size={23} />
+              </span>
+              <strong>Ouvrir un dossier</strong>
+              <span>Travaillez sur votre code local dans l’IDE intégré.</span>
+              <ArrowRight size={18} />
+            </button>
+            <button className="action-card" onClick={clone}>
+              <span className="action-icon brand-accent">
+                <GitBranch size={23} />
+              </span>
+              <strong>Cloner un dépôt GitHub</strong>
+              <span>
+                Copiez un dépôt sur cette machine pour l’ouvrir et l’analyser.
+              </span>
+              <ArrowRight size={18} />
+            </button>
+            <button className="action-card" onClick={analyse}>
+              <span className="action-icon brand-accent">
+                <Sparkles size={23} />
+              </span>
+              <strong>Lancer une analyse</strong>
+              <span>Choisissez un dossier, puis analysez-le.</span>
+              <ArrowRight size={18} />
+            </button>
+          </div>
         </>
       )}
       {workspace && (

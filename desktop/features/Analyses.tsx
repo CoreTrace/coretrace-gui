@@ -23,13 +23,7 @@ import {
 } from "../model";
 import type { CloudModel } from "../useCloud";
 import type { CloudRunModel } from "../useCloudRun";
-import type {
-  Finding,
-  Job,
-  LocalResult,
-  LocalRun,
-  Repository,
-} from "../types";
+import type { Finding, Job, LocalResult, LocalRun, Repository } from "../types";
 import { JobRows } from "./Dashboard";
 import { ReportDialog } from "./ReportDialog";
 
@@ -40,7 +34,9 @@ function firstProblem(local: LocalResult): string | undefined {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  return lines.find((line) => /error|fatal|not found|cannot|failed/i.test(line));
+  return lines.find((line) =>
+    /error|fatal|not found|cannot|failed/i.test(line),
+  );
 }
 
 /** Section titles when the findings are grouped by severity. */
@@ -104,7 +100,11 @@ export function Findings({
       </div>
       {loading &&
         [0, 1, 2].map((i) => (
-          <article className="finding placeholder" key={`placeholder-${i}`} aria-hidden="true">
+          <article
+            className="finding placeholder"
+            key={`placeholder-${i}`}
+            aria-hidden="true"
+          >
             <div className="inline">
               <span className="mark skeleton" />
               <span className="skeleton line short" />
@@ -138,34 +138,36 @@ export function Findings({
                 {GROUP[level] ?? level} · {group.length}
               </h3>
               {group.map((f, i) => (
-        <button
-          className={`finding ${f.level}`}
-          key={`${f.path}-${f.line}-${i}`}
-          disabled={!f.path}
-          title={f.path ? "Ouvrir dans l’éditeur" : "Aucun emplacement"}
-          onClick={() => open(f.path, f.line)}
-        >
-          <div className="inline">
-            <span
-              className={`mark ${f.level}`}
-              title={MARK[f.level]?.label ?? f.level}
-              aria-label={MARK[f.level]?.label ?? f.level}
-            >
-              {MARK[f.level]?.letter ?? f.level.charAt(0).toUpperCase()}
-            </span>
-            {/* Where, first: the reader reads the message and jumps to the
+                <button
+                  className={`finding ${f.level}`}
+                  key={`${f.path}-${f.line}-${i}`}
+                  disabled={!f.path}
+                  title={f.path ? "Ouvrir dans l’éditeur" : "Aucun emplacement"}
+                  onClick={() => open(f.path, f.line)}
+                >
+                  <div className="inline">
+                    <span
+                      className={`mark ${f.level}`}
+                      title={MARK[f.level]?.label ?? f.level}
+                      aria-label={MARK[f.level]?.label ?? f.level}
+                    >
+                      {MARK[f.level]?.letter ?? f.level.charAt(0).toUpperCase()}
+                    </span>
+                    {/* Where, first: the reader reads the message and jumps to the
                 code, so the place to jump to is the row's leading element. */}
-            <strong className="location">
-              <FileCode2 size={13} />
-              {f.path || "Sans emplacement"}:{f.line}
-            </strong>
-            <span className="muted small">
-              {f.tool} {f.rule}
-            </span>
-            {f.origin === "cloud" && <span className="badge">cloud</span>}
-          </div>
-          <p>{f.message}</p>
-        </button>
+                    <strong className="location">
+                      <FileCode2 size={13} />
+                      {f.path || "Sans emplacement"}:{f.line}
+                    </strong>
+                    <span className="muted small">
+                      {f.tool} {f.rule}
+                    </span>
+                    {f.origin === "cloud" && (
+                      <span className="badge">cloud</span>
+                    )}
+                  </div>
+                  <p>{f.message}</p>
+                </button>
               ))}
             </div>
           ))}
@@ -450,7 +452,9 @@ export function Analyses({
   const localReport = useMemo(() => {
     try {
       return {
-        findings: local?.report ? parseFindings(local.report, undefined, "local") : [],
+        findings: local?.report
+          ? parseFindings(local.report, undefined, "local")
+          : [],
         error: "",
       };
     } catch (e) {
@@ -559,92 +563,94 @@ export function Analyses({
             />
           )}
           {(initialRepository || rerun) && (
-          <section className="panel">
-            <div className="section-heading">
-              <h2>Analyser un dépôt</h2>
-              <span className="badge">{cloud.org || "Connexion requise"}</span>
-            </div>
-            <div className="run-form">
-              <label>
-                Dépôt
-                <select
-                  value={repositoryId}
-                  disabled={running}
-                  onChange={(e) => {
-                    setRepositoryId(e.target.value);
-                    setReference(
-                      cloud.repositories.find((r) => r.id === e.target.value)
-                        ?.default_branch ?? "",
-                    );
-                    setRequestId(crypto.randomUUID());
-                  }}
-                >
-                  <option value="">Sélectionnez un dépôt</option>
-                  {/* Every connected repository, not only the enabled ones:
+            <section className="panel">
+              <div className="section-heading">
+                <h2>Analyser un dépôt</h2>
+                <span className="badge">
+                  {cloud.org || "Connexion requise"}
+                </span>
+              </div>
+              <div className="run-form">
+                <label>
+                  Dépôt
+                  <select
+                    value={repositoryId}
+                    disabled={running}
+                    onChange={(e) => {
+                      setRepositoryId(e.target.value);
+                      setReference(
+                        cloud.repositories.find((r) => r.id === e.target.value)
+                          ?.default_branch ?? "",
+                      );
+                      setRequestId(crypto.randomUUID());
+                    }}
+                  >
+                    <option value="">Sélectionnez un dépôt</option>
+                    {/* Every connected repository, not only the enabled ones:
                       hiding the rest looked like they were missing. The
                       platform refuses a disabled one, so it says why here. */}
-                  {cloud.repositories.map((repo) => (
-                    <option
-                      key={repo.id}
-                      value={repo.id}
-                      disabled={!repo.enabled}
-                    >
-                      {repo.full_name}
-                      {repo.enabled ? "" : " — analyse désactivée"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Branche, tag ou commit
+                    {cloud.repositories.map((repo) => (
+                      <option
+                        key={repo.id}
+                        value={repo.id}
+                        disabled={!repo.enabled}
+                      >
+                        {repo.full_name}
+                        {repo.enabled ? "" : " — analyse désactivée"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Branche, tag ou commit
+                  <input
+                    value={reference}
+                    disabled={running}
+                    placeholder="main"
+                    onChange={(e) => {
+                      setReference(e.target.value);
+                      setRequestId(crypto.randomUUID());
+                    }}
+                  />
+                </label>
+                <button
+                  className="primary"
+                  disabled={
+                    running || !repositoryId || !reference.trim() || !cloud.me
+                  }
+                  onClick={() => void run()}
+                >
+                  {running ? (
+                    <LoaderCircle size={15} className="spin" />
+                  ) : (
+                    <Play size={15} />
+                  )}
+                  {running ? "Envoi…" : "Lancer l’analyse"}
+                </button>
+              </div>
+              <label className="checkbox">
                 <input
-                  value={reference}
+                  type="checkbox"
+                  checked={rerun}
                   disabled={running}
-                  placeholder="main"
                   onChange={(e) => {
-                    setReference(e.target.value);
+                    setRerun(e.target.checked);
                     setRequestId(crypto.randomUUID());
                   }}
                 />
+                Relancer même si ce commit a déjà été analysé
               </label>
-              <button
-                className="primary"
-                disabled={
-                  running || !repositoryId || !reference.trim() || !cloud.me
-                }
-                onClick={() => void run()}
-              >
-                {running ? (
-                  <LoaderCircle size={15} className="spin" />
-                ) : (
-                  <Play size={15} />
-                )}
-                {running ? "Envoi…" : "Lancer l’analyse"}
-              </button>
-            </div>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={rerun}
-                disabled={running}
-                onChange={(e) => {
-                  setRerun(e.target.checked);
-                  setRequestId(crypto.randomUUID());
-                }}
-              />
-              Relancer même si ce commit a déjà été analysé
-            </label>
-            <p className="muted small">
-              Les outils sont définis par la configuration du dépôt sur la
-              plateforme. Chaque exécution peut consommer des CTU.
-            </p>
-            {!cloud.repositories.some((r) => r.enabled) && (
-              <p className="notice">
-                Connectez et activez un dépôt depuis la page Dépôts pour lancer
-                une analyse cloud.
+              <p className="muted small">
+                Les outils sont définis par la configuration du dépôt sur la
+                plateforme. Chaque exécution peut consommer des CTU.
               </p>
-            )}
-          </section>
+              {!cloud.repositories.some((r) => r.enabled) && (
+                <p className="notice">
+                  Connectez et activez un dépôt depuis la page Dépôts pour
+                  lancer une analyse cloud.
+                </p>
+              )}
+            </section>
           )}
           {local && (
             <section className="panel">

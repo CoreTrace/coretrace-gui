@@ -249,7 +249,10 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     openQuickRef.current = openQuick;
     useEffect(() => {
       const onKey = (event: KeyboardEvent) => {
-        if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "p")
+        if (
+          !(event.ctrlKey || event.metaKey) ||
+          event.key.toLowerCase() !== "p"
+        )
           return;
         // The editor stays mounted behind other pages; only answer when it is
         // the page in front.
@@ -392,7 +395,12 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     const saveAll = async () => {
       for (const t of tabs) {
         if (t.content === t.draft) continue;
-        const result = await desktop.save(workspace.id, t.path, t.draft, t.revision);
+        const result = await desktop.save(
+          workspace.id,
+          t.path,
+          t.draft,
+          t.revision,
+        );
         if (!alive.current) return;
         setTabs((previous) =>
           previous.map((x) =>
@@ -443,7 +451,9 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                   ) : (
                     <ChevronDown size={14} />
                   )}
-                  <span className={w.id === workspace.id ? "current" : undefined}>
+                  <span
+                    className={w.id === workspace.id ? "current" : undefined}
+                  >
                     <FolderOpen size={14} /> {w.name}
                   </span>
                 </button>
@@ -458,18 +468,18 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                 )}
               </div>
               {!collapsed[w.id] && (
-              <Tree
-                workspace={w}
-                select={(path) => {
-                  if (w.id === workspace.id) {
-                    void open(path).catch((e) => notify(errorMessage(e)));
-                  } else {
-                    openIn?.(w.id, path);
-                  }
-                }}
-                selected={w.id === workspace.id ? active : ""}
-                refresh={refresh}
-              />
+                <Tree
+                  workspace={w}
+                  select={(path) => {
+                    if (w.id === workspace.id) {
+                      void open(path).catch((e) => notify(errorMessage(e)));
+                    } else {
+                      openIn?.(w.id, path);
+                    }
+                  }}
+                  selected={w.id === workspace.id ? active : ""}
+                  refresh={refresh}
+                />
               )}
             </section>
           ))}
@@ -543,7 +553,11 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                         >
                           <Play size={14} />
                           <span>
-                            <strong>{dirty ? "Enregistrer et analyser ici" : "Sur cette machine"}</strong>
+                            <strong>
+                              {dirty
+                                ? "Enregistrer et analyser ici"
+                                : "Sur cette machine"}
+                            </strong>
                             <small>Ce fichier, avec le ctrace installé</small>
                           </span>
                         </button>
@@ -557,7 +571,11 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                         >
                           <CloudUpload size={14} />
                           <span>
-                            <strong>{dirty ? "Enregistrer et analyser dans le cloud" : "Dans le cloud"}</strong>
+                            <strong>
+                              {dirty
+                                ? "Enregistrer et analyser dans le cloud"
+                                : "Dans le cloud"}
+                            </strong>
                             <small>
                               {runInCloud
                                 ? "Le dossier ouvert, avec vos CTU"
@@ -596,14 +614,18 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
               <div className="editor-status">
                 <span>{language(tab.path)} · UTF-8</span>
                 <span>
-                  Ctrl/Cmd + S : enregistrer · Ctrl/Cmd + P : ouvrir un fichier · Ctrl/Cmd + F : rechercher
+                  Ctrl/Cmd + S : enregistrer · Ctrl/Cmd + P : ouvrir un fichier
+                  · Ctrl/Cmd + F : rechercher
                 </span>
               </div>
             </>
           ) : (
             <div className="empty centered">
               <FileCode2 size={36} />
-              <p>Choisissez un fichier dans l’explorateur, ou Ctrl+P pour le nommer.</p>
+              <p>
+                Choisissez un fichier dans l’explorateur, ou Ctrl+P pour le
+                nommer.
+              </p>
               <span className="small muted">{workspace.path}</span>
             </div>
           )}

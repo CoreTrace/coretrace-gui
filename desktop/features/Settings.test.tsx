@@ -11,8 +11,12 @@ vi.mock("../bridge", () => ({
       Promise.resolve({ config: null, compileCommands: null }),
     ),
     readCloud: vi.fn(() => Promise.resolve([])),
-    connectGitHub: vi.fn(() => Promise.resolve("https://github.com/login/oauth/authorize")),
-    cloneLocation: vi.fn(() => Promise.resolve("/home/me/.local/share/CoreTrace/repositories")),
+    connectGitHub: vi.fn(() =>
+      Promise.resolve("https://github.com/login/oauth/authorize"),
+    ),
+    cloneLocation: vi.fn(() =>
+      Promise.resolve("/home/me/.local/share/CoreTrace/repositories"),
+    ),
     probeTools: vi.fn(() =>
       Promise.resolve([
         { name: "cppcheck", found: true },
@@ -56,7 +60,9 @@ it("says nothing is signed in when there is no session", () => {
 
 it("offers a GitHub pill and opens the authorisation in the browser", async () => {
   const connect = vi.mocked(desktop.connectGitHub);
-  connect.mockResolvedValue("https://github.com/login/oauth/authorize?client_id=Iv1");
+  connect.mockResolvedValue(
+    "https://github.com/login/oauth/authorize?client_id=Iv1",
+  );
   show({
     principal: { kind: "user" },
     email: "cedric@example.test",

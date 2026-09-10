@@ -8,10 +8,12 @@ suite("describe", () => {
     expect(describe({ phase: "packing", files: 40, bytes: 2048 }, 3)).toBe(
       "Préparation de l’archive : 40 fichiers (2 Ko) · 3 s",
     );
-    expect(describe({ phase: "uploading", files: 40, total: 3 * 1024 * 1024 }, 65)).toBe(
-      "Envoi de 40 fichiers (3.0 Mo) · 1 min 05 s",
+    expect(
+      describe({ phase: "uploading", files: 40, total: 3 * 1024 * 1024 }, 65),
+    ).toBe("Envoi de 40 fichiers (3.0 Mo) · 1 min 05 s");
+    expect(describe({ phase: "verifying" }, 2)).toBe(
+      "Vérification par la plateforme · 2 s",
     );
-    expect(describe({ phase: "verifying" }, 2)).toBe("Vérification par la plateforme · 2 s");
     expect(describe({ phase: "quoting" }, 7)).toBe("Calcul du coût · 7 s");
   });
 
@@ -30,7 +32,9 @@ suite("describe", () => {
   it("says nothing when nothing is happening", () => {
     expect(describe({ phase: "idle" }, 0)).toBeNull();
     expect(describe({ phase: "done", job: "j" }, 0)).toBeNull();
-    expect(running({ phase: "quoted", job: "j", ctu: 1, deadline: "" })).toBe(false);
+    expect(running({ phase: "quoted", job: "j", ctu: 1, deadline: "" })).toBe(
+      false,
+    );
     expect(elapsed(0)).toBe("0 s");
   });
 });

@@ -75,7 +75,10 @@ it("says what the platform said when a run fails", async () => {
 });
 
 it("says whether a cancelled run had already spent anything", async () => {
-  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "cancelled", spent: false });
+  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({
+    phase: "cancelled",
+    spent: false,
+  });
   show();
   expect(await screen.findByText(/Aucun CTU/)).toBeDefined();
 });
@@ -83,14 +86,19 @@ it("says whether a cancelled run had already spent anything", async () => {
 it("offers the run when nothing is happening", async () => {
   vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "idle" });
   show();
-  await userEvent.click(await screen.findByRole("button", { name: /Analyser dans le cloud/ }));
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Analyser dans le cloud/ }),
+  );
   expect(desktop.startCloudRun).toHaveBeenCalledWith("C:/work/app", "alpha");
 });
 
 it("opens the results once when the run finishes", async () => {
   // The panel said "results below" and did nothing, so a finished analysis
   // showed an empty page. Opening it is what that sentence promised.
-  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "done", job: "job-7" });
+  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({
+    phase: "done",
+    job: "job-7",
+  });
   const onFinished = show();
   await waitFor(() => expect(onFinished).toHaveBeenCalledWith("job-7"));
   await new Promise((r) => setTimeout(r, 1100));
@@ -100,7 +108,10 @@ it("opens the results once when the run finishes", async () => {
 it("announces a finished run once however long it keeps reporting itself", async () => {
   // The status stays "done" and is polled every second. Announcing it each time
   // would reopen the analysis under the reader as they worked.
-  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "done", job: "job-42" });
+  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({
+    phase: "done",
+    job: "job-42",
+  });
   const onFinished = vi.fn();
   render(<Harness onFinished={onFinished} />);
   await waitFor(() => expect(onFinished).toHaveBeenCalledTimes(1));

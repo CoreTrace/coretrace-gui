@@ -185,10 +185,14 @@ it("folds a folder away and back", async () => {
   );
   expect(await screen.findByRole("button", { name: "main.ts" })).toBeDefined();
 
-  await userEvent.click(screen.getByRole("button", { name: "Replier project" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Replier project" }),
+  );
   expect(screen.queryByRole("button", { name: "main.ts" })).toBeNull();
 
-  await userEvent.click(screen.getByRole("button", { name: "Déplier project" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Déplier project" }),
+  );
   expect(await screen.findByRole("button", { name: "main.ts" })).toBeDefined();
 });
 
@@ -219,7 +223,10 @@ it("opens a file by name with Ctrl+P", async () => {
 });
 
 it("saves before analysing instead of refusing until the reader does", async () => {
-  vi.mocked(desktop.save).mockResolvedValue({ content: "edited", revision: "r2" });
+  vi.mocked(desktop.save).mockResolvedValue({
+    content: "edited",
+    revision: "r2",
+  });
   const run = vi.fn();
   render(
     <ConfirmProvider>
@@ -242,5 +249,10 @@ it("saves before analysing instead of refusing until the reader does", async () 
     screen.getByRole("menuitem", { name: /Enregistrer et analyser ici/ }),
   );
   await waitFor(() => expect(run).toHaveBeenCalledWith("main.ts"));
-  expect(desktop.save).toHaveBeenCalledWith("workspace-1", "main.ts", "edited", "revision-1");
+  expect(desktop.save).toHaveBeenCalledWith(
+    "workspace-1",
+    "main.ts",
+    "edited",
+    "revision-1",
+  );
 });

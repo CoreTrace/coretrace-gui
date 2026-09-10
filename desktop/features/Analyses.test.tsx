@@ -158,15 +158,24 @@ it("renders report messages as text and sends a location to the editor", async (
   );
   expect(document.querySelector("img")).toBeNull();
   // The whole row is the target now; its name carries the location first.
-  await userEvent.click(screen.getByRole("button", { name: /src\/main\.c:14/ }));
+  await userEvent.click(
+    screen.getByRole("button", { name: /src\/main\.c:14/ }),
+  );
   expect(open).toHaveBeenCalledWith("src/main.c", 14);
 });
 
 it("opens the analysis that already covers the commit", async () => {
   // The platform answers 409 naming the job that already exists. Reporting only
   // "Conflict (HTTP 409)" threw that away and left the reader with nowhere to go.
-  const existing = { id: "job-9", status: "succeeded", created_at: "2026-01-01T00:00:00Z", runs: [] };
-  vi.mocked(desktop.analyseCloud).mockResolvedValue({ existing_job: "job-9" } as never);
+  const existing = {
+    id: "job-9",
+    status: "succeeded",
+    created_at: "2026-01-01T00:00:00Z",
+    runs: [],
+  };
+  vi.mocked(desktop.analyseCloud).mockResolvedValue({
+    existing_job: "job-9",
+  } as never);
   vi.mocked(desktop.readCloud).mockResolvedValue(existing as never);
   const { select, notify } = form();
 
@@ -179,7 +188,9 @@ it("opens the analysis that already covers the commit", async () => {
   );
 
   await waitFor(() => expect(select).toHaveBeenCalledWith(existing));
-  expect(notify).toHaveBeenCalledWith(expect.stringContaining("déjà été analysé"));
+  expect(notify).toHaveBeenCalledWith(
+    expect.stringContaining("déjà été analysé"),
+  );
 });
 
 it("counts what the search actually shows", async () => {
@@ -189,14 +200,29 @@ it("counts what the search actually shows", async () => {
     <Findings
       open={vi.fn()}
       findings={[
-        { rule: "r1", level: "error", path: "a.c", line: 1, message: "buffer overflow" },
-        { rule: "r2", level: "warning", path: "b.c", line: 2, message: "unused variable" },
+        {
+          rule: "r1",
+          level: "error",
+          path: "a.c",
+          line: 1,
+          message: "buffer overflow",
+        },
+        {
+          rule: "r2",
+          level: "warning",
+          path: "b.c",
+          line: 2,
+          message: "unused variable",
+        },
         { rule: "r3", level: "note", path: "c.c", line: 3, message: "style" },
       ]}
     />,
   );
   expect(screen.getByRole("heading", { name: /Résultats 3/ })).toBeDefined();
-  await userEvent.type(screen.getByLabelText("Filtrer les résultats"), "overflow");
+  await userEvent.type(
+    screen.getByLabelText("Filtrer les résultats"),
+    "overflow",
+  );
   expect(screen.getByRole("heading", { name: /1 sur 3/ })).toBeDefined();
 });
 
@@ -204,7 +230,9 @@ it("marks a level with its letter, not its name", () => {
   render(
     <Findings
       open={vi.fn()}
-      findings={[{ rule: "r", level: "error", path: "a.c", line: 1, message: "m" }]}
+      findings={[
+        { rule: "r", level: "error", path: "a.c", line: 1, message: "m" },
+      ]}
     />,
   );
   const mark = screen.getByLabelText("Erreur");
@@ -266,7 +294,9 @@ it("loads the reports of a job opened from the history", async () => {
     </ConfirmProvider>,
   );
 
-  await waitFor(() => expect(report).toHaveBeenCalledWith("alpha", "job-1", "run-1"));
+  await waitFor(() =>
+    expect(report).toHaveBeenCalledWith("alpha", "job-1", "run-1"),
+  );
   await screen.findByText("Uninitialized variable: name");
 });
 

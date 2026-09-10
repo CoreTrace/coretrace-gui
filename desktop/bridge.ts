@@ -81,7 +81,9 @@ export const desktop = {
   clonedRepositories: () => call<string[]>("cloned_repositories"),
   /** Build files at the folder's root, for a tool-failure report. */
   supportCandidates: (workspaceId: string) =>
-    call<{ name: string; bytes: number }[]>("support_candidates", { workspaceId }),
+    call<{ name: string; bytes: number }[]>("support_candidates", {
+      workspaceId,
+    }),
   /** A text file the user chose to attach. */
   supportReadFile: (workspaceId: string, relative: string) =>
     call<string>("support_read_file", { workspaceId, relative }),

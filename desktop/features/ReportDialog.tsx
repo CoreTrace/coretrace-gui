@@ -59,7 +59,9 @@ export function ReportDialog({
   const output = `${local.stdout}\n${local.stderr}`;
   const log = useMemo(() => truncate(output), [output]);
   const tools = useMemo(() => failedTools(output), [output]);
-  const [candidates, setCandidates] = useState<{ name: string; bytes: number }[]>([]);
+  const [candidates, setCandidates] = useState<
+    { name: string; bytes: number }[]
+  >([]);
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const [extra, setExtra] = useState<{ name: string; content: string }[]>([]);
   const [libraries, setLibraries] = useState("");
@@ -91,7 +93,9 @@ export function ReportDialog({
   const lines = log.split("\n").length;
 
   const addFile = () => {
-    const name = window.prompt("Chemin du fichier, relatif au dossier ouvert :");
+    const name = window.prompt(
+      "Chemin du fichier, relatif au dossier ouvert :",
+    );
     if (!name) return;
     void desktop
       .supportReadFile(workspaceId, name)
@@ -120,7 +124,8 @@ export function ReportDialog({
       const id = await desktop.supportSend({
         tools,
         signature: signature(output),
-        ctrace_version: /ctrace\D{0,12}(\d+\.\d+\.\d+)/.exec(local.stdout)?.[1] ?? "",
+        ctrace_version:
+          /ctrace\D{0,12}(\d+\.\d+\.\d+)/.exec(local.stdout)?.[1] ?? "",
         desktop_version: DESKTOP_VERSION,
         os: "",
         libraries,

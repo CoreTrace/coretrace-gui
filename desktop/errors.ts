@@ -20,7 +20,8 @@ const EXACT: Record<string, string> = {
     "L’analyse a dépassé 15 minutes et a été arrêtée.",
   "Analysis has not stopped yet; keep the window open and try again":
     "L’analyse ne s’est pas encore arrêtée ; gardez la fenêtre ouverte et réessayez.",
-  "Choose an installed ctrace executable": "Choisissez un programme ctrace installé.",
+  "Choose an installed ctrace executable":
+    "Choisissez un programme ctrace installé.",
   "Choose a JSON file": "Choisissez un fichier JSON.",
   "Unknown analysis setting": "Paramètre d’analyse inconnu.",
   // workspace
@@ -35,7 +36,8 @@ const EXACT: Record<string, string> = {
   "Choose a text file smaller than 4 MiB":
     "Choisissez un fichier texte de moins de 4 Mio.",
   "File exceeds 4 MiB": "Le fichier dépasse 4 Mio.",
-  "Binary files cannot be edited": "Les fichiers binaires ne peuvent pas être modifiés.",
+  "Binary files cannot be edited":
+    "Les fichiers binaires ne peuvent pas être modifiés.",
   "Folder contains more than 5,000 entries; open a smaller folder":
     "Ce dossier contient plus de 5 000 entrées ; ouvrez un dossier plus petit.",
   "Invalid or oversized text": "Texte invalide ou trop volumineux.",
@@ -45,7 +47,8 @@ const EXACT: Record<string, string> = {
     "Le fichier a changé sur le disque. Rouvrez-le avant d’enregistrer ; votre brouillon est conservé.",
   "File changed while saving; your draft has been kept":
     "Le fichier a changé pendant l’enregistrement ; votre brouillon est conservé.",
-  "Workspace changed; reopen the file": "Le dossier a changé ; rouvrez le fichier.",
+  "Workspace changed; reopen the file":
+    "Le dossier a changé ; rouvrez le fichier.",
   // github
   "Use owner/repository or https://github.com/owner/repository":
     "Indiquez propriétaire/dépôt ou https://github.com/propriétaire/dépôt.",
@@ -65,22 +68,28 @@ const EXACT: Record<string, string> = {
     "L’envoi est vérifié mais ne désigne aucune entrée.",
   "The platform returned no upload address":
     "La plateforme n’a renvoyé aucune adresse d’envoi.",
-  "The platform authorised no upload": "La plateforme n’a autorisé aucun envoi.",
+  "The platform authorised no upload":
+    "La plateforme n’a autorisé aucun envoi.",
   "The analysis is taking longer than expected; it is still running in the cloud.":
     "L’analyse prend plus de temps que prévu ; elle continue dans le cloud.",
   // cloud / sign-in
   "Sign in to CoreTrace first": "Connectez-vous d’abord à CoreTrace.",
   "Choose an organisation": "Choisissez une organisation.",
-  "Choose a branch, tag or commit": "Choisissez une branche, un tag ou un commit.",
-  "Sign-in code expired; start again": "Le code de connexion a expiré ; recommencez.",
+  "Choose a branch, tag or commit":
+    "Choisissez une branche, un tag ou un commit.",
+  "Sign-in code expired; start again":
+    "Le code de connexion a expiré ; recommencez.",
   "No sign-in in progress": "Aucune connexion en cours.",
-  "Only HTTPS links may be opened": "Seuls les liens HTTPS peuvent être ouverts.",
-  "Report checksum mismatch": "Le rapport reçu ne correspond pas à son empreinte.",
+  "Only HTTPS links may be opened":
+    "Seuls les liens HTTPS peuvent être ouverts.",
+  "Report checksum mismatch":
+    "Le rapport reçu ne correspond pas à son empreinte.",
   "Report exceeds 10 MiB": "Le rapport dépasse 10 Mio.",
   "Report exceeds the desktop limit of 10 MiB": "Le rapport dépasse 10 Mio.",
   "Report is not UTF-8": "Le rapport n’est pas en UTF-8.",
   "Could not download report": "Impossible de télécharger le rapport.",
-  "Platform response exceeds 8 MiB": "La réponse de la plateforme dépasse 8 Mio.",
+  "Platform response exceeds 8 MiB":
+    "La réponse de la plateforme dépasse 8 Mio.",
 };
 
 /** Messages that carry a variable tail, matched on their head. */
@@ -91,8 +100,14 @@ const PREFIX: [string, string][] = [
   ["Report download failed (HTTP ", "Le téléchargement du rapport a échoué"],
   ["Cannot write the archive: ", "Impossible d’écrire l’archive"],
   ["Cannot add ", "Impossible d’ajouter un fichier à l’archive"],
-  ["Could not create the clone folder: ", "Impossible de créer le dossier de clonage"],
-  ["No application data directory: ", "Aucun dossier de données pour l’application"],
+  [
+    "Could not create the clone folder: ",
+    "Impossible de créer le dossier de clonage",
+  ],
+  [
+    "No application data directory: ",
+    "Aucun dossier de données pour l’application",
+  ],
   ["No configuration directory: ", "Aucun dossier de configuration"],
 ];
 

@@ -57,7 +57,11 @@ export function CloudRun({
       )}
 
       {showStart && phase.phase === "idle" && (
-        <button className="primary" disabled={busy || !org} onClick={() => void startRun()}>
+        <button
+          className="primary"
+          disabled={busy || !org}
+          onClick={() => void startRun()}
+        >
           <CloudUpload size={15} />
           {busy ? "Préparation…" : "Analyser dans le cloud"}
         </button>
@@ -79,7 +83,8 @@ export function CloudRun({
 
       {phase.phase === "running" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> {describe(phase, seconds, typical)}
+          <Loader2 size={14} className="spin" />{" "}
+          {describe(phase, seconds, typical)}
           {typical !== undefined && (
             <span className="muted">
               {" "}

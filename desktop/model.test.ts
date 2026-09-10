@@ -149,7 +149,12 @@ it("says which machine ran the tool", () => {
   // cannot tell whether their own machine or the platform produced it.
   const sarif = JSON.stringify({
     findings: [
-      { rule_id: "r1", level: "warning", message: "m", location: { path: "a.c", line: 3 } },
+      {
+        rule_id: "r1",
+        level: "warning",
+        message: "m",
+        location: { path: "a.c", line: 3 },
+      },
     ],
   });
   expect(parseFindings(sarif, "ctrace", "cloud")[0].origin).toBe("cloud");
@@ -184,14 +189,25 @@ it("names every status and conclusion the platform sends, in French", () => {
     expect(label, status).not.toBe(status);
     expect(label, status).not.toContain("_");
   }
-  for (const conclusion of ["clean", "findings", "partial", "failed", "capped"]) {
-    const label = outcome({ status: "completed", conclusion, runs: [] } as unknown as Job);
+  for (const conclusion of [
+    "clean",
+    "findings",
+    "partial",
+    "failed",
+    "capped",
+  ]) {
+    const label = outcome({
+      status: "completed",
+      conclusion,
+      runs: [],
+    } as unknown as Job);
     expect(label, conclusion).not.toBe(conclusion);
   }
 });
 
 describe("typicalSeconds", () => {
-  const job = (ms?: number) => ({ execution_ms: ms, runs: [] }) as unknown as Job;
+  const job = (ms?: number) =>
+    ({ execution_ms: ms, runs: [] }) as unknown as Job;
 
   it("says nothing when too few analyses have been measured", () => {
     // An estimate from one or two runs is a guess wearing a measurement's

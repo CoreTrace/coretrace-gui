@@ -4,2539 +4,2553 @@
  */
 
 export interface paths {
-    "/healthz": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["healthz"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+  "/healthz": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/clients/cli/latest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Latest published command-line client; clients check it at most daily and never self-update. */
-        get: operations["getLatestCli"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["healthz"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/clients/cli/latest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/plans": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Current revision of every plan in tier order (community, pro, enterprise, then others by name); plans without a revision are omitted. */
-        get: operations["listPlans"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** @description Latest published command-line client; clients check it at most daily and never self-update. */
+    get: operations["getLatestCli"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/plans": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/providers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listProviders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** @description Current revision of every plan in tier order (community, pro, enterprise, then others by name); plans without a revision are omitted. */
+    get: operations["listPlans"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/providers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/login/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["startLogin"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listProviders"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/login/{provider}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/callback/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Completes the sign-in. Browser transactions (started through /auth/login) set the refresh cookie and redirect to the server-configured landing address (CONTROL_BROWSER_LANDING_URL), with ?error=<invalid_state|provider_denied|provider_unavailable> on failure; the access token never travels in the redirect and is obtained through /auth/refresh with the cookie. Command-line transactions receive the token pair as JSON. */
-        get: operations["finishLogin"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["startLogin"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/callback/{provider}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/device": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["startDevice"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** @description Completes the sign-in. Browser transactions (started through /auth/login) set the refresh cookie and redirect to the server-configured landing address (CONTROL_BROWSER_LANDING_URL), with ?error=<invalid_state|provider_denied|provider_unavailable> on failure; the access token never travels in the redirect and is obtained through /auth/refresh with the cookie. Command-line transactions receive the token pair as JSON. */
+    get: operations["finishLogin"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/device": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/device/token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["pollDevice"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["startDevice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/device/token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/device/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["approveDevice"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["pollDevice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/device/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["refreshSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["approveDevice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/refresh": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["logout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["refreshSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/gitlab-job-token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Exchanges a GitLab CI job token for a short-lived organisation credential bound to the organisation that linked the project. */
-        post: operations["exchangeGitLabJobToken"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["logout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/gitlab-job-token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getMe"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** @description Exchanges a GitLab CI job token for a short-lived organisation credential bound to the organisation that linked the project. */
+    post: operations["exchangeGitLabJobToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/me/identities/github": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Begins attaching a GitHub account to the signed-in user. The state binds the flow to the current session, which is the proof of ownership: an e-mail match never links accounts. */
-        post: operations["startGitHubIdentityLink"];
-        /** @description Detaches the GitHub account and forgets its token. Installations already adopted stay with their organisation. A user's last identity cannot be detached. */
-        delete: operations["deleteGitHubIdentity"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getMe"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me/identities/github": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createOrg"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** @description Begins attaching a GitHub account to the signed-in user. The state binds the flow to the current session, which is the proof of ownership: an e-mail match never links accounts. */
+    post: operations["startGitHubIdentityLink"];
+    /** @description Detaches the GitHub account and forgets its token. Installations already adopted stay with their organisation. A user's last identity cannot be detached. */
+    delete: operations["deleteGitHubIdentity"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getOrg"];
-        put?: never;
-        post?: never;
-        delete: operations["deleteOrg"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["createOrg"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/members": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listMembers"];
-        put?: never;
-        post: operations["upsertMember"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getOrg"];
+    put?: never;
+    post?: never;
+    delete: operations["deleteOrg"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/members": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/members/{user}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["removeMember"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listMembers"];
+    put?: never;
+    post: operations["upsertMember"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/members/{user}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/api-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listApiKeys"];
-        put?: never;
-        post: operations["createApiKey"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["removeMember"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/api-keys": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/api-keys/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["revokeApiKey"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listApiKeys"];
+    put?: never;
+    post: operations["createApiKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/api-keys/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createUpload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["revokeApiKey"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/uploads": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/uploads/{id}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["completeUpload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["createUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/uploads/{id}/complete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/uploads/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getUpload"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["completeUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/uploads/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/tools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listTools"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getUpload"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/tools": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/estimates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createEstimate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listTools"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/estimates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/jobs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listJobs"];
-        put?: never;
-        post: operations["createJob"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["createEstimate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/jobs/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getJob"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listJobs"];
+    put?: never;
+    post: operations["createJob"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/jobs/{id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["confirmJob"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getJob"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/{id}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/jobs/{id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["cancelJob"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["confirmJob"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/{id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/jobs/{id}/runs/{run}/report": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getRunReport"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["cancelJob"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/{id}/runs/{run}/report": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/jobs/{id}/runs/{run}/log": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getRunLog"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getRunReport"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/jobs/{id}/runs/{run}/log": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/limits": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Effective plan caps and remaining budget the clients need before packing and at the confirmation prompt. */
-        get: operations["getOrgLimits"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getRunLog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/limits": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/policy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getPolicy"];
-        put: operations["putPolicy"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** @description Effective plan caps and remaining budget the clients need before packing and at the confirmation prompt. */
+    get: operations["getOrgLimits"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/policy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/github/link": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["linkGitHubApp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["getPolicy"];
+    put: operations["putPolicy"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/github/link": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/github/adopt": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Binds to this organisation the GitHub App installations the signed-in user already has and nobody has claimed. Repositories arrive disabled. An installation another organisation holds is reported, never moved. */
-        post: operations["adoptGitHubInstallations"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["linkGitHubApp"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/github/adopt": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/scm/github/setup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["completeGitHubSetup"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** @description Binds to this organisation the GitHub App installations the signed-in user already has and nobody has claimed. Repositories arrive disabled. An installation another organisation holds is reported, never moved. */
+    post: operations["adoptGitHubInstallations"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/scm/github/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listScmInstallations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["completeGitHubSetup"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["deleteScmInstallation"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listScmInstallations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations/{id}/repos": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listScmRepos"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["deleteScmInstallation"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations/{id}/repos": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations/{id}/repos/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["syncScmRepos"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get: operations["listScmRepos"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations/{id}/repos/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations/{id}/repos/{repo}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch: operations["updateScmRepo"];
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["syncScmRepos"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations/{id}/repos/{repo}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations/{id}/repos/{repo}/branches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Branches of a linked repository, resolved through the installation token; at most 200. */
-        get: operations["listScmBranches"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateScmRepo"];
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations/{id}/repos/{repo}/branches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/installations/{id}/repos/{repo}/analyses": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description Analyse a repository at a ref. The ref is resolved to a commit and the job is created as a delivery would create it, with event kind manual. A second request for the same commit answers 409 naming the latest job for it, unless rerun is set, which makes a new analysis. */
-        post: operations["createScmAnalysis"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** @description Branches of a linked repository, resolved through the installation token; at most 200. */
+    get: operations["listScmBranches"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/installations/{id}/repos/{repo}/analyses": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/gitlab/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createGitLabConnection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** @description Analyse a repository at a ref. The ref is resolved to a commit and the job is created as a delivery would create it, with event kind manual. A second request for the same commit answers 409 naming the latest job for it, unless rerun is set, which makes a new analysis. */
+    post: operations["createScmAnalysis"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/gitlab/connections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/gitlab/connections/{id}/rotate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["rotateGitLabToken"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["createGitLabConnection"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/gitlab/connections/{id}/rotate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/scm/gitlab/connections/{id}/webhook-secret/rotate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["rotateGitLabWebhookSecret"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["rotateGitLabToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/scm/gitlab/connections/{id}/webhook-secret/rotate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/orgs/{org}/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listOrgAudit"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post: operations["rotateGitLabWebhookSecret"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/orgs/{org}/audit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
+    get: operations["listOrgAudit"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: {
-        Problem: {
-            /** @enum {string} */
-            type: "unauthenticated" | "forbidden_entitlement" | "forbidden" | "payment_required" | "rate_limited" | "conflict" | "invalid" | "not_found" | "provider_unavailable" | "internal";
-            title: string;
-            status: number;
-            detail?: {
-                [key: string]: unknown;
-            };
-            request_id: string;
-        };
-        Health: {
-            status: string;
-            schema_version: string;
-        };
-        Providers: {
-            providers: string[];
-        };
-        DeviceStart: {
-            device_code: string;
-            user_code: string;
-            verification_uri: string;
-            expires_in: number;
-            interval: number;
-        };
-        DeviceTokenRequest: {
-            device_code: string;
-        };
-        DeviceApproveRequest: {
-            user_code: string;
-        };
-        DeviceError: {
-            /** @enum {string} */
-            error: "authorization_pending" | "slow_down" | "expired_token" | "invalid_grant";
-        };
-        Tokens: {
-            access_token: string;
-            token_type: string;
-            /** Format: date-time */
-            expires_at: string;
-            /** @description Returned to CLI clients only; browsers receive it as an HttpOnly cookie. */
-            refresh_token?: string;
-        };
-        RefreshRequest: {
-            refresh_token?: string;
-        };
-        Me: {
-            /**
-             * Format: uuid
-             * @description Present for user principals only.
-             */
-            user_id?: string;
-            /** @description E-mail of the identity most recently used to sign in; user principals only. */
-            email?: string;
-            principal: components["schemas"]["Principal"];
-            /** @description Issuers the user can sign in with, so the application can tell a connected GitHub account from one that has never been attached. User principals only. */
-            identities?: string[];
-            orgs: components["schemas"]["OrgMembership"][];
-        };
-        Principal: {
-            /** @enum {string} */
-            kind: "user" | "api_key";
-            /** @description Display name for users; key name for API keys. */
-            name?: string;
-            scopes?: string[];
-        };
-        Limits: {
-            plan: string;
-            /** Format: int64 */
-            max_archive_bytes: number;
-            /** Format: int64 */
-            max_expanded_bytes: number;
-            /** Format: int64 */
-            max_files: number;
-            /** Format: int64 */
-            max_file_bytes: number;
-            /** Format: int64 */
-            max_ctu_per_job: number;
-            /** Format: int64 */
-            monthly_budget_ctu: number;
-            /**
-             * Format: int64
-             * @description Included plus overage minus used and reserved in the current period, further bounded by the policy's monthly budget.
-             */
-            remaining_budget_ctu: number;
-            /** Format: date-time */
-            period_ends_at: string;
-            /**
-             * Format: int64
-             * @description The CTU the organisation may spend this period, the plan's included CTU plus any allowance granted.
-             */
-            period_allowance_ctu?: number;
-            /**
-             * Format: int64
-             * @description The CTU settled against this period so far.
-             */
-            period_used_ctu?: number;
-        };
-        Plan: {
-            name: string;
-            tier: string;
-            /** Format: int64 */
-            included_ctu: number;
-            limits: {
-                [key: string]: number;
-            };
-            entitlements: string[];
-        };
-        ClientRelease: {
-            version: string;
-            release_url: string;
-            checksums_url: string;
-        };
-        GitLabJobTokenRequest: {
-            host: string;
-            job_token: string;
-        };
-        GitLabJobTokenResponse: {
-            access_token: string;
-            token_type: string;
-            /** Format: date-time */
-            expires_at: string;
-            /** Format: uuid */
-            org_id: string;
-            project_id: string;
-        };
-        OrgMembership: {
-            /** Format: uuid */
-            id: string;
-            slug: string;
-            role: string;
-            access_state: string;
-        };
-        CreateOrgRequest: {
-            slug: string;
-        };
-        Org: {
-            /** Format: uuid */
-            id: string;
-            slug: string;
-            access_state: string;
-            /** Format: date-time */
-            created_at: string;
-            role?: string;
-        };
-        Member: {
-            /** Format: uuid */
-            user_id: string;
-            role: string;
-        };
-        MemberRequest: {
-            /** Format: uuid */
-            user_id: string;
-            /** @enum {string} */
-            role: "owner" | "admin" | "member" | "viewer" | "billing";
-        };
-        ApiKey: {
-            /** Format: uuid */
-            id: string;
-            public_id: string;
-            name: string;
-            scopes: string[];
-            /** Format: uuid */
-            created_by?: string;
-            /** Format: date-time */
-            expires_at?: string;
-            /** Format: date-time */
-            last_used_at?: string;
-            /** Format: date-time */
-            revoked_at?: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        ApiKeyCreateRequest: {
-            name: string;
-            scopes: ("jobs:write" | "jobs:read" | "reports:read" | "uploads:write")[];
-            /** Format: date-time */
-            expires_at?: string;
-            ip_allowlist?: string[];
-        };
-        ApiKeyCreated: {
-            key: components["schemas"]["ApiKey"];
-            /** @description Shown exactly once. */
-            secret: string;
-        };
-        UploadRequest: {
-            declared_sha256: string;
-            /** Format: int64 */
-            declared_size: number;
-        };
-        UploadAuthorized: {
-            /** Format: uuid */
-            upload_id: string;
-            put_url: string;
-            /** Format: date-time */
-            expires_at: string;
-            /** Format: int64 */
-            max_bytes: number;
-        };
-        UploadStatus: {
-            /** Format: uuid */
-            upload_id: string;
-            state: string;
-            reject_reason?: string;
-            /** Format: uuid */
-            input_id?: string;
-            /** Format: int64 */
-            expanded_size?: number;
-            file_count?: number;
-        };
-        Tool: {
-            id: string;
-            version: string;
-            required_entitlement: string;
-            languages: string[];
-            entitled: boolean;
-            isolation: string;
-        };
-        EstimateRequest: {
-            /** Format: uuid */
-            input_id: string;
-            tools?: string[];
-            config?: {
-                [key: string]: unknown;
-            };
-        };
-        EstimateAccepted: {
-            /** Format: uuid */
-            job_id: string;
-            status: string;
-        };
-        JobRequest: {
-            /** Format: uuid */
-            input_id?: string;
-            quote_id?: string;
-            tools?: string[];
-            config?: {
-                [key: string]: unknown;
-            };
-            allow_partial?: boolean;
-            auto_confirm?: boolean;
-            idempotency_key?: string;
-            /** @description What is being analysed, for the history. Display only; the platform never interprets it. */
-            label?: string;
-        };
-        RejectedTool: {
-            tool: string;
-            reason: string;
-        };
-        ToolRun: {
-            /** Format: uuid */
-            id: string;
-            tool: string;
-            version: string;
-            execution_status: string;
-            execution_outcome?: string;
-            metering_status: string;
-            /** Format: int64 */
-            input_ctu: number;
-            /** Format: int64 */
-            output_ctu: number;
-            /** Format: int64 */
-            billed_ctu: number;
-            /** Format: int64 */
-            reserved_ctu: number;
-            attempt: number;
-            /**
-             * Format: date-time
-             * @description Absent until the run starts executing.
-             */
-            started_at?: string;
-            /**
-             * Format: date-time
-             * @description Absent until the run finishes.
-             */
-            finished_at?: string;
-            /** @description What the tool wants the customer to know about a result that is not the whole story; for the stack analyser, units_total, units_analysed and skipped [{file, reason}]. Absent for a full result. */
-            warnings?: {
-                [key: string]: unknown;
-            };
-        };
-        Job: {
-            /** Format: uuid */
-            id: string;
-            status: string;
-            conclusion?: string;
-            rejection_reason?: string;
-            source?: components["schemas"]["JobSource"];
-            warnings?: {
-                [key: string]: unknown;
-            };
-            quote_id?: string;
-            /**
-             * Format: int64
-             * @description What the quote reserves in total, so a client can show the cost before confirming.
-             */
-            reserved_ctu?: number;
-            /**
-             * Format: int64
-             * @description What the job has cost so far. The listing carries no runs, so this is the only cost it can show.
-             */
-            billed_ctu?: number;
-            /** @description What the job was run against, as the caller named it. An upload names no repository, so without it a history can only say "imported sources". */
-            label?: string;
-            /**
-             * Format: int64
-             * @description How long the tools ran, measured from the runs. A client can only estimate a remaining time from durations it has seen, and the listing carries no runs to measure.
-             */
-            execution_ms?: number;
-            /** Format: date-time */
-            confirm_deadline?: string;
-            /** Format: date-time */
-            created_at: string;
-            accepted?: string[];
-            rejected?: components["schemas"]["RejectedTool"][];
-            runs: components["schemas"]["ToolRun"][];
-        };
-        PolicyRequest: {
-            /** Format: int64 */
-            max_ctu_per_job?: number;
-            /** Format: int64 */
-            monthly_budget_ctu?: number;
-            /** @description Applies to SCM-triggered (automated) jobs only. */
-            auto_run_enabled?: boolean;
-            required_tools?: string[];
-            retention_days?: number;
-            zero_retention?: boolean;
-            /**
-             * Format: int64
-             * @description Calendar-month budget for automated runs (0 = unlimited).
-             */
-            scm_monthly_budget_ctu?: number;
-            /** @description Self-hosted provider hosts that may be connected; github.com and gitlab.com are implicit. */
-            allowed_scm_hosts?: string[];
-            /** @description IANA zone used for calendar-month budgets (default UTC). */
-            org_time_zone?: string;
-        };
-        Policy: {
-            version: number;
-            /** Format: int64 */
-            max_ctu_per_job: number;
-            /** Format: int64 */
-            monthly_budget_ctu: number;
-            auto_run_enabled?: boolean;
-            required_tools: string[];
-            retention_days: number;
-            zero_retention: boolean;
-            /** Format: int64 */
-            scm_monthly_budget_ctu?: number;
-            allowed_scm_hosts?: string[];
-            org_time_zone?: string;
-        };
-        JobSource: {
-            /** @enum {string} */
-            kind: "upload" | "scm";
-            provider?: string;
-            provider_host?: string;
-            /** @description Display only; the platform identifies repositories by provider id. */
-            repo_full_name?: string;
-            commit_sha?: string;
-            event_kind?: string;
-            ref?: string;
-            pr_number?: number;
-        };
-        ScmInstallation: {
-            /** Format: uuid */
-            id: string;
-            provider: string;
-            provider_host: string;
-            account_login: string;
-            kind: string;
-            state: string;
-            /** Format: date-time */
-            created_at: string;
-            repos_enabled: number;
-            repos_total: number;
-        };
-        ScmRepo: {
-            /** Format: uuid */
-            id: string;
-            external_repo_id: string;
-            full_name: string;
-            default_branch: string;
-            enabled: boolean;
-            summary_comments: boolean;
-        };
-        ScmBranch: {
-            name: string;
-            commit_sha: string;
-            is_default: boolean;
-        };
-        ScmAnalysisRequest: {
-            /** @description Branch name, tag or commit SHA. */
-            ref: string;
-            /** @description Reserved for a future per-request selection; the repository configuration decides today. */
-            tools?: string[];
-            idempotency_key?: string;
-            /** @description Analyse the commit again even though an analysis of it exists. Earlier analyses stay in the history. */
-            rerun?: boolean;
-        };
-        ScmRepoUpdate: {
-            enabled: boolean;
-        };
-        ScmLink: {
-            install_url: string;
-            /** Format: date-time */
-            expires_at: string;
-        };
-        IdentityLink: {
-            authorize_url: string;
-            /** Format: date-time */
-            expires_at: string;
-        };
-        ScmAdoption: {
-            /** @description Account logins newly bound to this organisation. */
-            adopted: string[];
-            /** @description Account logins another organisation already holds. */
-            skipped_elsewhere: string[];
-        };
-        GitLabConnectionRequest: {
-            provider_host: string;
-            project_id: string;
-            /** @description Project access token with read_repository and read_api; never returned. */
-            token: string;
-            legacy_token_allowed?: boolean;
-        };
-        GitLabConnection: {
-            /** Format: uuid */
-            id: string;
-            provider: string;
-            provider_host: string;
-            project_id: string;
-            state: string;
-            webhook_url: string;
-            /** @description Shown once at creation and rotation. */
-            webhook_secret?: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        GitLabTokenRotation: {
-            token: string;
-        };
-        WebhookSecret: {
-            webhook_secret: string;
-        };
-        AuditEntry: {
-            /** Format: uuid */
-            id: string;
-            actor_type: string;
-            actor_id: string;
-            action: string;
-            resource_type: string;
-            resource_id: string;
-            outcome: string;
-            request_id: string;
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            at: string;
-        };
-        ArtifactLink: {
-            /** Format: uuid */
-            artifact_id: string;
-            url: string;
-            /** Format: date-time */
-            expires_at: string;
-            sha256: string;
-            /** Format: int64 */
-            size: number;
-        };
+  schemas: {
+    Problem: {
+      /** @enum {string} */
+      type:
+        | "unauthenticated"
+        | "forbidden_entitlement"
+        | "forbidden"
+        | "payment_required"
+        | "rate_limited"
+        | "conflict"
+        | "invalid"
+        | "not_found"
+        | "provider_unavailable"
+        | "internal";
+      title: string;
+      status: number;
+      detail?: {
+        [key: string]: unknown;
+      };
+      request_id: string;
     };
-    responses: {
-        /** @description Error */
-        Problem: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
+    Health: {
+      status: string;
+      schema_version: string;
     };
-    parameters: {
-        OrgSlug: string;
+    Providers: {
+      providers: string[];
     };
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+    DeviceStart: {
+      device_code: string;
+      user_code: string;
+      verification_uri: string;
+      expires_in: number;
+      interval: number;
+    };
+    DeviceTokenRequest: {
+      device_code: string;
+    };
+    DeviceApproveRequest: {
+      user_code: string;
+    };
+    DeviceError: {
+      /** @enum {string} */
+      error:
+        | "authorization_pending"
+        | "slow_down"
+        | "expired_token"
+        | "invalid_grant";
+    };
+    Tokens: {
+      access_token: string;
+      token_type: string;
+      /** Format: date-time */
+      expires_at: string;
+      /** @description Returned to CLI clients only; browsers receive it as an HttpOnly cookie. */
+      refresh_token?: string;
+    };
+    RefreshRequest: {
+      refresh_token?: string;
+    };
+    Me: {
+      /**
+       * Format: uuid
+       * @description Present for user principals only.
+       */
+      user_id?: string;
+      /** @description E-mail of the identity most recently used to sign in; user principals only. */
+      email?: string;
+      principal: components["schemas"]["Principal"];
+      /** @description Issuers the user can sign in with, so the application can tell a connected GitHub account from one that has never been attached. User principals only. */
+      identities?: string[];
+      orgs: components["schemas"]["OrgMembership"][];
+    };
+    Principal: {
+      /** @enum {string} */
+      kind: "user" | "api_key";
+      /** @description Display name for users; key name for API keys. */
+      name?: string;
+      scopes?: string[];
+    };
+    Limits: {
+      plan: string;
+      /** Format: int64 */
+      max_archive_bytes: number;
+      /** Format: int64 */
+      max_expanded_bytes: number;
+      /** Format: int64 */
+      max_files: number;
+      /** Format: int64 */
+      max_file_bytes: number;
+      /** Format: int64 */
+      max_ctu_per_job: number;
+      /** Format: int64 */
+      monthly_budget_ctu: number;
+      /**
+       * Format: int64
+       * @description Included plus overage minus used and reserved in the current period, further bounded by the policy's monthly budget.
+       */
+      remaining_budget_ctu: number;
+      /** Format: date-time */
+      period_ends_at: string;
+      /**
+       * Format: int64
+       * @description The CTU the organisation may spend this period, the plan's included CTU plus any allowance granted.
+       */
+      period_allowance_ctu?: number;
+      /**
+       * Format: int64
+       * @description The CTU settled against this period so far.
+       */
+      period_used_ctu?: number;
+    };
+    Plan: {
+      name: string;
+      tier: string;
+      /** Format: int64 */
+      included_ctu: number;
+      limits: {
+        [key: string]: number;
+      };
+      entitlements: string[];
+    };
+    ClientRelease: {
+      version: string;
+      release_url: string;
+      checksums_url: string;
+    };
+    GitLabJobTokenRequest: {
+      host: string;
+      job_token: string;
+    };
+    GitLabJobTokenResponse: {
+      access_token: string;
+      token_type: string;
+      /** Format: date-time */
+      expires_at: string;
+      /** Format: uuid */
+      org_id: string;
+      project_id: string;
+    };
+    OrgMembership: {
+      /** Format: uuid */
+      id: string;
+      slug: string;
+      role: string;
+      access_state: string;
+    };
+    CreateOrgRequest: {
+      slug: string;
+    };
+    Org: {
+      /** Format: uuid */
+      id: string;
+      slug: string;
+      access_state: string;
+      /** Format: date-time */
+      created_at: string;
+      role?: string;
+    };
+    Member: {
+      /** Format: uuid */
+      user_id: string;
+      role: string;
+    };
+    MemberRequest: {
+      /** Format: uuid */
+      user_id: string;
+      /** @enum {string} */
+      role: "owner" | "admin" | "member" | "viewer" | "billing";
+    };
+    ApiKey: {
+      /** Format: uuid */
+      id: string;
+      public_id: string;
+      name: string;
+      scopes: string[];
+      /** Format: uuid */
+      created_by?: string;
+      /** Format: date-time */
+      expires_at?: string;
+      /** Format: date-time */
+      last_used_at?: string;
+      /** Format: date-time */
+      revoked_at?: string;
+      /** Format: date-time */
+      created_at: string;
+    };
+    ApiKeyCreateRequest: {
+      name: string;
+      scopes: ("jobs:write" | "jobs:read" | "reports:read" | "uploads:write")[];
+      /** Format: date-time */
+      expires_at?: string;
+      ip_allowlist?: string[];
+    };
+    ApiKeyCreated: {
+      key: components["schemas"]["ApiKey"];
+      /** @description Shown exactly once. */
+      secret: string;
+    };
+    UploadRequest: {
+      declared_sha256: string;
+      /** Format: int64 */
+      declared_size: number;
+    };
+    UploadAuthorized: {
+      /** Format: uuid */
+      upload_id: string;
+      put_url: string;
+      /** Format: date-time */
+      expires_at: string;
+      /** Format: int64 */
+      max_bytes: number;
+    };
+    UploadStatus: {
+      /** Format: uuid */
+      upload_id: string;
+      state: string;
+      reject_reason?: string;
+      /** Format: uuid */
+      input_id?: string;
+      /** Format: int64 */
+      expanded_size?: number;
+      file_count?: number;
+    };
+    Tool: {
+      id: string;
+      version: string;
+      required_entitlement: string;
+      languages: string[];
+      entitled: boolean;
+      isolation: string;
+    };
+    EstimateRequest: {
+      /** Format: uuid */
+      input_id: string;
+      tools?: string[];
+      config?: {
+        [key: string]: unknown;
+      };
+    };
+    EstimateAccepted: {
+      /** Format: uuid */
+      job_id: string;
+      status: string;
+    };
+    JobRequest: {
+      /** Format: uuid */
+      input_id?: string;
+      quote_id?: string;
+      tools?: string[];
+      config?: {
+        [key: string]: unknown;
+      };
+      allow_partial?: boolean;
+      auto_confirm?: boolean;
+      idempotency_key?: string;
+      /** @description What is being analysed, for the history. Display only; the platform never interprets it. */
+      label?: string;
+    };
+    RejectedTool: {
+      tool: string;
+      reason: string;
+    };
+    ToolRun: {
+      /** Format: uuid */
+      id: string;
+      tool: string;
+      version: string;
+      execution_status: string;
+      execution_outcome?: string;
+      metering_status: string;
+      /** Format: int64 */
+      input_ctu: number;
+      /** Format: int64 */
+      output_ctu: number;
+      /** Format: int64 */
+      billed_ctu: number;
+      /** Format: int64 */
+      reserved_ctu: number;
+      attempt: number;
+      /**
+       * Format: date-time
+       * @description Absent until the run starts executing.
+       */
+      started_at?: string;
+      /**
+       * Format: date-time
+       * @description Absent until the run finishes.
+       */
+      finished_at?: string;
+      /** @description What the tool wants the customer to know about a result that is not the whole story; for the stack analyser, units_total, units_analysed and skipped [{file, reason}]. Absent for a full result. */
+      warnings?: {
+        [key: string]: unknown;
+      };
+    };
+    Job: {
+      /** Format: uuid */
+      id: string;
+      status: string;
+      conclusion?: string;
+      rejection_reason?: string;
+      source?: components["schemas"]["JobSource"];
+      warnings?: {
+        [key: string]: unknown;
+      };
+      quote_id?: string;
+      /**
+       * Format: int64
+       * @description What the quote reserves in total, so a client can show the cost before confirming.
+       */
+      reserved_ctu?: number;
+      /**
+       * Format: int64
+       * @description What the job has cost so far. The listing carries no runs, so this is the only cost it can show.
+       */
+      billed_ctu?: number;
+      /** @description What the job was run against, as the caller named it. An upload names no repository, so without it a history can only say "imported sources". */
+      label?: string;
+      /**
+       * Format: int64
+       * @description How long the tools ran, measured from the runs. A client can only estimate a remaining time from durations it has seen, and the listing carries no runs to measure.
+       */
+      execution_ms?: number;
+      /** Format: date-time */
+      confirm_deadline?: string;
+      /** Format: date-time */
+      created_at: string;
+      accepted?: string[];
+      rejected?: components["schemas"]["RejectedTool"][];
+      runs: components["schemas"]["ToolRun"][];
+    };
+    PolicyRequest: {
+      /** Format: int64 */
+      max_ctu_per_job?: number;
+      /** Format: int64 */
+      monthly_budget_ctu?: number;
+      /** @description Applies to SCM-triggered (automated) jobs only. */
+      auto_run_enabled?: boolean;
+      required_tools?: string[];
+      retention_days?: number;
+      zero_retention?: boolean;
+      /**
+       * Format: int64
+       * @description Calendar-month budget for automated runs (0 = unlimited).
+       */
+      scm_monthly_budget_ctu?: number;
+      /** @description Self-hosted provider hosts that may be connected; github.com and gitlab.com are implicit. */
+      allowed_scm_hosts?: string[];
+      /** @description IANA zone used for calendar-month budgets (default UTC). */
+      org_time_zone?: string;
+    };
+    Policy: {
+      version: number;
+      /** Format: int64 */
+      max_ctu_per_job: number;
+      /** Format: int64 */
+      monthly_budget_ctu: number;
+      auto_run_enabled?: boolean;
+      required_tools: string[];
+      retention_days: number;
+      zero_retention: boolean;
+      /** Format: int64 */
+      scm_monthly_budget_ctu?: number;
+      allowed_scm_hosts?: string[];
+      org_time_zone?: string;
+    };
+    JobSource: {
+      /** @enum {string} */
+      kind: "upload" | "scm";
+      provider?: string;
+      provider_host?: string;
+      /** @description Display only; the platform identifies repositories by provider id. */
+      repo_full_name?: string;
+      commit_sha?: string;
+      event_kind?: string;
+      ref?: string;
+      pr_number?: number;
+    };
+    ScmInstallation: {
+      /** Format: uuid */
+      id: string;
+      provider: string;
+      provider_host: string;
+      account_login: string;
+      kind: string;
+      state: string;
+      /** Format: date-time */
+      created_at: string;
+      repos_enabled: number;
+      repos_total: number;
+    };
+    ScmRepo: {
+      /** Format: uuid */
+      id: string;
+      external_repo_id: string;
+      full_name: string;
+      default_branch: string;
+      enabled: boolean;
+      summary_comments: boolean;
+    };
+    ScmBranch: {
+      name: string;
+      commit_sha: string;
+      is_default: boolean;
+    };
+    ScmAnalysisRequest: {
+      /** @description Branch name, tag or commit SHA. */
+      ref: string;
+      /** @description Reserved for a future per-request selection; the repository configuration decides today. */
+      tools?: string[];
+      idempotency_key?: string;
+      /** @description Analyse the commit again even though an analysis of it exists. Earlier analyses stay in the history. */
+      rerun?: boolean;
+    };
+    ScmRepoUpdate: {
+      enabled: boolean;
+    };
+    ScmLink: {
+      install_url: string;
+      /** Format: date-time */
+      expires_at: string;
+    };
+    IdentityLink: {
+      authorize_url: string;
+      /** Format: date-time */
+      expires_at: string;
+    };
+    ScmAdoption: {
+      /** @description Account logins newly bound to this organisation. */
+      adopted: string[];
+      /** @description Account logins another organisation already holds. */
+      skipped_elsewhere: string[];
+    };
+    GitLabConnectionRequest: {
+      provider_host: string;
+      project_id: string;
+      /** @description Project access token with read_repository and read_api; never returned. */
+      token: string;
+      legacy_token_allowed?: boolean;
+    };
+    GitLabConnection: {
+      /** Format: uuid */
+      id: string;
+      provider: string;
+      provider_host: string;
+      project_id: string;
+      state: string;
+      webhook_url: string;
+      /** @description Shown once at creation and rotation. */
+      webhook_secret?: string;
+      /** Format: date-time */
+      created_at: string;
+    };
+    GitLabTokenRotation: {
+      token: string;
+    };
+    WebhookSecret: {
+      webhook_secret: string;
+    };
+    AuditEntry: {
+      /** Format: uuid */
+      id: string;
+      actor_type: string;
+      actor_id: string;
+      action: string;
+      resource_type: string;
+      resource_id: string;
+      outcome: string;
+      request_id: string;
+      metadata: {
+        [key: string]: unknown;
+      };
+      /** Format: date-time */
+      at: string;
+    };
+    ArtifactLink: {
+      /** Format: uuid */
+      artifact_id: string;
+      url: string;
+      /** Format: date-time */
+      expires_at: string;
+      sha256: string;
+      /** Format: int64 */
+      size: number;
+    };
+  };
+  responses: {
+    /** @description Error */
+    Problem: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/problem+json": components["schemas"]["Problem"];
+      };
+    };
+  };
+  parameters: {
+    OrgSlug: string;
+  };
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    healthz: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Service healthy */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Health"];
-                };
-            };
-        };
+  healthz: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getLatestCli: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Service healthy */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Latest client release */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClientRelease"];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["Health"];
         };
+      };
     };
-    listPlans: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Plans */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Plan"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  getLatestCli: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listProviders: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Latest client release */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Configured identity providers */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Providers"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["ClientRelease"];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    startLogin: {
-        parameters: {
-            query: {
-                redirect_uri: string;
-            };
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Redirect to the identity provider */
-            302: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  listPlans: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    finishLogin: {
-        parameters: {
-            query: {
-                state: string;
-                code: string;
-            };
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Plans */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Session established for a command-line client */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tokens"];
-                };
-            };
-            /** @description Browser session established (refresh cookie set) or failed (error query parameter); Location is the server-configured landing address, never a value taken from the request */
-            302: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["Plan"][];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    startDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Device authorisation started */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeviceStart"];
-                };
-            };
-        };
+  };
+  listProviders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    pollDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Configured identity providers */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeviceTokenRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Providers"];
         };
-        responses: {
-            /** @description Tokens */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tokens"];
-                };
-            };
-            /** @description Pending, slow down or expired */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeviceError"];
-                };
-            };
-        };
+      };
     };
-    approveDevice: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeviceApproveRequest"];
-            };
-        };
-        responses: {
-            /** @description Approved */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  startLogin: {
+    parameters: {
+      query: {
+        redirect_uri: string;
+      };
+      header?: never;
+      path: {
+        provider: string;
+      };
+      cookie?: never;
     };
-    refreshSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to the identity provider */
+      302: {
+        headers: {
+          Location?: string;
+          [name: string]: unknown;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["RefreshRequest"];
-            };
-        };
-        responses: {
-            /** @description Rotated tokens */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tokens"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    logout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Session family revoked */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  finishLogin: {
+    parameters: {
+      query: {
+        state: string;
+        code: string;
+      };
+      header?: never;
+      path: {
+        provider: string;
+      };
+      cookie?: never;
     };
-    exchangeGitLabJobToken: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Session established for a command-line client */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GitLabJobTokenRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Tokens"];
         };
-        responses: {
-            /** @description Short-lived credential */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GitLabJobTokenResponse"];
-                };
-            };
-            default: components["responses"]["Problem"];
+      };
+      /** @description Browser session established (refresh cookie set) or failed (error query parameter); Location is the server-configured landing address, never a value taken from the request */
+      302: {
+        headers: {
+          Location?: string;
+          [name: string]: unknown;
         };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    getMe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current user */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Me"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  startDevice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    startGitHubIdentityLink: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Device authorisation started */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Authorisation URL carrying a signed state */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IdentityLink"];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["DeviceStart"];
         };
+      };
     };
-    deleteGitHubIdentity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Detached */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  pollDevice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    createOrg: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateOrgRequest"];
-            };
-        };
-        responses: {
-            /** @description Organisation created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Org"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeviceTokenRequest"];
+      };
     };
-    getOrg: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Tokens */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Organisation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Org"];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["Tokens"];
         };
+      };
+      /** @description Pending, slow down or expired */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceError"];
+        };
+      };
     };
-    deleteOrg: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Soft-deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  approveDevice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listMembers: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Members */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Member"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeviceApproveRequest"];
+      };
     };
-    upsertMember: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Approved */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MemberRequest"];
-            };
-        };
-        responses: {
-            /** @description Member added or updated */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    removeMember: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                user: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Removed */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  refreshSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listApiKeys: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Keys */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiKey"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["RefreshRequest"];
+      };
     };
-    createApiKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Rotated tokens */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApiKeyCreateRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Tokens"];
         };
-        responses: {
-            /** @description Key created; secret shown once */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiKeyCreated"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+      };
+      default: components["responses"]["Problem"];
     };
-    revokeApiKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revoked */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  logout: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    createUpload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Session family revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UploadRequest"];
-            };
-        };
-        responses: {
-            /** @description Upload authorised */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadAuthorized"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    completeUpload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Verification scheduled */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadStatus"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  exchangeGitLabJobToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getUpload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Upload state */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadStatus"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitLabJobTokenRequest"];
+      };
     };
-    listTools: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Short-lived credential */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Active tools */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tool"][];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["GitLabJobTokenResponse"];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    createEstimate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EstimateRequest"];
-            };
-        };
-        responses: {
-            /** @description Estimate job created; quote arrives as a job event */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EstimateAccepted"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  getMe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listJobs: {
-        parameters: {
-            query?: {
-                status?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Current user */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Jobs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Job"][];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["Me"];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    createJob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JobRequest"];
-            };
-        };
-        responses: {
-            /** @description Idempotent replay of an existing job */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Job"];
-                };
-            };
-            /** @description Job created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Job"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  startGitHubIdentityLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getJob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Authorisation URL carrying a signed state */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Job */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Job"];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["IdentityLink"];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    confirmJob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Confirmed and queued */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Job"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  deleteGitHubIdentity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    cancelJob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Detached */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Cancelled */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    getRunReport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                run: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Short-lived download link (audited) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArtifactLink"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  createOrg: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getRunLog: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                run: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Short-lived download link to the run log (audited) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArtifactLink"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateOrgRequest"];
+      };
     };
-    getOrgLimits: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Organisation created */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Effective limits */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Limits"];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["Org"];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    getPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current policy revision */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Policy"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  getOrg: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
     };
-    putPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Organisation */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PolicyRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Org"];
         };
-        responses: {
-            /** @description New policy revision */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Policy"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+      };
+      default: components["responses"]["Problem"];
     };
-    linkGitHubApp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Installation URL carrying a signed state */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmLink"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  deleteOrg: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
     };
-    adoptGitHubInstallations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Soft-deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description What adoption changed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmAdoption"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    completeGitHubSetup: {
-        parameters: {
-            query: {
-                installation_id: string;
-                setup_action?: string;
-                state: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Installation linked (JSON when Accept is application/json) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmInstallation"];
-                };
-            };
-            /** @description Redirect to the installation page */
-            302: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  listMembers: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
     };
-    listScmInstallations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Members */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Installations and connections of the organisation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmInstallation"][];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["Member"][];
         };
+      };
+      default: components["responses"]["Problem"];
     };
-    deleteScmInstallation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Installation revoked */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  upsertMember: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
     };
-    listScmRepos: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Repositories of the installation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmRepo"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MemberRequest"];
+      };
     };
-    syncScmRepos: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description Member added or updated */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Repositories after re-listing from the provider */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmRepo"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    updateScmRepo: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-                repo: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScmRepoUpdate"];
-            };
-        };
-        responses: {
-            /** @description Repository view */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmRepo"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  removeMember: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        user: string;
+      };
+      cookie?: never;
     };
-    listScmBranches: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-                repo: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Removed */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Branches */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScmBranch"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
     };
-    createScmAnalysis: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-                repo: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScmAnalysisRequest"];
-            };
-        };
-        responses: {
-            /** @description Analysis accepted */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Job"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  listApiKeys: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
     };
-    createGitLabConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Keys */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GitLabConnectionRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["ApiKey"][];
         };
-        responses: {
-            /** @description Connection created; the webhook secret is shown once */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GitLabConnection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+      };
+      default: components["responses"]["Problem"];
     };
-    rotateGitLabToken: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GitLabTokenRotation"];
-            };
-        };
-        responses: {
-            /** @description Token replaced */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
+  };
+  createApiKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
     };
-    rotateGitLabWebhookSecret: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description New webhook secret (shown once; the previous one stays valid 24 h) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookSecret"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ApiKeyCreateRequest"];
+      };
     };
-    listOrgAudit: {
-        parameters: {
-            query?: {
-                action?: string;
-                limit?: number;
-                before?: string;
-            };
-            header?: never;
-            path: {
-                org: components["parameters"]["OrgSlug"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Key created; secret shown once */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Audit entries, newest first */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditEntry"][];
-                };
-            };
-            default: components["responses"]["Problem"];
+        content: {
+          "application/json": components["schemas"]["ApiKeyCreated"];
         };
+      };
+      default: components["responses"]["Problem"];
     };
+  };
+  revokeApiKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UploadRequest"];
+      };
+    };
+    responses: {
+      /** @description Upload authorised */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadAuthorized"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  completeUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Verification scheduled */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadStatus"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Upload state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UploadStatus"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listTools: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Active tools */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Tool"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createEstimate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EstimateRequest"];
+      };
+    };
+    responses: {
+      /** @description Estimate job created; quote arrives as a job event */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EstimateAccepted"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listJobs: {
+    parameters: {
+      query?: {
+        status?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Jobs */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Job"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["JobRequest"];
+      };
+    };
+    responses: {
+      /** @description Idempotent replay of an existing job */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Job"];
+        };
+      };
+      /** @description Job created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Job"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Job */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Job"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  confirmJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Confirmed and queued */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Job"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  cancelJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Cancelled */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getRunReport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        run: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Short-lived download link (audited) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ArtifactLink"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getRunLog: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        run: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Short-lived download link to the run log (audited) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ArtifactLink"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getOrgLimits: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Effective limits */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Limits"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current policy revision */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Policy"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  putPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PolicyRequest"];
+      };
+    };
+    responses: {
+      /** @description New policy revision */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Policy"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  linkGitHubApp: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installation URL carrying a signed state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmLink"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  adoptGitHubInstallations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description What adoption changed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmAdoption"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  completeGitHubSetup: {
+    parameters: {
+      query: {
+        installation_id: string;
+        setup_action?: string;
+        state: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installation linked (JSON when Accept is application/json) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmInstallation"];
+        };
+      };
+      /** @description Redirect to the installation page */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listScmInstallations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installations and connections of the organisation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmInstallation"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deleteScmInstallation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Installation revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listScmRepos: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Repositories of the installation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmRepo"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  syncScmRepos: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Repositories after re-listing from the provider */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmRepo"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateScmRepo: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+        repo: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ScmRepoUpdate"];
+      };
+    };
+    responses: {
+      /** @description Repository view */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmRepo"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listScmBranches: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+        repo: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Branches */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScmBranch"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createScmAnalysis: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+        repo: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ScmAnalysisRequest"];
+      };
+    };
+    responses: {
+      /** @description Analysis accepted */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Job"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createGitLabConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitLabConnectionRequest"];
+      };
+    };
+    responses: {
+      /** @description Connection created; the webhook secret is shown once */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GitLabConnection"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rotateGitLabToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GitLabTokenRotation"];
+      };
+    };
+    responses: {
+      /** @description Token replaced */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rotateGitLabWebhookSecret: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description New webhook secret (shown once; the previous one stays valid 24 h) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WebhookSecret"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listOrgAudit: {
+    parameters: {
+      query?: {
+        action?: string;
+        limit?: number;
+        before?: string;
+      };
+      header?: never;
+      path: {
+        org: components["parameters"]["OrgSlug"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Audit entries, newest first */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditEntry"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
 }
