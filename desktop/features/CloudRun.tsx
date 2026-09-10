@@ -39,7 +39,6 @@ export function CloudRun({
 }) {
   const { phase, seconds, busy } = run;
   const startRun = () => void run.start(workspace, org);
-  const approve = () => void run.approve(org);
   const stop = () => void run.cancel();
 
   // Nothing has happened and this panel cannot start anything: showing an
@@ -71,18 +70,11 @@ export function CloudRun({
       )}
 
       {phase.phase === "quoted" && (
-        <div className="setting-row">
-          <div>
-            <strong>{phase.ctu.toLocaleString("fr-FR")} CTU</strong>
-            <p className="muted">
-              Coût de cette analyse. Rien n’a encore été débité.
-            </p>
-          </div>
-          <button className="primary" disabled={busy} onClick={() => void approve()}>
-            <Cloud size={15} />
-            {busy ? "Lancement…" : "Lancer l’analyse"}
-          </button>
-        </div>
+        <p role="status">
+          <Cloud size={14} /> {phase.ctu.toLocaleString("fr-FR")} CTU pour cette
+          analyse. Rien n’a encore été débité : acceptez ou refusez depuis la
+          notification.
+        </p>
       )}
 
       {phase.phase === "running" && (
@@ -97,7 +89,9 @@ export function CloudRun({
         </p>
       )}
       {phase.phase === "done" && (
-        <p role="status">Analyse terminée. Les résultats sont ouverts.</p>
+        <p role="status">
+          Analyse terminée. Ouvrez les résultats depuis la notification.
+        </p>
       )}
       {phase.phase === "failed" && (
         <p role="alert" className="error">

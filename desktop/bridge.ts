@@ -6,6 +6,7 @@ import type {
   FileEntry,
   Job,
   LocalResult,
+  LocalRun,
   Workspace,
 } from "./types";
 
@@ -59,6 +60,9 @@ export const desktop = {
   analysisOptions: () => call<AnalysisOptions>("analysis_options"),
   chooseAnalysisFile: (kind: keyof AnalysisOptions, clear = false) =>
     call<AnalysisOptions>("choose_analysis_file", { kind, clear }),
+  /** Recent local runs of the open folder, newest first. */
+  localHistory: (workspaceId: string) =>
+    call<LocalRun[]>("local_history", { workspaceId }),
   /** Analyses every source file in the open folder, one after another. */
   analyseLocalFolder: (workspaceId: string) =>
     call<LocalResult>("analyse_local_folder", { workspaceId }),

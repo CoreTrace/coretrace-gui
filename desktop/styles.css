@@ -1572,3 +1572,23 @@ dialog label {
   padding: 0 4px;
   font-size: 12px;
 }
+
+/* A finding is one thing to click. The place to jump to leads the row. */
+button.finding {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+button.finding:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.finding .location {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
