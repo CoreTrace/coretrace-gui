@@ -189,6 +189,8 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     // the others off the screen.
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [saving, setSaving] = useState(false);
+    // The analyse menu, closed on every choice so it never covers the editor.
+    const [menuOpen, setMenuOpen] = useState(false);
     const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const pendingLine = useRef<number | null>(null);
     const confirm = useConfirm();
@@ -419,29 +421,59 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                     <Save size={14} />
                     {saving ? "Enregistrement…" : "Enregistrer"}
                   </button>
-                  <button
-                    className="primary"
-                    disabled={busy || dirty}
-                    title={
-                      dirty
-                        ? "Enregistrez les fichiers avant de lancer une analyse"
-                        : "Analyse statique du fichier actif avec ctrace"
-                    }
-                    onClick={() => run(tab.path)}
-                  >
-                    <Play size={14} />
-                    Analyser le fichier
-                  </button>
-                  {runInCloud && (
+                  <div className="menu-anchor">
                     <button
-                      disabled={busy}
-                      title="Envoie le dossier ouvert à la plateforme et l’analyse avec vos CTU"
-                      onClick={runInCloud}
+                      className="primary"
+                      disabled={busy || dirty}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      title={
+                        dirty
+                          ? "Enregistrez les fichiers avant de lancer une analyse"
+                          : "Choisissez où analyser"
+                      }
+                      onClick={() => setMenuOpen((open) => !open)}
                     >
-                      <CloudUpload size={14} />
-                      Analyser dans le cloud
+                      <Play size={14} />
+                      Analyser
+                      <ChevronDown size={13} />
                     </button>
-                  )}
+                    {menuOpen && (
+                      <div className="menu" role="menu">
+                        <button
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            run(tab.path);
+                          }}
+                        >
+                          <Play size={14} />
+                          <span>
+                            <strong>Sur cette machine</strong>
+                            <small>Ce fichier, avec le ctrace installé</small>
+                          </span>
+                        </button>
+                        <button
+                          role="menuitem"
+                          disabled={!runInCloud}
+                          onClick={() => {
+                            setMenuOpen(false);
+                            runInCloud?.();
+                          }}
+                        >
+                          <CloudUpload size={14} />
+                          <span>
+                            <strong>Dans le cloud</strong>
+                            <small>
+                              {runInCloud
+                                ? "Le dossier ouvert, avec vos CTU"
+                                : "Connectez-vous pour analyser dans le cloud"}
+                            </small>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <Editor

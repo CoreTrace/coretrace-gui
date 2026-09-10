@@ -3,6 +3,10 @@ import { desktop, errorMessage } from "../bridge";
 import type { CloudModel } from "../useCloud";
 import type { Repository } from "../types";
 import { useState } from "react";
+
+/** Repository cards shown at once, and added per "Afficher plus". */
+const PAGE = 4;
+
 export function Repositories({
   cloud,
   clone,
@@ -15,12 +19,18 @@ export function Repositories({
   notify: (message: string) => void;
 }) {
   const [search, setSearch] = useState("");
+  // An organisation can have hundreds of repositories, and a wall of cards is
+  // not a list anyone reads. Show a handful and let the reader ask for more.
+  const [limit, setLimit] = useState(PAGE);
   const needle = search.trim().toLowerCase();
-  const shown = needle
+  const matching = needle
     ? cloud.repositories.filter((r) =>
         r.full_name.toLowerCase().includes(needle),
       )
     : cloud.repositories;
+  // A search looks through every repository, not only the ones on screen.
+  const shown = matching.slice(0, limit);
+  const remaining = matching.length - shown.length;
   return (
     <div className="page">
       <div className="page-heading">
@@ -59,16 +69,20 @@ export function Repositories({
             aria-label="Rechercher un dépôt"
             placeholder="Rechercher un dépôt…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setLimit(PAGE);
+            }}
           />
           <span className="muted small count">
             {search.trim()
-              ? `${shown.length} sur ${cloud.repositories.length}`
+              ? `${matching.length} sur ${cloud.repositories.length}`
               : `${cloud.repositories.length} dépôts`}
           </span>
         </label>
       )}
       {cloud.repositories.length ? (
+        <>
         <div className="repository-grid">
           {shown.map((repo) => (
             <article className="repository-card" key={repo.id}>
@@ -97,6 +111,15 @@ export function Repositories({
             </article>
           ))}
         </div>
+        {remaining > 0 && (
+          <button
+            className="show-more"
+            onClick={() => setLimit((current) => current + PAGE)}
+          >
+            Afficher plus ({remaining} restants)
+          </button>
+        )}
+        </>
       ) : (
         <div className="empty">
           <FolderGit2 size={36} />
