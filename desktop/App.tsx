@@ -391,16 +391,6 @@ export default function App() {
             <span>Paramètres</span>
           </button>
         </nav>
-        {workspace && (
-          <div className="sidebar-workspace">
-            <div className="nav-label">DOSSIER OUVERT</div>
-            <button title={workspace.path} onClick={() => setPage("workspace")}>
-              <FolderOpen size={15} />
-              <span>{workspace.name}</span>
-              {dirty && <span className="dirty-dot" />}
-            </button>
-          </div>
-        )}
         <div className="sidebar-bottom">
           {/* The organisation already has a picker in the header and the
               account its own button below; repeating the slug here said

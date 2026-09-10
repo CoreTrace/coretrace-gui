@@ -272,23 +272,6 @@ small,
   color: #989898;
   font-size: 10px;
 }
-.sidebar-workspace {
-  margin-top: 3px;
-  overflow: hidden;
-}
-.sidebar-workspace > button {
-  background: transparent;
-  border: 0;
-  width: 100%;
-  justify-content: flex-start;
-  color: #b0b0b0;
-  font-size: 12px;
-}
-.sidebar-workspace > button span:not(.dirty-dot) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .sidebar-bottom {
   margin-top: auto;
   padding-top: 20px;
@@ -1010,14 +993,6 @@ summary {
   background: #282828;
   border-top: 2px solid #e53935;
 }
-.dirty-dot {
-  width: 6px;
-  height: 6px;
-  background: #b4b4b4;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
 .editor-toolbar {
   display: flex;
   align-items: center;
@@ -1136,7 +1111,6 @@ dialog label {
 .sidebar-collapsed .nav-label,
 .sidebar-collapsed nav button > span,
 .sidebar-collapsed .new-analysis > span,
-.sidebar-collapsed .sidebar-workspace,
 .sidebar-collapsed .profile > span:not(.avatar) {
   display: none;
 }
@@ -1222,7 +1196,6 @@ dialog label {
   .nav-label,
   .sidebar nav button > span,
   .new-analysis > span,
-  .sidebar-workspace,
   .profile > span:not(.avatar) {
     display: none;
   }
