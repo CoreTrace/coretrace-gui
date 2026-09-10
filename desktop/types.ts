@@ -49,7 +49,6 @@ export interface Finding {
 }
 export type Page =
   | "home"
-  | "organisation"
   | "analyses"
   | "repositories"
   | "workspace"

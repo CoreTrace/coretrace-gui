@@ -1534,15 +1534,22 @@ dialog label {
   font-size: 11px;
 }
 
-/* A notice that asks for a decision rather than reporting one. Two of them can
-   be on screen at once — a quote and a finished run — so they stack upwards
-   instead of covering each other. */
+/* Notices sit in the corner, out of the editor's way, and stack upwards when
+   a quote and a finished run arrive together. Progress is not a notice: it
+   lives in the status bar. */
+.toast {
+  left: auto;
+  right: 20px;
+  bottom: 44px;
+  transform: none;
+  min-width: 280px;
+  max-width: 420px;
+}
 .toast.decision {
-  bottom: 42px;
   gap: 12px;
 }
 .toast.decision ~ .toast {
-  bottom: 112px;
+  bottom: 120px;
 }
 .toast.decision > span {
   display: flex;
@@ -1554,17 +1561,14 @@ dialog label {
   font-size: 12px;
 }
 
-/* Progress, not a decision: it goes above the decisions, which are the ones
-   that need the reader's hand. */
-.toast.progress {
-  bottom: 42px;
-  gap: 12px;
-  border-color: var(--line-strong);
+
+.app-status .grow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
-.toast.progress ~ .toast.decision {
-  bottom: 112px;
-}
-.toast.progress ~ .toast.decision ~ .toast.decision,
-.toast.progress ~ .toast:not(.decision) {
-  bottom: 182px;
+.app-status .text-button {
+  padding: 0 4px;
+  font-size: 12px;
 }

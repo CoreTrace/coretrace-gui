@@ -387,8 +387,7 @@ export function Analyses({
   localRunning,
   openWorkspace,
   workspaceRoot,
-  workspaceId,
-  analyseFolder,
+  newAnalysis,
   cloudRun,
 }: {
   cloud: CloudModel;
@@ -404,9 +403,9 @@ export function Analyses({
   openWorkspace: () => void;
   /** The folder open in the editor, when there is one: what a cloud run sends. */
   workspaceRoot?: string;
-  workspaceId?: string;
-  /** Analyses that folder on this machine, file by file. */
-  analyseFolder: () => void;
+  /** Starts an analysis of the open folder: cloud when possible, this machine
+      otherwise. Owned by the application, so every button does the same. */
+  newAnalysis: () => void;
   /** The one cloud run, owned above the pages. */
   cloudRun: CloudRunModel;
 }) {
@@ -419,35 +418,7 @@ export function Analyses({
   const [running, setRunning] = useState(false);
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
-  const [starting, setStarting] = useState(false);
   const confirm = useConfirm();
-  /**
-   * One way in. The platform analyses the folder with the reader's CTU when
-   * they have an organisation to spend them from; otherwise, and whenever the
-   * cloud will not take the run, the same folder is analysed on this machine.
-   */
-  const newAnalysis = async () => {
-    if (!workspaceRoot || !workspaceId) {
-      openWorkspace();
-      return;
-    }
-    setStarting(true);
-    try {
-      if (cloud.me && cloud.org) {
-        try {
-          await cloudRun.start(workspaceRoot, cloud.org);
-          return;
-        } catch (e) {
-          notify(
-            `Analyse cloud impossible (${errorMessage(e)}). Analyse sur cette machine à la place.`,
-          );
-        }
-      }
-      analyseFolder();
-    } finally {
-      setStarting(false);
-    }
-  };
   const localReport = useMemo(() => {
     try {
       return {
@@ -538,19 +509,15 @@ export function Analyses({
             </div>
             <button
               className="primary"
-              disabled={starting || localRunning}
+              disabled={localRunning}
               title={
                 cloud.me && cloud.org
                   ? "Analyse le dossier ouvert avec vos CTU, ou sur cette machine si le cloud est indisponible"
                   : "Analyse le dossier ouvert sur cette machine"
               }
-              onClick={() => void newAnalysis()}
+              onClick={newAnalysis}
             >
-              {starting ? (
-                <LoaderCircle size={16} className="spin" />
-              ) : (
-                <Play size={16} />
-              )}
+              <Play size={16} />
               Nouvelle analyse
             </button>
           </div>
@@ -650,21 +617,6 @@ export function Analyses({
               </p>
             )}
           </section>
-          )}
-          {localRunning && (
-            <div className="notice inline">
-              <LoaderCircle size={16} className="spin" />
-              Analyse locale en cours…
-              <button
-                onClick={() =>
-                  void desktop
-                    .cancelLocal()
-                    .catch((e) => notify(errorMessage(e)))
-                }
-              >
-                Arrêter
-              </button>
-            </div>
           )}
           {local && (
             <section className="panel">

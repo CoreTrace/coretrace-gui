@@ -57,20 +57,21 @@ export function JobRows({
 }
 export function Dashboard({
   cloud,
-  organisation,
   workspace,
   navigate,
   openFolder,
   clone,
+  analyse,
   login,
   selectJob,
 }: {
   cloud: CloudModel;
-  organisation: boolean;
   workspace: Workspace | null;
   navigate: (page: Page) => void;
   openFolder: () => void;
   clone: () => void;
+  /** Starts an analysis of the open folder, or opens one when none is. */
+  analyse: () => void;
   login: () => void;
   selectJob: (job: Job) => void;
 }) {
@@ -85,22 +86,16 @@ export function Dashboard({
     <div className="page dashboard">
       <div className="eyebrow">
         <span className="status-dot" />
-        {organisation ? "ESPACE ORGANISATION" : "VOTRE ESPACE DE TRAVAIL"}
+        VOTRE ESPACE DE TRAVAIL
       </div>
       <div className="hero">
         <div>
           <h1>
-            {organisation
-              ? cloud.org || "Votre organisation"
-              : `Bonjour${cloud.me?.principal.name ? `, ${cloud.me.principal.name}` : ""}.`}
+            {`Bonjour${cloud.me?.principal.name ? `, ${cloud.me.principal.name}` : ""}.`}
             <br />
-            {!organisation && <span>Que souhaitez-vous analyser ?</span>}
+            <span>Que souhaitez-vous analyser ?</span>
           </h1>
-          <p>
-            {organisation
-              ? "L’activité, les ressources et les résultats de votre équipe."
-              : "Ouvrez votre code. Lancez une analyse. Comprenez chaque résultat."}
-          </p>
+          <p>Ouvrez votre code. Lancez une analyse. Comprenez chaque résultat.</p>
         </div>
         <div className="hero-mark">
           <ShieldCheck size={52} strokeWidth={1.2} />
@@ -137,29 +132,24 @@ export function Dashboard({
           <span>Copiez un dépôt sur cette machine pour l’ouvrir et l’analyser.</span>
           <ArrowRight size={18} />
         </button>
-        <button className="action-card" onClick={() => navigate("analyses")}>
+        <button className="action-card" onClick={analyse}>
           <span className="action-icon brand-accent">
             <Sparkles size={23} />
           </span>
           <strong>Lancer une analyse</strong>
-          <span>Retrouvez les outils et les résultats de CoreTrace.</span>
+          <span>
+            {workspace
+              ? "Analysez le dossier ouvert avec vos CTU, ou sur cette machine."
+              : "Choisissez un dossier, puis analysez-le."}
+          </span>
           <ArrowRight size={18} />
         </button>
       </div>
       {cloud.me && (
         <>
           <div className="section-heading">
-            <h2>
-              {organisation
-                ? "Ressources de l’organisation"
-                : "Votre organisation"}
-            </h2>
-            <button
-              className="text-button"
-              onClick={() =>
-                navigate(organisation ? "settings" : "organisation")
-              }
-            >
+            <h2>Votre organisation</h2>
+            <button className="text-button" onClick={() => navigate("settings")}>
               {cloud.org || "Choisir une organisation"} <ArrowRight size={14} />
             </button>
           </div>
