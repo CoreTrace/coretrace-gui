@@ -1,4 +1,9 @@
 name: CoreTrace Desktop
+# Every push and pull request is checked and built on the three desktops.
+# A tag v<version> additionally builds the installers on each and publishes
+# them as a GitHub Release, whose notes are docs/releases/v<version>.md. A
+# version with a pre-release suffix (6.0.0-beta.1) is published as a
+# pre-release; a plain one becomes the latest release.
 on:
   push:
     branches: [master, develop, feat/tauri-react-desktop]
@@ -9,7 +14,7 @@ on:
 permissions:
   contents: read
 jobs:
-  desktop:
+  check:
     strategy:
       fail-fast: false
       matrix:
@@ -40,16 +45,75 @@ jobs:
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build desktop
-        if: "!startsWith(github.ref, 'refs/tags/v')"
         run: npm run tauri -- build --no-bundle
-      - name: Build release installers
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
           name: coretrace-desktop-${{ runner.os }}-${{ runner.arch }}
           path: |
             src-tauri/target/release/coretrace-desktop.exe
             src-tauri/target/release/coretrace-desktop
-            src-tauri/target/release/bundle/**
           if-no-files-found: error
+
+  release:
+    # Only a tag publishes, and only after every desktop passed its checks.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: check
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            args: --bundles nsis
+          - os: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+          - os: ubuntu-24.04
+            args: --bundles deb,appimage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          # A universal macOS binary is built from both architectures.
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libdbus-1-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: npm ci
+      - name: Verify release versions
+        run: node scripts/check-desktop-version.cjs
+      - name: Release notes
+        id: notes
+        shell: bash
+        run: |
+          file="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$file" ]; then
+            echo "No release notes at $file; write them before tagging." >&2
+            exit 1
+          fi
+          {
+            echo "body<<NOTES_EOF"
+            cat "$file"
+            echo
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build installers and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: CoreTrace Desktop ${{ github.ref_name }}
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          includeUpdaterJson: false
+          args: ${{ matrix.args }}
