@@ -307,3 +307,50 @@ test('run-ctrace handler preserves tool name for real unknown tool failures', as
   platformMock.mock.restore();
 });
 
+test('run-ctrace handler fails fast on an unknown --invoke tool name instead of reporting a clean run', async (t) => {
+  const handlers = new Map();
+  const electronStub = {
+    ipcMain: {
+      handle: (channel, handler) => handlers.set(channel, handler)
+    }
+  };
+
+  const serveClientStub = {
+    ensureServerRunning: t.mock.fn(async () => ({ host: '127.0.0.1', port: 8080, token: 't' })),
+    // The real /api run_analysis endpoint silently drops unknown invoke
+    // entries (empty outputs, status "ok") instead of erroring, so this
+    // stub should never even be reached once the fix validates client-side.
+    callApi: t.mock.fn(async () => ({
+      ok: true,
+      statusCode: 200,
+      json: { result: { outputs: {}, invoked_tools: ['notatool'] } }
+    })),
+    shutdownServer: t.mock.fn(async () => ({ success: true })),
+    resolveBinaryPath: () => '/fake/bin/ctrace',
+    checkBinaryFormat: () => ({ ok: true })
+  };
+
+  const { setupCtraceHandlers } = withModuleMocks({
+    electron: electronStub,
+    '../utils/ctraceServeClient': serveClientStub
+  }, () => {
+    const modulePath = path.join(__dirname, '../src/main/ipc/ctraceHandlers.js');
+    delete require.cache[modulePath];
+    return require(modulePath);
+  });
+
+  const accessMock = t.mock.method(fsPromises, 'access', async () => {});
+  const platformMock = t.mock.method(os, 'platform', () => 'linux');
+
+  setupCtraceHandlers();
+  const response = await handlers.get('run-ctrace')(null, ['--invoke', 'notatool']);
+
+  assert.strictEqual(response.success, false);
+  assert.match(response.error, /Unknown tool 'notatool'/);
+  assert.match(response.error, /ikos,cppcheck,tscancode,ctrace_stack_analyzer/);
+  assert.strictEqual(serveClientStub.callApi.mock.calls.length, 0, 'should fail before ever calling the backend API');
+
+  accessMock.mock.restore();
+  platformMock.mock.restore();
+});
+
