@@ -74,6 +74,51 @@ pub fn workspaces(state: tauri::State<'_, WorkspaceState>) -> Result<Vec<Workspa
     Ok(state.0.lock().map_err(|e| e.to_string())?.clone())
 }
 
+/// Every file in the folder as a relative path, for finding one by name.
+/// Folders an analysis never reads are skipped, and the walk stops at a cap:
+/// a listing nobody can search is not worth the time to build.
+#[tauri::command]
+pub fn list_all_files(
+    state: tauri::State<'_, WorkspaceState>,
+    workspace_id: String,
+) -> Result<Vec<String>, String> {
+    const CAP: usize = 20_000;
+    let root = root(&state, &workspace_id)?;
+    let mut found = Vec::new();
+    let mut folders = vec![root.clone()];
+    while let Some(folder) = folders.pop() {
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() {
+                continue;
+            }
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if kind.is_dir() {
+                if !crate::pack::excluded(&name) && !name.starts_with('.') {
+                    folders.push(path);
+                }
+                continue;
+            }
+            if let Ok(relative) = path.strip_prefix(&root) {
+                found.push(relative.to_string_lossy().replace('\\', "/"));
+                if found.len() >= CAP {
+                    found.sort();
+                    return Ok(found);
+                }
+            }
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
 /// Writes the open folders down so the next session finds them.
 pub fn remember(app: &tauri::AppHandle, state: &WorkspaceState) {
     if let Ok(open) = state.0.lock() {
