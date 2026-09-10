@@ -82,6 +82,9 @@ function form(local: LocalResult | null = null) {
         cloudRun={idleRun}
         localHistory={[]}
         showLocalRun={vi.fn()}
+        reportedRuns={new Set<string>()}
+        markReported={vi.fn()}
+        login={vi.fn()}
       />
     </ConfirmProvider>,
   );
@@ -89,6 +92,7 @@ function form(local: LocalResult | null = null) {
 }
 it("shows incomplete execution even when ctrace exits successfully", () => {
   form({
+    runId: "run-1",
     exitCode: 0,
     stdout: "Failed to create process",
     stderr: "",
@@ -255,6 +259,9 @@ it("loads the reports of a job opened from the history", async () => {
         cloudRun={idleRun}
         localHistory={[]}
         showLocalRun={vi.fn()}
+        reportedRuns={new Set<string>()}
+        markReported={vi.fn()}
+        login={vi.fn()}
       />
     </ConfirmProvider>,
   );
@@ -284,6 +291,9 @@ it("the one button starts whatever analysis the application decides", async () =
         cloudRun={idleRun}
         localHistory={[]}
         showLocalRun={vi.fn()}
+        reportedRuns={new Set<string>()}
+        markReported={vi.fn()}
+        login={vi.fn()}
       />
     </ConfirmProvider>,
   );

@@ -33,8 +33,12 @@ export interface LocalRun {
   cancelled: boolean;
   warnings: string[];
   report: string | null;
+  /** Whether a report of this run was sent to the team. */
+  reported: boolean;
 }
 export interface LocalResult {
+  /** The history entry this result became; a report refers to it. */
+  runId: string;
   warnings?: string[];
   exitCode: number | null;
   stdout: string;
@@ -46,6 +50,17 @@ export interface LocalResult {
 export interface ToolStatus {
   name: string;
   found: boolean;
+}
+/** What the desktop sends when a tool failed. */
+export interface ReportBody {
+  tools: string[];
+  signature: string;
+  ctrace_version: string;
+  desktop_version: string;
+  os: string;
+  libraries: string;
+  log: string;
+  files: { name: string; content: string }[];
 }
 export interface DeviceCode {
   userCode: string;

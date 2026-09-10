@@ -8,6 +8,7 @@ import type {
   Job,
   LocalResult,
   LocalRun,
+  ReportBody,
   ToolStatus,
   Workspace,
 } from "./types";
@@ -78,6 +79,16 @@ export const desktop = {
   probeTools: () => call<ToolStatus[]>("probe_tools"),
   /** Repositories already cloned here, as owner/name. */
   clonedRepositories: () => call<string[]>("cloned_repositories"),
+  /** Build files at the folder's root, for a tool-failure report. */
+  supportCandidates: (workspaceId: string) =>
+    call<{ name: string; bytes: number }[]>("support_candidates", { workspaceId }),
+  /** A text file the user chose to attach. */
+  supportReadFile: (workspaceId: string, relative: string) =>
+    call<string>("support_read_file", { workspaceId, relative }),
+  /** Sends the report; resolves to its id, rejects with the platform's sentence. */
+  supportSend: (report: ReportBody) => call<string>("support_send", { report }),
+  supportMarkReported: (workspaceId: string, runId: string) =>
+    call<void>("support_mark_reported", { workspaceId, runId }),
   cancelLocal: () => call<void>("cancel_local"),
   status: () =>
     native
