@@ -68,6 +68,9 @@ export const desktop = {
     call<LocalResult>("analyse_local_folder", { workspaceId }),
   analyseLocal: (workspaceId: string, path: string) =>
     call<LocalResult>("analyse_local", { workspaceId, path }),
+  /** Every file of the folder, relative, for finding one by name. */
+  allFiles: (workspaceId: string) =>
+    call<string[]>("list_all_files", { workspaceId }),
   cancelLocal: () => call<void>("cancel_local"),
   status: () =>
     native
