@@ -40,6 +40,14 @@ jobs:
         run: node scripts/check-desktop-version.cjs
       - run: npm run check
       - run: npm run format:check
+      - name: Show what Prettier would change
+        # --check only names files; when it fails, the diff says why.
+        if: failure()
+        shell: bash
+        run: |
+          npx prettier --write desktop vite.config.ts vitest.config.ts >/dev/null
+          git --no-pager diff --stat
+          git --no-pager diff | head -120 | cat -A | head -120
       - run: npm test
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
