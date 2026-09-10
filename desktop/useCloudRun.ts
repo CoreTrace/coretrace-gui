@@ -113,3 +113,52 @@ export function useCloudRun({
     cancel: () => guard(() => desktop.cancelCloudRun()),
   };
 }
+
+function megabytes(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} Ko`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+/** mm:ss since a phase began. */
+export function elapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m} min ${String(s).padStart(2, "0")} s` : `${s} s`;
+}
+
+/**
+ * What the run is doing right now, in one line, or null when nothing is.
+ * Shared by the panel in the Analyses tab and the notice everywhere else, so
+ * the reader is told the same thing wherever they look.
+ *
+ * Every line carries a figure that changes — a count, a size, the seconds —
+ * because animations may be switched off system-wide, and a line that changes
+ * is the only proof that anything is still happening.
+ */
+export function describe(
+  phase: CloudPhase,
+  seconds: number,
+  typical?: number,
+): string | null {
+  const time = elapsed(seconds);
+  switch (phase.phase) {
+    case "packing":
+      return `Préparation de l’archive : ${phase.files} fichiers (${megabytes(phase.bytes)}) · ${time}`;
+    case "uploading":
+      return `Envoi de ${phase.files} fichiers (${megabytes(phase.total)}) · ${time}`;
+    case "verifying":
+      return `Vérification par la plateforme · ${time}`;
+    case "quoting":
+      return `Calcul du coût · ${time}`;
+    case "running": {
+      const base = `Analyse en cours dans le cloud · ${time}`;
+      if (typical === undefined) return base;
+      return seconds < typical
+        ? `${base} · environ ${elapsed(typical - seconds)} restant`
+        : `${base} · plus longue que d’habitude`;
+    }
+    default:
+      return null;
+  }
+}

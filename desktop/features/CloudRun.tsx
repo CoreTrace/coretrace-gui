@@ -1,18 +1,10 @@
 import { Cloud, CloudUpload, Loader2, XCircle } from "lucide-react";
-import { running as active, type CloudRunModel } from "../useCloudRun";
-
-function megabytes(bytes: number): string {
-  return bytes < 1024 * 1024
-    ? `${Math.max(1, Math.round(bytes / 1024))} Ko`
-    : `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
-}
-
-/** mm:ss since a phase began. */
-function elapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m > 0 ? `${m} min ${String(s).padStart(2, "0")} s` : `${s} s`;
-}
+import {
+  type CloudRunModel,
+  describe,
+  elapsed,
+  running as active,
+} from "../useCloudRun";
 
 /**
  * Analyses the open folder in the cloud. The run stops at its price: the
@@ -72,28 +64,9 @@ export function CloudRun({
         </button>
       )}
 
-      {phase.phase === "packing" && (
+      {active(phase) && phase.phase !== "running" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Préparation de l’archive :{" "}
-          {phase.files} fichiers ({megabytes(phase.bytes)}) · {elapsed(seconds)}
-        </p>
-      )}
-      {phase.phase === "uploading" && (
-        <p role="status">
-          <Loader2 size={14} className="spin" /> Envoi de {phase.files} fichiers
-          ({megabytes(phase.total)}) · {elapsed(seconds)}
-        </p>
-      )}
-      {phase.phase === "verifying" && (
-        <p role="status">
-          <Loader2 size={14} className="spin" /> Vérification par la plateforme ·{" "}
-          {elapsed(seconds)}
-        </p>
-      )}
-
-      {phase.phase === "quoting" && (
-        <p role="status">
-          <Loader2 size={14} className="spin" /> Calcul du coût · {elapsed(seconds)}
+          <Loader2 size={14} className="spin" /> {describe(phase, seconds)}
         </p>
       )}
 
@@ -114,19 +87,12 @@ export function CloudRun({
 
       {phase.phase === "running" && (
         <p role="status">
-          <Loader2 size={14} className="spin" /> Analyse en cours dans le cloud ·{" "}
-          {elapsed(seconds)}
+          <Loader2 size={14} className="spin" /> {describe(phase, seconds, typical)}
           {typical !== undefined && (
-            <>
-              {" · "}
-              {seconds < typical
-                ? `environ ${elapsed(typical - seconds)} restant`
-                : "plus longue que d’habitude"}
-              <span className="muted">
-                {" "}
-                (d’après vos analyses précédentes, ~{elapsed(typical)})
-              </span>
-            </>
+            <span className="muted">
+              {" "}
+              (d’après vos analyses précédentes, ~{elapsed(typical)})
+            </span>
           )}
         </p>
       )}

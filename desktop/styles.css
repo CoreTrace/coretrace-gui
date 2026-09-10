@@ -1568,3 +1568,18 @@ dialog label {
   color: #a9a9a9;
   font-size: 11px;
 }
+
+/* Progress, not a decision: it goes above the decisions, which are the ones
+   that need the reader's hand. */
+.toast.progress {
+  bottom: 42px;
+  gap: 12px;
+  border-color: #3c3c3c;
+}
+.toast.progress ~ .toast.decision {
+  bottom: 112px;
+}
+.toast.progress ~ .toast.decision ~ .toast.decision,
+.toast.progress ~ .toast:not(.decision) {
+  bottom: 182px;
+}
