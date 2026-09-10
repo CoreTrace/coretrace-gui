@@ -293,23 +293,6 @@ small,
   margin-top: auto;
   padding-top: 20px;
 }
-.cloud-card {
-  padding: 14px 12px;
-  border: 1px solid #2e2e2e;
-  border-radius: 8px;
-  margin-bottom: 15px;
-  background: linear-gradient(125deg, #27272755, transparent);
-}
-.cloud-card > span {
-  font-size: 11px;
-}
-.cloud-card p {
-  font-size: 10px;
-  color: #838383;
-  margin-top: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .profile {
   background: transparent;
   border: 0;
@@ -790,6 +773,12 @@ small,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+  /* The search field sat directly on the first row of cards. */
+  margin-top: 16px;
+}
+.show-more {
+  display: block;
+  margin: 16px auto 0;
 }
 .repository-card {
   border: 1px solid #3c3c3c;
@@ -1148,7 +1137,6 @@ dialog label {
 .sidebar-collapsed nav button > span,
 .sidebar-collapsed .new-analysis > span,
 .sidebar-collapsed .sidebar-workspace,
-.sidebar-collapsed .cloud-card,
 .sidebar-collapsed .profile > span:not(.avatar) {
   display: none;
 }
@@ -1235,7 +1223,6 @@ dialog label {
   .sidebar nav button > span,
   .new-analysis > span,
   .sidebar-workspace,
-  .cloud-card,
   .profile > span:not(.avatar) {
     display: none;
   }
@@ -1515,4 +1502,49 @@ dialog label {
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* A control that opens a short list of ways to do the same thing. Two buttons
+   side by side asked the reader to compare them every time; one asks only when
+   they have already decided to analyse. */
+.menu-anchor {
+  position: relative;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 240px;
+  padding: 6px;
+  border: 1px solid #3c3c3c;
+  border-radius: 10px;
+  background: #242424;
+  box-shadow: 0 12px 28px #00000066;
+}
+.menu button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+.menu button:hover:not(:disabled) {
+  background: #2f2f2f;
+}
+.menu button:disabled {
+  opacity: 0.5;
+}
+.menu button span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu button small {
+  color: #939393;
+  font-size: 10px;
 }
