@@ -1548,3 +1548,23 @@ dialog label {
   color: #939393;
   font-size: 10px;
 }
+
+/* A notice that asks for a decision rather than reporting one. Two of them can
+   be on screen at once — a quote and a finished run — so they stack upwards
+   instead of covering each other. */
+.toast.decision {
+  bottom: 42px;
+  gap: 12px;
+}
+.toast.decision ~ .toast {
+  bottom: 112px;
+}
+.toast.decision > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.toast.decision small {
+  color: #a9a9a9;
+  font-size: 11px;
+}
