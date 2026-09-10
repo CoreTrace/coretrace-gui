@@ -15,7 +15,7 @@ import { desktop } from "../bridge";
 import type { Document } from "../types";
 
 vi.mock("../bridge", () => ({
-  desktop: { files: vi.fn(), read: vi.fn(), save: vi.fn() },
+  desktop: { files: vi.fn(), read: vi.fn(), save: vi.fn(), allFiles: vi.fn() },
   errorMessage: (e: unknown) => String(e),
 }));
 vi.mock("@monaco-editor/react", () => ({
@@ -190,4 +190,57 @@ it("folds a folder away and back", async () => {
 
   await userEvent.click(screen.getByRole("button", { name: "Déplier project" }));
   expect(await screen.findByRole("button", { name: "main.ts" })).toBeDefined();
+});
+
+it("opens a file by name with Ctrl+P", async () => {
+  // A tree is fine for seventeen files and useless for seventeen hundred.
+  vi.mocked(desktop.allFiles).mockResolvedValue(["src/main.ts", "src/util.ts"]);
+  render(
+    <ConfirmProvider>
+      <WorkspaceEditor
+        workspace={{ id: "workspace-1", name: "project", path: "C:/project" }}
+        dirtyChanged={vi.fn()}
+        run={vi.fn()}
+        busy={false}
+        notify={vi.fn()}
+      />
+    </ConfirmProvider>,
+  );
+  await screen.findByRole("button", { name: "main.ts" });
+  fireEvent.keyDown(window, { key: "p", ctrlKey: true });
+  const box = await screen.findByRole("textbox", { name: "Nom du fichier" });
+  await userEvent.type(box, "uti");
+  expect(await screen.findByRole("option", { name: /util\.ts/ })).toBeDefined();
+  expect(screen.queryByRole("option", { name: /main\.ts/ })).toBeNull();
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() =>
+    expect(desktop.read).toHaveBeenCalledWith("workspace-1", "src/util.ts"),
+  );
+});
+
+it("saves before analysing instead of refusing until the reader does", async () => {
+  vi.mocked(desktop.save).mockResolvedValue({ content: "edited", revision: "r2" });
+  const run = vi.fn();
+  render(
+    <ConfirmProvider>
+      <WorkspaceEditor
+        workspace={{ id: "workspace-1", name: "project", path: "C:/project" }}
+        dirtyChanged={vi.fn()}
+        run={run}
+        busy={false}
+        notify={vi.fn()}
+      />
+    </ConfirmProvider>,
+  );
+  await userEvent.click(await screen.findByRole("button", { name: "main.ts" }));
+  const buffer = await screen.findByRole("textbox", { name: "Editor buffer" });
+  fireEvent.change(buffer, { target: { value: "edited" } });
+  const analyse = screen.getByRole("button", { name: /^Analyser/ });
+  expect(analyse.hasAttribute("disabled")).toBe(false);
+  await userEvent.click(analyse);
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: /Enregistrer et analyser ici/ }),
+  );
+  await waitFor(() => expect(run).toHaveBeenCalledWith("main.ts"));
+  expect(desktop.save).toHaveBeenCalledWith("workspace-1", "main.ts", "edited", "revision-1");
 });

@@ -1592,3 +1592,33 @@ button.finding:disabled {
   font-size: 12px;
   font-weight: 500;
 }
+
+/* Finding a file by name. One list, the chosen row lit, nothing else. */
+.quick-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+.quick-open button {
+  justify-content: flex-start;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  padding: 7px 10px;
+  text-align: left;
+}
+.quick-open button.selected,
+.quick-open button:hover {
+  background: var(--surface-3);
+}
+.quick-open button strong {
+  white-space: nowrap;
+}
+.quick-open button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

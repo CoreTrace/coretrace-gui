@@ -19,10 +19,11 @@ import {
   Play,
   RefreshCw,
   Save,
+  Search,
   X,
 } from "lucide-react";
 import { desktop, errorMessage } from "../bridge";
-import { useConfirm } from "../components/Dialog";
+import { Dialog, useConfirm } from "../components/Dialog";
 import type { Document, FileEntry, Workspace } from "../types";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -191,6 +192,13 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     const [saving, setSaving] = useState(false);
     // The analyse menu, closed on every choice so it never covers the editor.
     const [menuOpen, setMenuOpen] = useState(false);
+    // Finding a file by name. The listing is fetched the first time it is
+    // asked for and kept for the life of this folder.
+    const [quickOpen, setQuickOpen] = useState(false);
+    const [allFiles, setAllFiles] = useState<string[] | null>(null);
+    const [query, setQuery] = useState("");
+    const [cursor, setCursor] = useState(0);
+    const rootRef = useRef<HTMLDivElement>(null);
     const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const pendingLine = useRef<number | null>(null);
     const confirm = useConfirm();
@@ -224,6 +232,58 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
       window.addEventListener("beforeunload", prevent);
       return () => window.removeEventListener("beforeunload", prevent);
     }, [dirty]);
+    const openQuick = () => {
+      setQuery("");
+      setCursor(0);
+      setQuickOpen(true);
+      if (allFiles === null) {
+        void desktop
+          .allFiles(workspace.id)
+          .then((files) => {
+            if (alive.current) setAllFiles(files);
+          })
+          .catch((e) => notify(errorMessage(e)));
+      }
+    };
+    const openQuickRef = useRef(openQuick);
+    openQuickRef.current = openQuick;
+    useEffect(() => {
+      const onKey = (event: KeyboardEvent) => {
+        if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "p")
+          return;
+        // The editor stays mounted behind other pages; only answer when it is
+        // the page in front.
+        if (rootRef.current?.closest("[hidden]")) return;
+        event.preventDefault();
+        openQuickRef.current();
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, []);
+    const matches = (() => {
+      if (!allFiles) return [];
+      const needle = query.trim().toLowerCase();
+      if (!needle) return allFiles.slice(0, 50);
+      // A name that starts with the query beats one that merely contains it,
+      // which beats a match only in the folder path.
+      const score = (path: string) => {
+        const name = path.split("/").pop()?.toLowerCase() ?? "";
+        if (name.startsWith(needle)) return 0;
+        if (name.includes(needle)) return 1;
+        if (path.toLowerCase().includes(needle)) return 2;
+        return -1;
+      };
+      return allFiles
+        .map((path) => [score(path), path] as const)
+        .filter(([rank]) => rank >= 0)
+        .sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]))
+        .slice(0, 50)
+        .map(([, path]) => path);
+    })();
+    const chooseQuick = (path: string) => {
+      setQuickOpen(false);
+      void open(path).catch((e) => notify(errorMessage(e)));
+    };
     const reveal = (line: number) => {
       editor.current?.revealLineInCenter(line);
       editor.current?.setPosition({ lineNumber: line, column: 1 });
@@ -304,6 +364,9 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
         () => void saveRef.current(),
       );
+      instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () =>
+        openQuickRef.current(),
+      );
       if (pendingLine.current) {
         reveal(pendingLine.current);
         pendingLine.current = null;
@@ -324,8 +387,43 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
       if (active === path)
         setActive(tabs.find((t) => t.path !== path)?.path ?? "");
     };
+    // Analysing reads the files on disk, so unsaved work would be analysed as
+    // it was. Rather than refuse until the reader saves, save for them.
+    const saveAll = async () => {
+      for (const t of tabs) {
+        if (t.content === t.draft) continue;
+        const result = await desktop.save(workspace.id, t.path, t.draft, t.revision);
+        if (!alive.current) return;
+        setTabs((previous) =>
+          previous.map((x) =>
+            x.path === t.path
+              ? { ...x, content: result.content, revision: result.revision }
+              : x,
+          ),
+        );
+      }
+    };
+    const analyseHere = async () => {
+      if (!tab) return;
+      try {
+        if (dirty) await saveAll();
+      } catch (e) {
+        notify(errorMessage(e));
+        return;
+      }
+      run(tab.path);
+    };
+    const analyseInCloud = async () => {
+      try {
+        if (dirty) await saveAll();
+      } catch (e) {
+        notify(errorMessage(e));
+        return;
+      }
+      runInCloud?.();
+    };
     return (
-      <div className="ide">
+      <div className="ide" ref={rootRef}>
         <aside className="file-explorer">
           {/* Every open folder, not only the one being edited: closing the
               others out of sight was the part that felt unlike an editor. */}
@@ -424,14 +522,10 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                   <div className="menu-anchor">
                     <button
                       className="primary"
-                      disabled={busy || dirty}
+                      disabled={busy}
                       aria-haspopup="menu"
                       aria-expanded={menuOpen}
-                      title={
-                        dirty
-                          ? "Enregistrez les fichiers avant de lancer une analyse"
-                          : "Choisissez où analyser"
-                      }
+                      title="Choisissez où analyser"
                       onClick={() => setMenuOpen((open) => !open)}
                     >
                       <Play size={14} />
@@ -444,12 +538,12 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                           role="menuitem"
                           onClick={() => {
                             setMenuOpen(false);
-                            run(tab.path);
+                            void analyseHere();
                           }}
                         >
                           <Play size={14} />
                           <span>
-                            <strong>Sur cette machine</strong>
+                            <strong>{dirty ? "Enregistrer et analyser ici" : "Sur cette machine"}</strong>
                             <small>Ce fichier, avec le ctrace installé</small>
                           </span>
                         </button>
@@ -458,12 +552,12 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                           disabled={!runInCloud}
                           onClick={() => {
                             setMenuOpen(false);
-                            runInCloud?.();
+                            void analyseInCloud();
                           }}
                         >
                           <CloudUpload size={14} />
                           <span>
-                            <strong>Dans le cloud</strong>
+                            <strong>{dirty ? "Enregistrer et analyser dans le cloud" : "Dans le cloud"}</strong>
                             <small>
                               {runInCloud
                                 ? "Le dossier ouvert, avec vos CTU"
@@ -502,21 +596,70 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
               <div className="editor-status">
                 <span>{language(tab.path)} · UTF-8</span>
                 <span>
-                  Ctrl/Cmd + S : enregistrer · Ctrl/Cmd + F : rechercher
+                  Ctrl/Cmd + S : enregistrer · Ctrl/Cmd + P : ouvrir un fichier · Ctrl/Cmd + F : rechercher
                 </span>
               </div>
             </>
           ) : (
             <div className="empty centered">
               <FileCode2 size={36} />
-              <h2>Votre code, au même endroit.</h2>
-              <p>
-                Sélectionnez un fichier pour le lire, le modifier ou l’analyser.
-              </p>
+              <p>Choisissez un fichier dans l’explorateur, ou Ctrl+P pour le nommer.</p>
               <span className="small muted">{workspace.path}</span>
             </div>
           )}
         </section>
+        {quickOpen && (
+          <Dialog title="Ouvrir un fichier" close={() => setQuickOpen(false)}>
+            <label className="search">
+              <Search size={15} />
+              <input
+                // biome-ignore lint/a11y/noAutofocus: the dialog exists to be typed into
+                autoFocus
+                aria-label="Nom du fichier"
+                placeholder="Nom ou chemin…"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setCursor(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setCursor((c) => Math.min(c + 1, matches.length - 1));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setCursor((c) => Math.max(c - 1, 0));
+                  } else if (e.key === "Enter" && matches[cursor]) {
+                    e.preventDefault();
+                    chooseQuick(matches[cursor]);
+                  }
+                }}
+              />
+            </label>
+            <div className="quick-open" role="listbox" aria-label="Fichiers">
+              {allFiles === null ? (
+                <p className="muted small">Lecture du dossier…</p>
+              ) : matches.length === 0 ? (
+                <p className="muted small">Aucun fichier ne correspond.</p>
+              ) : (
+                matches.map((path, i) => (
+                  <button
+                    key={path}
+                    role="option"
+                    aria-selected={i === cursor}
+                    className={i === cursor ? "selected" : ""}
+                    onMouseEnter={() => setCursor(i)}
+                    onClick={() => chooseQuick(path)}
+                  >
+                    <FileCode2 size={14} />
+                    <strong>{path.split("/").pop()}</strong>
+                    <span className="muted small">{path}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </Dialog>
+        )}
       </div>
     );
   },
