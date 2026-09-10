@@ -79,11 +79,7 @@ export interface Finding {
   origin?: "local" | "cloud";
 }
 export type Page =
-  | "home"
-  | "analyses"
-  | "repositories"
-  | "workspace"
-  | "settings";
+  "home" | "analyses" | "repositories" | "workspace" | "settings";
 
 /** Where a cloud run has got to, as the Rust side reports it. */
 export type CloudPhase =

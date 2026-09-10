@@ -109,9 +109,7 @@ export function Settings({
                 principal name; the e-mail is the identity to show. */}
             <strong>
               {cloud.me
-                ? cloud.me.principal.name ||
-                  cloud.me.email ||
-                  "Compte connecté"
+                ? cloud.me.principal.name || cloud.me.email || "Compte connecté"
                 : "Non connecté"}
             </strong>
             <p className="muted">
@@ -157,7 +155,9 @@ export function Settings({
                 onClick={() => void connectGitHub()}
               >
                 <Github size={15} />
-                {connectingGitHub ? "Terminez dans le navigateur…" : "Connecter GitHub"}
+                {connectingGitHub
+                  ? "Terminez dans le navigateur…"
+                  : "Connecter GitHub"}
               </button>
             )}
           </div>
@@ -220,9 +220,7 @@ export function Settings({
               </span>
             ))}
             {tools.some((tool) => !tool.found) && (
-              <span>
-                — les outils absents ne produisent aucun résultat.
-              </span>
+              <span>— les outils absents ne produisent aucun résultat.</span>
             )}
           </p>
         )}

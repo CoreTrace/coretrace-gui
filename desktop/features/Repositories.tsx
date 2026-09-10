@@ -93,59 +93,61 @@ export function Repositories({
       )}
       {cloud.repositories.length ? (
         <>
-        <div className="repository-grid">
-          {shown.map((repo) => (
-            <article className="repository-card" key={repo.id}>
-              <div className="inline">
-                <FolderGit2 size={22} />
-                <span className={`badge ${repo.enabled ? "clean" : ""}`}>
-                  {repo.enabled ? "Analyse activée" : "Analyse désactivée"}
-                </span>
-              </div>
-              <h3>{repo.full_name}</h3>
-              <p className="muted small">
-                <GitBranch size={13} /> {repo.default_branch}
-              </p>
-              <footer>
-                <button
-                  title={
-                    cloned.includes(repo.full_name)
-                      ? "Déjà cloné sur cette machine"
-                      : "Télécharge une copie sur cette machine, puis l’ouvre"
-                  }
-                  onClick={() => clone(repo.full_name)}
-                >
-                  {cloned.includes(repo.full_name) ? "Ouvrir" : "Cloner et ouvrir"}
-                </button>
-                {repo.enabled ? (
-                  <button className="primary" onClick={() => analyse(repo)}>
-                    Analyser
-                  </button>
-                ) : (
-                  // Enabling happens on the web; a disabled button here only
-                  // said no without saying where yes was.
+          <div className="repository-grid">
+            {shown.map((repo) => (
+              <article className="repository-card" key={repo.id}>
+                <div className="inline">
+                  <FolderGit2 size={22} />
+                  <span className={`badge ${repo.enabled ? "clean" : ""}`}>
+                    {repo.enabled ? "Analyse activée" : "Analyse désactivée"}
+                  </span>
+                </div>
+                <h3>{repo.full_name}</h3>
+                <p className="muted small">
+                  <GitBranch size={13} /> {repo.default_branch}
+                </p>
+                <footer>
                   <button
-                    onClick={() =>
-                      void desktop
-                        .openAccount("repositories")
-                        .catch((e) => notify(errorMessage(e)))
+                    title={
+                      cloned.includes(repo.full_name)
+                        ? "Déjà cloné sur cette machine"
+                        : "Télécharge une copie sur cette machine, puis l’ouvre"
                     }
+                    onClick={() => clone(repo.full_name)}
                   >
-                    Activer sur le web <ArrowUpRight size={14} />
+                    {cloned.includes(repo.full_name)
+                      ? "Ouvrir"
+                      : "Cloner et ouvrir"}
                   </button>
-                )}
-              </footer>
-            </article>
-          ))}
-        </div>
-        {remaining > 0 && (
-          <button
-            className="show-more"
-            onClick={() => setLimit((current) => current + PAGE)}
-          >
-            Afficher plus ({remaining} restants)
-          </button>
-        )}
+                  {repo.enabled ? (
+                    <button className="primary" onClick={() => analyse(repo)}>
+                      Analyser
+                    </button>
+                  ) : (
+                    // Enabling happens on the web; a disabled button here only
+                    // said no without saying where yes was.
+                    <button
+                      onClick={() =>
+                        void desktop
+                          .openAccount("repositories")
+                          .catch((e) => notify(errorMessage(e)))
+                      }
+                    >
+                      Activer sur le web <ArrowUpRight size={14} />
+                    </button>
+                  )}
+                </footer>
+              </article>
+            ))}
+          </div>
+          {remaining > 0 && (
+            <button
+              className="show-more"
+              onClick={() => setLimit((current) => current + PAGE)}
+            >
+              Afficher plus ({remaining} restants)
+            </button>
+          )}
         </>
       ) : (
         <div className="empty">

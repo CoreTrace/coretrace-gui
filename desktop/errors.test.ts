@@ -12,7 +12,9 @@ it("says the desktop's English answers in French", () => {
 
 it("keeps what a tool itself said as a detail", () => {
   expect(
-    translateError("Git clone failed. For private repositories, sign in first. fatal: repository not found"),
+    translateError(
+      "Git clone failed. For private repositories, sign in first. fatal: repository not found",
+    ),
   ).toBe(
     "Le clonage Git a échoué — For private repositories, sign in first. fatal: repository not found",
   );
@@ -22,5 +24,7 @@ it("keeps what a tool itself said as a detail", () => {
 });
 
 it("passes through what it does not know rather than hiding it", () => {
-  expect(translateError("Something new happened")).toBe("Something new happened");
+  expect(translateError("Something new happened")).toBe(
+    "Something new happened",
+  );
 });

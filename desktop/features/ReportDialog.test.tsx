@@ -54,7 +54,9 @@ it("lists the build files ticked, states the privacy promise, and sends", async 
       onSent={onSent}
     />,
   );
-  const cmake = (await screen.findByLabelText(/CMakeLists\.txt/)) as HTMLInputElement;
+  const cmake = (await screen.findByLabelText(
+    /CMakeLists\.txt/,
+  )) as HTMLInputElement;
   expect(cmake.checked).toBe(true);
   expect(screen.getByText(/Ces données restent privées/)).toBeDefined();
   await userEvent.type(screen.getByLabelText(/Quelles librairies/), "SDL2");
@@ -71,7 +73,9 @@ it("lists the build files ticked, states the privacy promise, and sends", async 
 
 it("shows the platform's refusal in place", async () => {
   vi.mocked(desktop.supportSend).mockRejectedValueOnce(
-    new Error("Vous avez atteint la limite de rapports. Réessayez dans 3 heures."),
+    new Error(
+      "Vous avez atteint la limite de rapports. Réessayez dans 3 heures.",
+    ),
   );
   render(
     <ReportDialog
