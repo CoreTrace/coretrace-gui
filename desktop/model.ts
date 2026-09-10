@@ -188,3 +188,21 @@ export function typicalSeconds(jobs: Job[]): number | undefined {
       : measured[middle];
   return Math.round(median / 1000);
 }
+
+/** Membership vocabulary as the platform names it, in the reader's words. */
+const ROLE: Record<string, string> = {
+  owner: "Propriétaire",
+  admin: "Administrateur",
+  member: "Membre",
+  viewer: "Lecteur",
+  billing: "Facturation",
+};
+const ACCESS: Record<string, string> = {
+  active: "Actif",
+  invited: "Invité",
+  pending: "En attente",
+  suspended: "Suspendu",
+  removed: "Retiré",
+};
+export const roleLabel = (role: string) => ROLE[role] ?? role;
+export const accessLabel = (state: string) => ACCESS[state] ?? state;

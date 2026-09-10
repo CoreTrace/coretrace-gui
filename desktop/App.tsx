@@ -96,6 +96,14 @@ export default function App() {
   // real seconds instead: a number that changes is proof the work is alive.
   const [waited, setWaited] = useState(0);
   const [message, setMessage] = useState("");
+  // A message is information; it leaves on its own unless the reader is
+  // reading it. Decisions and offers are separate notices and stay.
+  const [holdMessage, setHoldMessage] = useState(false);
+  useEffect(() => {
+    if (!message || holdMessage) return;
+    const timer = setTimeout(() => setMessage(""), 8000);
+    return () => clearTimeout(timer);
+  }, [message, holdMessage]);
   const [login, setLogin] = useState(false);
   const [clone, setClone] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -784,7 +792,12 @@ export default function App() {
         </div>
       )}
       {message && (
-        <div className="toast" role="alert">
+        <div
+          className="toast"
+          role="status"
+          onMouseEnter={() => setHoldMessage(true)}
+          onMouseLeave={() => setHoldMessage(false)}
+        >
           <span>{message}</span>
           <button
             className="icon"
