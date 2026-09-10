@@ -265,11 +265,23 @@ pub async fn choose_analyser(
         .map_err(|e| e.to_string())?
         .canonicalize()
         .map_err(|e| e.to_string())?;
+    let display = adopt_analyser(&state, path.clone())?;
+    crate::settings::remember_analyser(&app, path);
+    Ok(Some(display))
+}
+
+/// Makes an executable the one a local analysis runs, and takes the tool
+/// configuration sitting beside it if none was chosen. Returns the path as the
+/// interface shows it.
+///
+/// Both the picker and a restored session go through here: a session that
+/// restored only the displayed path left the reader looking at an analyser the
+/// runs could not find.
+pub fn adopt_analyser(state: &AnalysisState, path: PathBuf) -> Result<String, String> {
     if !path.is_file() {
         return Err("Choose an installed ctrace executable".into());
     }
     let display = tool_path(&path).display().to_string();
-    crate::settings::remember_analyser(&app, path.clone());
     *state.executable.lock().map_err(|e| e.to_string())? = Some(path);
     let mut options = state.options.lock().map_err(|e| e.to_string())?;
     if options.config.is_none() {
@@ -288,7 +300,7 @@ pub async fn choose_analyser(
             .flatten()
             .find_map(|candidate| candidate.canonicalize().ok());
     }
-    Ok(Some(display))
+    Ok(display)
 }
 async fn capture(mut reader: impl AsyncRead + Unpin) -> String {
     let mut out = Vec::new();
@@ -594,6 +606,68 @@ mod tests {
         .unwrap()
         .unwrap();
         assert!(result.cancelled);
+    }
+    #[test]
+    fn adopting_an_analyser_is_what_lets_a_run_find_it() {
+        // A restored session used to set only the path the interface displays.
+        // The run reads this state, so it still refused for want of an
+        // executable while the settings page showed one.
+        let dir = tempfile::tempdir().unwrap();
+        let executable = dir.path().join("ctrace.exe");
+        std::fs::write(&executable, b"not a real tool").unwrap();
+        let state = AnalysisState::default();
+        assert!(state.executable.lock().unwrap().is_none());
+
+        let display = adopt_analyser(&state, executable.canonicalize().unwrap()).unwrap();
+
+        assert!(display.ends_with("ctrace.exe"), "{display}");
+        assert!(
+            !display.contains(r#"\\?\"#),
+            "the interface never shows the extended form"
+        );
+        assert!(state.executable.lock().unwrap().is_some());
+        assert!(adopt_analyser(&state, dir.path().join("absent.exe")).is_err());
+    }
+    #[tokio::test]
+    async fn the_analyser_runs_from_the_path_settings_actually_stores() {
+        // Settings canonicalises the chosen executable, and on Windows that
+        // returns the extended-length \?\ form. Spawning that form together
+        // with a working directory is refused with "the filename, directory
+        // name, or volume label syntax is incorrect", so every local analysis
+        // failed before ctrace was reached.
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("fixture.rs");
+        std::fs::write(&source, include_str!("../tests/fixtures/ctrace.rs")).unwrap();
+        let executable = dir.path().join(if cfg!(windows) {
+            "ctrace.exe"
+        } else {
+            "ctrace"
+        });
+        let compile = std::process::Command::new("rustc")
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable)
+            .output()
+            .unwrap();
+        assert!(
+            compile.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compile.stderr)
+        );
+        let input = dir.path().join("main.c");
+        std::fs::write(&input, "int main() {}").unwrap();
+        let stored = executable.canonicalize().unwrap();
+        let (_sender, receiver) = oneshot::channel();
+        let result = run_analysis(
+            &stored,
+            dir.path(),
+            &input.canonicalize().unwrap(),
+            &AnalysisOptions::default(),
+            receiver,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.exit_code, Some(1));
     }
     #[cfg(windows)]
     #[test]
