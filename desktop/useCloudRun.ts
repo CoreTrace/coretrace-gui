@@ -20,9 +20,11 @@ export type CloudRunModel = {
   /** Seconds since the current phase began. */
   seconds: number;
   busy: boolean;
-  start: (workspace: string, org: string) => Promise<void>;
-  approve: (org: string) => Promise<void>;
-  cancel: () => Promise<void>;
+  /** Each resolves to whether the platform accepted the action; the reason
+      for a refusal has already been shown. */
+  start: (workspace: string, org: string) => Promise<boolean>;
+  approve: (org: string) => Promise<boolean>;
+  cancel: () => Promise<boolean>;
 };
 
 /**
@@ -93,8 +95,10 @@ export function useCloudRun({
       setBusy(true);
       try {
         await action();
+        return true;
       } catch (e) {
         notify(errorMessage(e));
+        return false;
       } finally {
         setBusy(false);
         await poll();

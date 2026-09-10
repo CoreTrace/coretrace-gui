@@ -78,7 +78,7 @@ function form(local: LocalResult | null = null) {
         local={local}
         localRunning={false}
         openWorkspace={vi.fn()}
-        analyseFolder={vi.fn()}
+        newAnalysis={vi.fn()}
         cloudRun={idleRun}
       />
     </ConfirmProvider>,
@@ -248,7 +248,7 @@ it("loads the reports of a job opened from the history", async () => {
         local={null}
         localRunning={false}
         openWorkspace={vi.fn()}
-        analyseFolder={vi.fn()}
+        newAnalysis={vi.fn()}
         cloudRun={idleRun}
       />
     </ConfirmProvider>,
@@ -258,43 +258,30 @@ it("loads the reports of a job opened from the history", async () => {
   await screen.findByText("Uninitialized variable: name");
 });
 
-it("spends CTU when it can, and analyses on this machine when it cannot", async () => {
-  const analyseFolder = vi.fn();
-  const start = vi.fn().mockResolvedValue(undefined);
-  const render_ = (signedIn: boolean) =>
-    render(
-      <ConfirmProvider>
-        <Analyses
-          cloud={
-            signedIn ? cloud : ({ ...cloud, me: null, org: "" } as CloudModel)
-          }
-          selected={null}
-          select={vi.fn()}
-          initialRepository={null}
-          initialRef=""
-          clearDraft={vi.fn()}
-          notify={vi.fn()}
-          openFinding={vi.fn()}
-          local={null}
-          localRunning={false}
-          openWorkspace={vi.fn()}
-          workspaceRoot="/work"
-          workspaceId="w1"
-          analyseFolder={analyseFolder}
-          cloudRun={{ ...idleRun, start }}
-        />
-      </ConfirmProvider>,
-    );
-
-  render_(true);
-  await userEvent.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
-  await waitFor(() => expect(start).toHaveBeenCalledWith("/work", "alpha"));
-  expect(analyseFolder).not.toHaveBeenCalled();
-  cleanup();
-
-  // Signed out: there are no CTU to spend, so the folder is analysed here.
-  render_(false);
-  await userEvent.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
-  await waitFor(() => expect(analyseFolder).toHaveBeenCalled());
-  expect(start).toHaveBeenCalledTimes(1);
+it("the one button starts whatever analysis the application decides", async () => {
+  const newAnalysis = vi.fn();
+  render(
+    <ConfirmProvider>
+      <Analyses
+        cloud={cloud}
+        selected={null}
+        select={vi.fn()}
+        initialRepository={null}
+        initialRef=""
+        clearDraft={vi.fn()}
+        notify={vi.fn()}
+        openFinding={vi.fn()}
+        local={null}
+        localRunning={false}
+        openWorkspace={vi.fn()}
+        workspaceRoot="/work"
+        newAnalysis={newAnalysis}
+        cloudRun={idleRun}
+      />
+    </ConfirmProvider>,
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: /Nouvelle analyse/ }),
+  );
+  expect(newAnalysis).toHaveBeenCalledTimes(1);
 });

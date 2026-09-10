@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { desktop, errorMessage, native } from "./bridge";
 import { Dialog, useConfirm } from "./components/Dialog";
+import { launchAnalysis } from "./launch";
 import { describe, running, useCloudRun } from "./useCloudRun";
 import { Login } from "./components/Login";
 import { Dashboard } from "./features/Dashboard";
@@ -37,7 +38,6 @@ const WorkspaceEditor = lazy(() =>
 
 const pages = {
   home: "Accueil",
-  organisation: "Organisation",
   analyses: "Analyses",
   repositories: "Dépôts",
   workspace: "Espace de code",
@@ -295,6 +295,27 @@ export default function App() {
       setLocalRunning(false);
     }
   };
+  // One entry point, owned here so the sidebar, the home page and the
+  // analyses page all do the same thing when they say "Nouvelle analyse".
+  const [starting, setStarting] = useState(false);
+  const newAnalysis = async () => {
+    if (!workspace) {
+      await openFolder();
+      return;
+    }
+    setStarting(true);
+    try {
+      await launchAnalysis({
+        workspace: workspace.path,
+        org: cloud.me ? cloud.org : "",
+        startCloud: cloudRun.start,
+        runLocal: runLocalFolder,
+        notify: setMessage,
+      });
+    } finally {
+      setStarting(false);
+    }
+  };
   const openFinding = (path: string, line: number) => {
     if (!workspace || !editor.current) {
       setMessage(
@@ -346,10 +367,8 @@ export default function App() {
         </div>
         <button
           className="new-analysis"
-          onClick={() => {
-            setSelectedJob(null);
-            setPage("analyses");
-          }}
+          disabled={starting || localRunning || running(cloudRun.phase)}
+          onClick={() => void newAnalysis()}
         >
           <Plus size={17} />
           <span>Nouvelle analyse</span>
@@ -374,14 +393,6 @@ export default function App() {
         </nav>
         <div className="nav-label">COMPTE</div>
         <nav aria-label="Compte">
-          <button
-            title="Organisation"
-            className={page === "organisation" ? "active" : ""}
-            onClick={() => setPage("organisation")}
-          >
-            <Building2 size={18} />
-            <span>Organisation</span>
-          </button>
           <button
             title="Paramètres"
             className={page === "settings" ? "active" : ""}
@@ -415,7 +426,9 @@ export default function App() {
                   : "Se connecter"}
               </strong>
               <small>
-                {cloud.me ? "Compte personnel" : "Accéder à CoreTrace Cloud"}
+                {cloud.me
+                  ? cloud.org || "Aucune organisation"
+                  : "Accéder à CoreTrace Cloud"}
               </small>
             </span>
           </button>
@@ -424,11 +437,8 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <div className="breadcrumbs">
-            CoreTrace <span>/</span>
-            <strong>{pages[page]}</strong>
             {page === "workspace" && workspace && (
               <>
-                <span>/</span>
                 {/* Several folders can be open; this is the one being edited. */}
                 <select
                   aria-label="Dossier actif"
@@ -514,13 +524,6 @@ export default function App() {
             <button onClick={() => void cloud.refresh()}>Réessayer</button>
           </div>
         )}
-        {(busy || localRunning) && (
-          <div className="operation" role="status">
-            <LoaderCircle className="spin" size={16} />
-            {busy || "Analyse locale en cours : ctrace examine le fichier."}
-            {waited > 0 && <span className="muted"> · {waited} s</span>}
-          </div>
-        )}
         <main
           className={
             page === "workspace"
@@ -528,14 +531,14 @@ export default function App() {
               : "main-content"
           }
         >
-          {(page === "home" || page === "organisation") && (
+          {page === "home" && (
             <Dashboard
               cloud={cloud}
-              organisation={page === "organisation"}
               workspace={workspace}
               navigate={setPage}
               openFolder={() => void openFolder()}
               clone={() => setClone("")}
+              analyse={() => void newAnalysis()}
               login={() => setLogin(true)}
               selectJob={selectJob}
             />
@@ -564,8 +567,7 @@ export default function App() {
               local={local}
               localRunning={localRunning}
               workspaceRoot={workspace?.path}
-              workspaceId={workspace?.id}
-              analyseFolder={() => void runLocalFolder()}
+              newAnalysis={() => void newAnalysis()}
               cloudRun={cloudRun}
               openWorkspace={() =>
                 workspace ? setPage("workspace") : void openFolder()
@@ -639,45 +641,55 @@ export default function App() {
             )}
           </div>
         </main>
-        <footer className="app-status">
-          <span>
-            <span className="status-dot" />
-            {native ? "Desktop prêt" : "Aperçu de l’interface"}
+        {/* The status bar is the one place a run reports itself. From any
+            page, a glance at the bottom edge says what is happening, for how
+            long, and how to stop it. */}
+        <footer className="app-status" role="status">
+          <span className="grow">
+            {running(cloudRun.phase) ? (
+              <>
+                <LoaderCircle className="spin" size={13} />
+                {describe(
+                  cloudRun.phase,
+                  cloudRun.seconds,
+                  typicalSeconds(cloud.jobs),
+                )}
+                <button
+                  className="text-button"
+                  disabled={cloudRun.busy}
+                  onClick={() => void cloudRun.cancel()}
+                >
+                  Annuler
+                </button>
+              </>
+            ) : localRunning ? (
+              <>
+                <LoaderCircle className="spin" size={13} />
+                Analyse locale en cours · {waited} s
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    void desktop
+                      .cancelLocal()
+                      .catch((e) => setMessage(errorMessage(e)))
+                  }
+                >
+                  Arrêter
+                </button>
+              </>
+            ) : busy ? (
+              <>
+                <LoaderCircle className="spin" size={13} />
+                {busy}
+                {waited > 0 && ` · ${waited} s`}
+              </>
+            ) : !native ? (
+              "Aperçu de l’interface"
+            ) : null}
           </span>
-          <span>
-            {localRunning
-              ? "Analyse locale en cours"
-              : workspace
-                ? workspace.name
-                : "Aucun dossier ouvert"}
-          </span>
+          <span>{workspace ? workspace.name : "Aucun dossier ouvert"}</span>
         </footer>
       </div>
-      {/* A run in progress has to be seen to be believed. From the editor the
-          panel that reports it is a tab away, and a button that seems to do
-          nothing for thirty seconds reads as broken. */}
-      {running(cloudRun.phase) && (
-        <div className="toast progress" role="status">
-          <LoaderCircle size={16} className="spin" />
-          <span>{describe(cloudRun.phase, cloudRun.seconds, typicalSeconds(cloud.jobs))}</span>
-          <button disabled={cloudRun.busy} onClick={() => void cloudRun.cancel()}>
-            Annuler
-          </button>
-        </div>
-      )}
-      {localRunning && page !== "analyses" && (
-        <div className="toast progress" role="status">
-          <LoaderCircle size={16} className="spin" />
-          <span>Analyse locale en cours · {waited} s</span>
-          <button
-            onClick={() =>
-              void desktop.cancelLocal().catch((e) => setMessage(errorMessage(e)))
-            }
-          >
-            Arrêter
-          </button>
-        </div>
-      )}
       {/* A quote is a decision, not news: nothing is spent until it is taken,
           so it is offered wherever the reader happens to be. */}
       {cloudRun.phase.phase === "quoted" && (
