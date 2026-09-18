@@ -5,3 +5,14 @@
 *.sh text eol=lf
 Dockerfile text eol=lf
 entrypoint.sh text eol=lf
+
+# Source files are LF in the repository, whatever the committer's platform.
+# A CRLF blob passes Prettier on one runner and fails on another.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
