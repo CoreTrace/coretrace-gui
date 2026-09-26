@@ -226,12 +226,19 @@ fn success((status, value): (u16, Value)) -> Result<Value, String> {
     if (200..300).contains(&status) {
         return Ok(value);
     }
+    // The title names the kind of refusal; detail.sentence says which limit
+    // and by how much, which is what the reader needs to act on.
     Err(format!(
-        "{} (HTTP {status}){}",
+        "{} (HTTP {status}){}{}",
         value["title"]
             .as_str()
             .or(value["error"].as_str())
             .unwrap_or("Platform request failed"),
+        value["detail"]["sentence"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| format!(": {s}"))
+            .unwrap_or_default(),
         value["request_id"]
             .as_str()
             .map(|s| format!(" · request {s}"))
@@ -682,6 +689,26 @@ mod tests {
         for bad in ["..", "org/jobs", "org?x=y", "org\r\nX-Org:x"] {
             assert!(segment(bad).is_err());
         }
+    }
+    #[test]
+    fn refusal_carries_the_platform_sentence() {
+        let error = success((
+            409,
+            json!({
+                "title": "Over the per-analysis CTU limit",
+                "detail": {"sentence": "This analysis needed 4,030,251 CTU, more than the 2,000,000 allowed for a single analysis."},
+                "request_id": "ae6453d001d35de430d418df"
+            }),
+        ))
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "Over the per-analysis CTU limit (HTTP 409): This analysis needed 4,030,251 CTU, more than the 2,000,000 allowed for a single analysis. · request ae6453d001d35de430d418df"
+        );
+        assert_eq!(
+            success((409, json!({"title": "Not enough CTU", "detail": "x"}))).unwrap_err(),
+            "Not enough CTU (HTTP 409)"
+        );
     }
     #[test]
     fn verification_link_prefills_the_browser_code() {
