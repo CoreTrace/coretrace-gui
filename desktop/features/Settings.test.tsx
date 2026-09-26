@@ -17,6 +17,7 @@ vi.mock("../bridge", () => ({
     cloneLocation: vi.fn(() =>
       Promise.resolve("/home/me/.local/share/CoreTrace/repositories"),
     ),
+    openNotices: vi.fn(() => Promise.resolve()),
     probeTools: vi.fn(() =>
       Promise.resolve([
         { name: "cppcheck", found: true },
@@ -102,4 +103,13 @@ it("names the tools that are missing before the first run", async () => {
   expect(probe.textContent).toContain("✓ cppcheck");
   expect(probe.textContent).toContain("✗ flawfinder");
   expect(probe.textContent).toContain("aucun résultat");
+});
+
+it("opens the third-party licences from the About panel", async () => {
+  // MIT, BSD and Unicode require their texts to reach the user with the app.
+  show(null);
+  await userEvent.click(
+    screen.getByRole("button", { name: /Licences open source/ }),
+  );
+  expect(desktop.openNotices).toHaveBeenCalled();
 });

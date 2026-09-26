@@ -129,6 +129,8 @@ export const desktop = {
   connectGitHub: () => call<string>("connect_github"),
   openAccount: (page: "device" | "dashboard" | "repositories" | "settings") =>
     call<void>("open_account", { page }),
+  /** Opens the bundled third-party licence texts in the system viewer. */
+  openNotices: () => call<void>("open_notices"),
 };
 export function errorMessage(error: unknown): string {
   return translateError(error instanceof Error ? error.message : String(error));
