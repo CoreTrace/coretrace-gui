@@ -1,9 +1,9 @@
 name: CoreTrace Desktop
 # Every push and pull request is checked and built on the three desktops.
 # A tag v<version> additionally builds the installers on each and publishes
-# them as a GitHub Release, whose notes are docs/releases/v<version>.md. A
-# version with a pre-release suffix (6.0.0-beta.1) is published as a
-# pre-release; a plain one becomes the latest release.
+# them as a GitHub Release, whose notes are docs/releases/v<version>.md. Every
+# release, betas included, becomes the latest one: the in-app updater reads
+# latest.json from /releases/latest, which skips pre-releases.
 on:
   push:
     branches: [master, develop, feat/tauri-react-desktop]
@@ -77,7 +77,7 @@ jobs:
           - os: windows-2022
             args: --bundles nsis
           - os: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
           - os: ubuntu-24.04
             args: --bundles deb,appimage
     runs-on: ${{ matrix.os }}
@@ -102,6 +102,8 @@ jobs:
         run: node scripts/check-desktop-version.cjs
       - name: Verify bundle icons
         run: node scripts/check-bundle-icons.cjs
+      - name: Third-party notices
+        run: npm run notices
       - name: Release notes
         id: notes
         shell: bash
@@ -121,11 +123,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ github.ref_name }}
           releaseName: CoreTrace Desktop ${{ github.ref_name }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          includeUpdaterJson: false
+          prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}

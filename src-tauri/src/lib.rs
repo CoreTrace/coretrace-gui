@@ -5,11 +5,17 @@ mod github;
 mod pack;
 mod settings;
 mod support;
+mod updates;
 mod workspace;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            tauri::async_runtime::spawn(updates::check(app.handle().clone()));
+            Ok(())
+        })
         .manage(workspace::WorkspaceState::default())
         .manage(analysis::AnalysisState::default())
         .manage(cloud::Cloud::new().expect("invalid CoreTrace platform configuration"))
