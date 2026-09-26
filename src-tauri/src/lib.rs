@@ -18,6 +18,7 @@ pub fn run() {
             workspace::choose_workspace,
             workspace::workspaces,
             settings::restore_session,
+            settings::open_notices,
             workspace::close_workspace,
             workspace::list_files,
             workspace::read_file,

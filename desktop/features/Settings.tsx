@@ -1,9 +1,17 @@
-import { ArrowUpRight, Github, LogOut, Settings2, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  Github,
+  Info,
+  LogOut,
+  Settings2,
+  Users,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, errorMessage, native, type AnalysisOptions } from "../bridge";
 import type { CloudModel } from "../useCloud";
 import { roleLabel } from "../model";
 import type { Member, ToolStatus } from "../types";
+import { version } from "../../package.json";
 export function Settings({
   cloud,
   analyser,
@@ -293,7 +301,28 @@ export function Settings({
           ))}
         </section>
       )}
-      <p className="muted small">CoreTrace 6.0.0-beta.1</p>
+      <section className="panel">
+        <div className="inline">
+          <Info size={19} />
+          <h2>À propos</h2>
+        </div>
+        <div className="setting-row">
+          <div>
+            <strong>CoreTrace {version}</strong>
+            <p className="muted">
+              Distribué sous licence Apache 2.0. Inclut des composants open
+              source soumis à leurs propres licences.
+            </p>
+          </div>
+          <button
+            onClick={() =>
+              void desktop.openNotices().catch((e) => notify(errorMessage(e)))
+            }
+          >
+            Licences open source <ArrowUpRight size={14} />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
