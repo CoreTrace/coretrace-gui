@@ -31,8 +31,8 @@ fi
 RELEASE_INPUT="${1#v}"
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [ "$CURRENT_BRANCH" != "master" ]; then
-  echo "Error: release must be cut from master (current: $CURRENT_BRANCH)."
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo "Error: release must be cut from main (current: $CURRENT_BRANCH)."
   exit 1
 fi
 
@@ -82,8 +82,8 @@ else
   echo "Cutting ${TARGET_TAG} on the stable channel."
 fi
 
-echo "Pushing master and ${TARGET_TAG} to origin..."
-git push origin master
+echo "Pushing main and ${TARGET_TAG} to origin..."
+git push origin main
 git push origin "$TARGET_TAG"
 
 echo

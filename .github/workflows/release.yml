@@ -6,10 +6,10 @@ name: CoreTrace Desktop
 # latest.json from /releases/latest, which skips pre-releases.
 on:
   push:
-    branches: [master, develop, feat/tauri-react-desktop]
+    branches: [main, develop, feat/tauri-react-desktop]
     tags: ["v*"]
   pull_request:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
