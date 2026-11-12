@@ -29,8 +29,8 @@ toolchain that must match the LLVM it links (`libclang-cpp.so.20.1`). With an
 older clang, or none at all, **every file below reports 0 diagnostics** and no
 error is printed — `DS02` would look correct while nothing is being analysed.
 
-Verify with scenario **F27b** before running any analysis scenario. Setup A
-(Docker) already has clang 20; Setup B (native AppImage) needs it installed.
+Verify with scenario **F9** before running any analysis scenario. The Docker
+image already has clang 20.
 
 Both the analyser bundled in v5.1.0 and the v0.74.0 build that the in-app
 backend updater installs produce exactly the results above once clang 20 is

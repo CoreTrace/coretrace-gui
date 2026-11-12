@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libxshmfence1 libnss3 libnspr4 libxss1 libxtst6 libnotify4 \
       libasound2t64 libsecret-1-0 libglib2.0-0t64 \
-      fonts-dejavu-core xdg-utils gnupg wget \
+      fonts-dejavu-core xdg-utils gnupg wget git \
     && rm -rf /var/lib/apt/lists/*
 
 # clang 20 is a hard runtime requirement of the analyser: it compiles the source
@@ -43,9 +43,13 @@ RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
 # Version under test. Override with --build-arg to test another release.
 ARG CTRACE_GUI_VERSION=5.1.0
 
+# The AppImage runtime stores the magic "AI\x02" in bytes 8-10 of its ELF header.
+# Under amd64 emulation (Apple Silicon) the kernel then no longer recognises the
+# file as x86-64 and exec fails with "Exec format error", so blank those bytes.
 RUN curl -fL --retry 3 -o /tmp/CtraceGUI.AppImage \
       "https://github.com/CoreTrace/coretrace-gui/releases/download/v${CTRACE_GUI_VERSION}/CtraceGUI-${CTRACE_GUI_VERSION}.AppImage" \
     && chmod +x /tmp/CtraceGUI.AppImage \
+    && printf '\0\0\0' | dd of=/tmp/CtraceGUI.AppImage bs=1 seek=8 conv=notrunc status=none \
     && cd /opt && /tmp/CtraceGUI.AppImage --appimage-extract > /dev/null \
     && mv squashfs-root ctrace-gui \
     && rm /tmp/CtraceGUI.AppImage \
@@ -55,7 +59,9 @@ RUN curl -fL --retry 3 -o /tmp/CtraceGUI.AppImage \
 # /tmp/.X11-unix is created here because Xvfb cannot create it as a non-root user
 # and prints an alarming "ERROR" when it is missing, even though it goes on to
 # start normally — a tester should not have to judge whether that is a defect.
-RUN useradd -m -s /bin/bash tester && mkdir -p /home/tester/workspace \
+# .config exists in the image so the named volume run.sh mounts there inherits
+# tester ownership; it keeps the session across container restarts.
+RUN useradd -m -s /bin/bash tester && mkdir -p /home/tester/workspace /home/tester/.config \
     && chown -R tester:tester /home/tester \
     && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 

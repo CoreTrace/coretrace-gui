@@ -13,5 +13,6 @@ docker run --rm -it $PLATFORM_FLAG \
   --name coretrace-gui-atp \
   -p 6080:6080 \
   -v "$DATASETS":/home/tester/workspace \
+  -v coretrace-gui-atp-config:/home/tester/.config \
   --shm-size=1g \
   coretrace-gui-atp

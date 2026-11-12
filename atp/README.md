@@ -11,7 +11,8 @@ The workbook is built from `ATP_template.xlsx` and keeps its two tabs:
 
 - **Info & Access** — download links, the Docker environment, the test data set
   with its verified expected results, and the notes a tester needs.
-- **Test Plan** — 56 scenarios (`F1`…`F56`, plus `F3b`; `F24` retired) with Feature ID, name, category,
+- **Test Plan** — 24 scenarios (`F1`…`F24`), all run in the Docker environment so the plan is
+  reproducible on any OS with Feature ID, name, category,
   objective, prerequisites, numbered steps, expected result and development
   status. The **Feedback** column is intentionally empty: the tester fills it.
 
@@ -24,7 +25,8 @@ anything.
 ## Regenerating the workbook
 
 The scenarios live in `scripts/gen_atp.py` next to this README; re-run it with
-`python gen_atp.py` after editing, then rebuild the archive:
+`python gen_atp.py` after editing (pass the path of `ATP_template.xlsx` to
+rebuild from the blank template; by default it rewrites the existing workbook), then rebuild the archive:
 
 ```sh
 cd atp && python scripts/make_appendices_zip.py
@@ -42,25 +44,22 @@ honours the mode at all.
 Shipped in v5.1.0:
 
 1. **macOS artifact.** ~~The `macos-latest` job is commented out.~~ v5.1.0
-   publishes an unsigned `.dmg` and `.zip` for Apple Silicon. `F3` is now a
-   native install with the Gatekeeper steps spelled out.
+   publishes an unsigned `.dmg` and `.zip` for Apple Silicon. Native installs are not
+   part of the plan: every scenario runs in Docker.
 2. **Ctrl-only shortcuts.** ~~`e.metaKey` was never tested.~~ Shortcuts follow
-   the platform, and `F53` covers Cmd on macOS. Tab navigation stays on Ctrl
+   the platform (Cmd on macOS). Tab navigation stays on Ctrl
    everywhere, because Cmd+Tab is the macOS application switcher.
-3. **Format Document was a no-op** for C/C++ — dropped, and `F24` is retired
-   (the numbering keeps the gap so every cross-reference stays valid).
+3. **Format Document was a no-op** for C/C++ — dropped, along with its scenario.
 
 Still open:
 
 4. **No Intel macOS artifact.** The x64 job targeted `macos-13`, which GitHub
    has retired; a job pinned to a retired label queues forever instead of
    failing, so v5.1.0 shipped without it. The matrix now uses `macos-15-intel`,
-   but that fix is not in the v5.1.0 tag. Until an Intel build ships, `F3b`
-   routes Intel Macs through Docker.
+   but that fix is not in the v5.1.0 tag. Intel Macs use Docker like everyone else.
 5. **The analyser binary is Linux-only.** `bin/ctrace` is an x86-64 ELF, so on
-   macOS the app runs but cannot analyse — `F54` pins the message it shows
-   instead. A Darwin build of ctrace is the real fix; until then, run `F28`
-   to `F38` on Linux.
+   macOS the app runs but cannot analyse. A Darwin build of ctrace is the real
+   fix; the plan avoids the problem by running in Docker.
 6. **Third-party analysers are unreachable.** `--invoke=cppcheck` resolves to
    the hard-coded path `/opt/homebrew/bin/cppcheck` and silently produces no
    output. Only `ctrace_stack_analyzer` is exercised by the plan.
@@ -71,4 +70,4 @@ Still open:
    `docker exec <container> xwininfo -root -tree -display :99`. Re-run that
    after any change under `appendices/docker/`.
 8. **Windows is not in the plan.** The WSL detection and setup flow
-   (`main.js`) has no scenario, because the delivery targets Linux and macOS.
+   (`main.js`) has no scenario, and the plan has no OS-specific scenario at all.
