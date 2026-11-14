@@ -599,21 +599,25 @@ fn source_files(root: &Path) -> Vec<PathBuf> {
 /// batch: one unreadable file should not hide the findings of the rest.
 fn merge_reports(reports: &[String]) -> Option<String> {
     let mut findings = Vec::new();
+    let mut runs = Vec::new();
     for report in reports {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(report) else {
             continue;
         };
         if let Some(list) = value["findings"].as_array() {
             findings.extend(list.iter().cloned());
-        } else if let Some(runs) = value["runs"].as_array() {
-            for run in runs {
-                if let Some(results) = run["results"].as_array() {
-                    findings.extend(results.iter().cloned());
-                }
-            }
+        } else if let Some(list) = value["runs"].as_array() {
+            // SARIF results keep their own shape: the interface reads them as
+            // runs, and found nothing when they were filed under "findings".
+            runs.extend(
+                list.iter()
+                    .filter(|run| run["results"].as_array().is_some_and(|r| !r.is_empty()))
+                    .cloned(),
+            );
         }
     }
-    (!findings.is_empty()).then(|| serde_json::json!({ "findings": findings }).to_string())
+    (!findings.is_empty() || !runs.is_empty())
+        .then(|| serde_json::json!({ "findings": findings, "runs": runs }).to_string())
 }
 
 /// Analyses every source file in the open folder, one after another.
@@ -913,7 +917,9 @@ mod tests {
         ])
         .unwrap();
         let value: serde_json::Value = serde_json::from_str(&merged).unwrap();
-        assert_eq!(value["findings"].as_array().unwrap().len(), 3);
+        assert_eq!(value["findings"].as_array().unwrap().len(), 2);
+        assert_eq!(value["runs"][0]["results"][0]["message"]["text"], "two");
+        assert!(merge_reports(&[r#"{"runs":[{"results":[]}]}"#.into()]).is_none());
         // Nothing to report is not a report.
         assert!(merge_reports(&[r#"{"findings":[]}"#.into()]).is_none());
         assert!(merge_reports(&[]).is_none());

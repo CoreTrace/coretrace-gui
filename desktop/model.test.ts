@@ -69,6 +69,33 @@ describe("report decoding", () => {
     location: { path: "src/main.cpp", line: 8 },
     message: "<script>untrusted text</script>",
   };
+  it("reads a merged folder report holding both shapes", () => {
+    const merged = JSON.stringify({
+      findings: [finding],
+      runs: [
+        {
+          results: [
+            {
+              ruleId: "StackBufferOverflow",
+              message: { text: "overflow" },
+              locations: [
+                {
+                  physicalLocation: {
+                    artifactLocation: { uri: "a.c" },
+                    region: { startLine: 12 },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(parseFindings(merged).map((f) => [f.path, f.line])).toEqual([
+      ["src/main.cpp", 8],
+      ["a.c", 12],
+    ]);
+  });
   it("reads canonical reports without interpreting tool text", () => {
     expect(
       parseFindings(

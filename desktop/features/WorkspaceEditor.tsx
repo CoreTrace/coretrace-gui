@@ -8,6 +8,8 @@ import {
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import "monaco-editor/esm/vs/basic-languages/monaco.contribution";
+// editor.api ships no features: without this Ctrl+F opens nothing.
+import "monaco-editor/esm/vs/editor/contrib/find/browser/findController";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import {
   ChevronDown,
