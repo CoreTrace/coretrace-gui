@@ -1,8 +1,9 @@
-# CoreTrace GUI — acceptance test appendices
+# CoreTrace Desktop — acceptance test appendices
 
 Everything a tester needs to run the test plan without help from the team.
-No compilation is required: the tests run against the **published binaries** of
-release **v5.1.0**.
+No compilation is required: the tests run against the **published package** of
+release **v6.0.0-beta.3**. The interface is in French; the test plan quotes its
+labels as displayed.
 
 ```
 appendices/
@@ -20,61 +21,74 @@ appendices/
     ├── DS04_infeasible_path.c
     ├── DS05_recursion.c
     ├── DS06_cpp_array_oob.cpp
-    ├── DS07_invalid.txt
-    └── DS08_large_file.c
+    └── DS07_invalid.txt
 ```
 
 ## Download links
 
 | Item | Link |
 |---|---|
-| Release under test (v5.1.0) | https://github.com/CoreTrace/coretrace-gui/releases/tag/v5.1.0 |
+| Release under test (v6.0.0-beta.3) | https://github.com/CoreTrace/coretrace-gui/releases/tag/v6.0.0-beta.3 |
+| Analyser installed in the image (ctrace v0.85.0) | https://github.com/CoreTrace/coretrace/releases/tag/v0.85.0 |
 | Source code | https://github.com/CoreTrace/coretrace-gui |
-| API documentation | https://coretrace.github.io/coretrace-gui/ |
 
 ## Setup — Docker (Linux, macOS or Windows)
 
 The whole test plan runs in this environment, whatever your operating system.
 Requires Docker and about 3 GB of free disk space (on Windows, run the scripts
-from WSL or Git Bash; on a Mac, give Docker Desktop at least 6 GB of RAM). The image downloads the
-AppImage, extracts it, and serves the running application over noVNC, so the
-only thing you need locally is a browser.
+from WSL or Git Bash; on a Mac, give Docker Desktop at least 6 GB of RAM). The
+image installs the published Linux package and the ctrace analyser, and serves
+the running application over noVNC, so the only thing you need locally is a
+browser.
 
 ```sh
 cd appendices/docker
-./build.sh            # ~5 min, downloads the AppImage once
+./build.sh            # ~5 min the first time
 ./run.sh              # mounts ../datasets at /home/tester/workspace
 ```
 
 Then open <http://localhost:6080/>. The page connects on its own — there is no
-Connect button to find, and the CoreTrace GUI window fills the canvas. Inside
-the app, the test data set is at `/home/tester/workspace`.
+Connect button to find — and shows the CoreTrace window. Inside the app, the
+test data set is at `/home/tester/workspace`.
 
-Stop the container with `Ctrl+C` in the terminal running `run.sh`.
+Stop the container with `Ctrl+C` in the terminal running `run.sh`, or by closing
+the application window. Nothing is kept between two runs of the container: the
+analyser has to be selected again (scenario **F9**).
+
+### File pickers
+
+The application opens the system's file picker to choose a folder or the
+analyser. Browse with the mouse (`Home`, then `workspace`), or type a path
+starting with `/`: the first `/` opens the path field. Browser shortcuts such as
+Ctrl+L act on your own browser, not on the picker.
 
 ### If the browser shows nothing
 
-The container prints a lot at startup — xkbcomp keysym warnings, a D-Bus
-connection error, `Xlib: extension "DPMS" missing`. All three are normal in a
-headless container and none of them stops the application. Judge the container
-by these instead:
+The container prints a lot at startup — xkbcomp keysym warnings,
+`Xlib: extension "DPMS" missing`. They are normal in a headless container and do
+not stop the application. Judge the container by these instead:
 
 ```sh
-docker exec coretrace-gui-atp xwininfo -root -tree -display :99 | grep "CTrace GUI"
+docker exec coretrace-gui-atp xwininfo -root -tree -display :99 | grep '"CoreTrace"'
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:6080/
 ```
 
-The first must list a `1200x800` window, the second must print `200`. If both
+The first must list a `1440x940` window, the second must print `200`. If both
 hold, the application is running and the problem is the browser view: open
-<http://localhost:6080/vnc_lite.html>, or hard-reload the page (Ctrl+Shift+R) in
-case an older non-connecting version of it was cached.
+<http://localhost:6080/vnc_lite.html>, or hard-reload the page (Ctrl+Shift+R).
 
-## clang 20
+## The analyser
 
-The analyser compiles the source under test to LLVM IR before analysing it and
-needs clang 20. The Docker image already contains it. Without it the analyser
-does not report an error — it returns "0 diagnostics" for every file — so
-scenario **F9** checks the toolchain before the analysis scenarios.
+CoreTrace Desktop ships no analyser: local analysis uses a `ctrace` program
+chosen once in *Paramètres*. The image provides **ctrace v0.85.0** at
+`/opt/coretrace/bin/ctrace`, with clang 20, which it needs to compile the file
+under test.
+
+- The release notes of v6.0.0-beta.3 point to ctrace v0.74.0. That version
+  writes a report the application cannot read (`Format de rapport non reconnu`),
+  which is why the image uses v0.85.0.
+- Only the stack analyser built into ctrace runs. cppcheck, tscancode, ikos and
+  flawfinder are not installed; *Paramètres* lists them as missing.
 
 ## Reporting an anomaly
 

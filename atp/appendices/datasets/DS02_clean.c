@@ -4,7 +4,7 @@
 
 void copy_name(const char *name)
 {
-    char buf[16];
+    char buf[16] = {0};
     snprintf(buf, sizeof(buf), "%s", name);
     printf("%s\n", buf);
 }
