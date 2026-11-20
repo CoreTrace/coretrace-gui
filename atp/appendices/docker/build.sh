@@ -16,7 +16,20 @@ if [ -z "$TESTER_UID" ]; then
     TESTER_UID="$SUDO_UID"
   fi
 fi
-if [ "$TESTER_UID" = "0" ]; then
+# Check the UID here, so a bad value fails now rather than after the package downloads.
+case "$TESTER_UID" in
+  '' | *[!0-9]*)
+    echo "TESTER_UID must be a decimal number, not '$TESTER_UID'." >&2
+    exit 1
+    ;;
+esac
+# Drop leading zeros: "0010" is UID 10, and "0000" is root.
+TESTER_UID="$(printf '%s' "$TESTER_UID" | sed 's/^0*//')"
+if [ "${#TESTER_UID}" -gt 10 ] || [ "${TESTER_UID:-0}" -gt 4294967294 ]; then
+  echo "TESTER_UID is out of range: the largest UID is 4294967294." >&2
+  exit 1
+fi
+if [ -z "$TESTER_UID" ]; then
   echo "Cannot build as root: run ./build.sh as your own user, or set TESTER_UID to the" >&2
   echo "UID that owns the data set. To use Docker without sudo, see" >&2
   echo "https://docs.docker.com/engine/install/linux-postinstall/" >&2
