@@ -1,0 +1,207 @@
+{
+  "measured_utc": "2026-11-20",
+  "source_commit": "a63995db01c7ddde3fa48ff64a59b11a89572517",
+  "tools": {
+    "typescript": "Version 5.9.3",
+    "clippy": "clippy 0.1.95 (59807616e1 2026-04-14)",
+    "npm": "11.19.1",
+    "osv_scanner": "osv-scanner version: 2.7.1"
+  },
+  "source": {
+    "typescript": {
+      "current_config_errors": 0,
+      "additional_errors": 17,
+      "by_code": {
+        "TS18048": 2,
+        "TS2345": 3,
+        "TS2532": 10,
+        "TS6133": 2
+      }
+    },
+    "clippy": {
+      "error": 0,
+      "warning": 0
+    },
+    "top_files": [
+      {
+        "path": "desktop/features/Analyses.test.tsx",
+        "findings": 3
+      },
+      {
+        "path": "desktop/model.test.ts",
+        "findings": 3
+      },
+      {
+        "path": "desktop/model.ts",
+        "findings": 3
+      },
+      {
+        "path": "desktop/App.tsx",
+        "findings": 2
+      },
+      {
+        "path": "desktop/features/Analyses.tsx",
+        "findings": 2
+      }
+    ]
+  },
+  "outdated_direct_dependencies": {
+    "npm": {
+      "@tauri-apps/api": {
+        "current": "2.11.1",
+        "wanted": "2.12.5",
+        "latest": "2.12.5"
+      },
+      "@tauri-apps/cli": {
+        "current": "2.11.4",
+        "wanted": "2.12.6",
+        "latest": "2.12.6"
+      },
+      "@testing-library/user-event": {
+        "current": "14.6.7",
+        "wanted": "14.6.13",
+        "latest": "14.6.13"
+      },
+      "@types/react": {
+        "current": "19.2.18",
+        "wanted": "19.3.0",
+        "latest": "19.3.0"
+      },
+      "@types/react-dom": {
+        "current": "19.2.7",
+        "wanted": "19.3.0",
+        "latest": "19.3.0"
+      },
+      "@vitejs/plugin-react": {
+        "current": "4.7.0",
+        "wanted": "4.7.0",
+        "latest": "6.3.0"
+      },
+      "jsdom": {
+        "current": "26.1.0",
+        "wanted": "26.1.0",
+        "latest": "31.0.1"
+      },
+      "lucide-react": {
+        "current": "0.468.0",
+        "wanted": "0.468.0",
+        "latest": "1.77.0"
+      },
+      "monaco-editor": {
+        "current": "0.52.2",
+        "wanted": "0.52.2",
+        "latest": "0.57.0"
+      },
+      "prettier": {
+        "current": "3.9.6",
+        "wanted": "3.10.1",
+        "latest": "3.10.1"
+      },
+      "react": {
+        "current": "19.2.8",
+        "wanted": "19.3.1",
+        "latest": "19.3.1"
+      },
+      "react-dom": {
+        "current": "19.2.8",
+        "wanted": "19.3.1",
+        "latest": "19.3.1"
+      },
+      "typescript": {
+        "current": "5.9.3",
+        "wanted": "5.9.3",
+        "latest": "7.0.2"
+      },
+      "vite": {
+        "current": "6.4.3",
+        "wanted": "6.4.6",
+        "latest": "8.3.8"
+      },
+      "vitest": {
+        "current": "3.2.7",
+        "wanted": "3.2.7",
+        "latest": "5.1.1"
+      }
+    },
+    "cargo": {
+      "keyring": {
+        "current": "3.6.3",
+        "latest": "4.2.0"
+      },
+      "open": {
+        "current": "5.4.3",
+        "latest": "5.4.5"
+      },
+      "reqwest": {
+        "current": "0.12.28",
+        "latest": "0.13.5"
+      },
+      "serde_json": {
+        "current": "1.0.151",
+        "latest": "1.0.154"
+      },
+      "sha2": {
+        "current": "0.10.9",
+        "latest": "0.11.1"
+      },
+      "tauri": {
+        "current": "2.11.5",
+        "latest": "2.12.7"
+      },
+      "tauri-build": {
+        "current": "2.6.3",
+        "latest": "2.7.6"
+      },
+      "tauri-plugin-dialog": {
+        "current": "2.7.3",
+        "latest": "2.8.4"
+      },
+      "tauri-plugin-updater": {
+        "current": "2.12.0",
+        "latest": "2.14.1"
+      },
+      "tokio": {
+        "current": "1.53.1",
+        "latest": "1.54.1"
+      },
+      "uuid": {
+        "current": "1.26.0",
+        "latest": "1.29.3"
+      },
+      "zstd": {
+        "current": "0.13.3",
+        "latest": "0.14.4"
+      }
+    }
+  },
+  "osv": {
+    "package-lock.json": {
+      "packages_scanned": 227,
+      "affected_packages": 5,
+      "package_advisory_groups": 11,
+      "by_severity": {
+        "critical": 2,
+        "high": 2,
+        "medium": 6,
+        "low": 1,
+        "none": 0,
+        "unscored": 0
+      },
+      "distinct_cve_ids": 10
+    },
+    "src-tauri/Cargo.lock": {
+      "packages_scanned": 514,
+      "affected_packages": 20,
+      "package_advisory_groups": 44,
+      "by_severity": {
+        "critical": 2,
+        "high": 4,
+        "medium": 4,
+        "low": 3,
+        "none": 0,
+        "unscored": 31
+      },
+      "distinct_cve_ids": 9
+    }
+  }
+}

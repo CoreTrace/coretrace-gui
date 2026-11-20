@@ -1,0 +1,38 @@
+name: Security debt
+description: Track public dependency maintenance or hardening work. Report vulnerabilities privately using SECURITY.md.
+labels: ["security-debt"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Rate the impact on the product or development workflow.
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: true
+  - type: input
+    id: estimate
+    attributes:
+      label: Estimated effort
+      description: Include implementation, review and verification.
+      placeholder: e.g. 4 developer-hours
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and impact
+      description: Give the measured revision, affected component and baseline or advisory reference. Keep product vulnerability details in the private reporting channel.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Describe the expected outcome and the check that will demonstrate it.
+    validations:
+      required: true

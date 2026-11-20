@@ -14,6 +14,8 @@ Thanks for your interest. This guide takes you from choosing an issue to a merge
   the About panel. For a vulnerability, follow [SECURITY.md](SECURITY.md) instead of opening a
   public issue.
 
+For maintenance work, use the [desktop debt register](docs/debt.md) to record severity, estimated effort and the check that will verify the fix.
+
 ## Set up
 
 Install Node.js 22.19 or newer, Rust 1.95 or newer and the
