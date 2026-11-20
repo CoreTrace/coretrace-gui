@@ -8,7 +8,7 @@ coretrace-gui and coretrace-vscode, then extended to the others through the
 promise zero debt: we **measure** it, **block** what increases it, **repay** it at a set
 pace and **track** the trend.
 
-## 1\. Definitions
+## 1. Definitions
 
 |Term|Definition|
 |-|-|
@@ -18,10 +18,10 @@ pace and **track** the trend.
 |New debt|Any finding not in the baseline.|
 |AI-assisted code|Code written or substantially modified by an AI tool (agent, multi-line completion, test generation).|
 
-## 2\. Debt register
+## 2. Debt register
 
 * Any known debt not fixed right away is a **GitHub issue** in the relevant repository,
-created with the "Debt" form (`.github/ISSUE\_TEMPLATE/debt.yml`).
+created with the "Debt" form (`.github/ISSUE_TEMPLATE/debt.yml`).
 * Labels: `tech-debt` or `security-debt`, plus a severity `severity:critical`,
 `severity:high`, `severity:medium` or `severity:low`.
 * Each issue gives: the location, the impact, an effort estimate and, if one exists, the
@@ -29,7 +29,7 @@ finding's identifier in the baseline.
 * A `TODO` in the code carries its issue number: `TODO(#123): ...`. A `TODO` without an
 issue counts as new debt for the gate.
 
-## 3\. AI-assisted code
+## 3. AI-assisted code
 
 1. **Disclosure:** a PR whose code is AI-assisted carries the `ai-assisted` label, and the
 relevant commits carry the `Assisted-by: <tool and model>` trailer.
@@ -41,7 +41,7 @@ that agents read before acting: commands, prohibitions, definition of "done".
 `main`, does not merge, and does not modify CI, `AGENTS.md` or the baseline without an
 explicit request.
 
-## 4\. Review and merge
+## 4. Review and merge
 
 No PR is merged without:
 
@@ -62,7 +62,7 @@ ruleset):
 
 Without this setting, a red CI does not prevent merging: the gate would only be advice.
 
-## 5\. Repayment
+## 5. Repayment
 
 * **15 to 20 % of each sprint** is reserved for `tech-debt` and `security-debt` issues,
 planned on the same footing as features.
@@ -83,7 +83,7 @@ vulnerabilities.
 * **Ratchet rule:** when a PR repays debt, the baseline is updated in the same PR. Repaid
 debt can no longer come back unnoticed.
 
-## 6\. Accepting new debt
+## 6. Accepting new debt
 
 Sometimes adding debt is the right call (urgent fix, prototype). In that case, the PR:
 
@@ -93,16 +93,16 @@ Sometimes adding debt is the right call (urgent fix, prototype). In that case, t
 
 A critical vulnerability is not accepted: it is fixed.
 
-## 7\. Tracking
+## 7. Tracking
 
-* Every sprint: `p4/indicators.py` is run on each demonstrated repository; the output is
+* Every sprint: `indicators.py` is run on each demonstrated repository; the output is
 presented at the sprint review.
 * Every quarter: review of this policy, the thresholds (complexity, length, costs in
 minutes) and the list of banned functions, based on the indicators.
 * Before each release: scans are rerun, because a CVE published since the last run can
 make unchanged code vulnerable.
 
-## 8\. Roles
+## 8. Roles
 
 |Role|Responsibilities|
 |-|-|

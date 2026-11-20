@@ -2,9 +2,14 @@
 
 Debt has no single measure. We track four proxy indicators, chosen because they can be
 computed automatically, each answers a specific question, and together they cover both
-kinds of debt and the effect of AI. `indicators.py` computes them for a repository:
+kinds of debt and the effect of AI. `indicators.py` computes them for a repository. Run it from the repository root:
 
+```sh
+python3 indicators.py --since 2026-09-01
+```
 
+`--since` is the start of the period, for instance the start of the sprint; it defaults to
+90 days ago. The PR and MTTR lines need the GitHub CLI, logged in (`gh auth login`).
 
 |#|Indicator|Question|Calculation|Source|Target|
 |-|-|-|-|-|-|
