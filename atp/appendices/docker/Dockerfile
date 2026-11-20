@@ -69,7 +69,7 @@ RUN mkdir -p /opt/coretrace \
 # host user's UID, or the mounted data set is read-only inside the container.
 ARG TESTER_UID=1000
 RUN userdel -r ubuntu 2>/dev/null || true \
-    && useradd -m -u "$TESTER_UID" -s /bin/bash tester && mkdir -p /home/tester/workspace \
+    && useradd -m -l -u "$TESTER_UID" -s /bin/bash tester && mkdir -p /home/tester/workspace \
     && chown -R tester:tester /home/tester \
     && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
