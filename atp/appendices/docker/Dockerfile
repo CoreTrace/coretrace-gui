@@ -65,7 +65,11 @@ RUN mkdir -p /opt/coretrace \
 # /tmp/.X11-unix is created here because Xvfb cannot create it as a non-root user
 # and prints an alarming "ERROR" when it is missing, even though it goes on to
 # start normally — a tester should not have to judge whether that is a defect.
-RUN useradd -m -s /bin/bash tester && mkdir -p /home/tester/workspace \
+# ubuntu:24.04 ships a "ubuntu" user with UID 1000: remove it so tester can take the
+# host user's UID, or the mounted data set is read-only inside the container.
+ARG TESTER_UID=1000
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && useradd -m -u "$TESTER_UID" -s /bin/bash tester && mkdir -p /home/tester/workspace \
     && chown -R tester:tester /home/tester \
     && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 

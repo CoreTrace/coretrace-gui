@@ -9,5 +9,6 @@ if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
   PLATFORM_FLAG="--platform linux/amd64"
 fi
 # shellcheck disable=SC2086
-docker build $PLATFORM_FLAG --build-arg CORETRACE_VERSION="$VERSION" -t coretrace-gui-atp .
+docker build $PLATFORM_FLAG --build-arg CORETRACE_VERSION="$VERSION" \
+  --build-arg TESTER_UID="$(id -u)" -t coretrace-gui-atp .
 echo "Image built: coretrace-gui-atp (CoreTrace Desktop $VERSION)"
