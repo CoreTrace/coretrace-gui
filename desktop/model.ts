@@ -106,10 +106,12 @@ export function parseFindings(
     return findings;
   }
   if (!record(parsed)) throw new Error("Format de rapport non reconnu.");
-  if (Array.isArray(parsed.findings))
-    return parsed.findings.map(finding).filter((f): f is Finding => f !== null);
+  // A folder analysis merges both shapes into one report.
+  const flat = Array.isArray(parsed.findings)
+    ? parsed.findings.map(finding).filter((f): f is Finding => f !== null)
+    : [];
   if (Array.isArray(parsed.runs)) {
-    return parsed.runs.flatMap((run) => {
+    const sarif = parsed.runs.flatMap((run) => {
       if (!record(run) || !Array.isArray(run.results)) return [];
       return run.results.flatMap((result) => {
         if (
@@ -133,7 +135,9 @@ export function parseFindings(
         ];
       });
     });
+    return flat.concat(sarif);
   }
+  if (Array.isArray(parsed.findings)) return flat;
   const single = finding(parsed);
   if (!single) throw new Error("Format de rapport non reconnu.");
   return [single];

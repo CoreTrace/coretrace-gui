@@ -5,26 +5,30 @@ What to upload on the Innovation platform:
 | File | Where it goes |
 |---|---|
 | `CoreTrace-GUI_ATP.xlsx` | the ATP Excel |
-| `CoreTrace-GUI_ATP_appendices.zip` (130 KB) | the appendices archive (limit: 200 MB) |
+| `CoreTrace-GUI_ATP_appendices.zip` | the appendices archive (limit: 200 MB) |
 
 The workbook is built from `ATP_template.xlsx` and keeps its two tabs:
 
 - **Info & Access** — download links, the Docker environment, the test data set
   with its verified expected results, and the notes a tester needs.
-- **Test Plan** — 56 scenarios (`F1`…`F56`, plus `F3b`; `F24` retired) with Feature ID, name, category,
+- **Test Plan** — 24 scenarios (`F1`…`F24`), all run in the Docker environment
+  so the plan is reproducible on any OS, with Feature ID, name, category,
   objective, prerequisites, numbered steps, expected result and development
   status. The **Feedback** column is intentionally empty: the tester fills it.
 
 ## Scope
 
-Only **coretrace-gui v5.1.0** is under test. The analysis binary is a
-prerequisite, shipped inside the release artifacts — testers never build
-anything.
+Only **CoreTrace Desktop v6.0.0-beta.3** (the Tauri rewrite) is under test, from
+its published Linux package. Local analysis uses **ctrace v0.85.0**, installed
+in the Docker image. `F23` and `F24` (sign-in, cloud analysis) need a CoreTrace
+account; connected repositories, dashboards and automatic updates are out of
+scope.
 
 ## Regenerating the workbook
 
 The scenarios live in `scripts/gen_atp.py` next to this README; re-run it with
-`python gen_atp.py` after editing, then rebuild the archive:
+`python gen_atp.py` after editing (pass the path of `ATP_template.xlsx` to
+rebuild from the blank template; by default it rewrites the existing workbook), then rebuild the archive:
 
 ```sh
 cd atp && python scripts/make_appendices_zip.py
@@ -39,36 +43,25 @@ honours the mode at all.
 
 ## Known gaps to close before the next test cycle
 
-Shipped in v5.1.0:
+Found while running the plan against v6.0.0-beta.3 in Docker:
 
-1. **macOS artifact.** ~~The `macos-latest` job is commented out.~~ v5.1.0
-   publishes an unsigned `.dmg` and `.zip` for Apple Silicon. `F3` is now a
-   native install with the Gatekeeper steps spelled out.
-2. **Ctrl-only shortcuts.** ~~`e.metaKey` was never tested.~~ Shortcuts follow
-   the platform, and `F53` covers Cmd on macOS. Tab navigation stays on Ctrl
-   everywhere, because Cmd+Tab is the macOS application switcher.
-3. **Format Document was a no-op** for C/C++ — dropped, and `F24` is retired
-   (the numbering keeps the gap so every cross-reference stays valid).
+1. **Folder analysis shows no result** (`F18`). *Nouvelle analyse* reports
+   "6 fichier(s) analysé(s) sur 6" and "Résultats 0": the merged report filed
+   SARIF results under a key the interface reads in another shape. Fixed in
+   `src-tauri/src/analysis.rs` and `desktop/model.ts`; `F18` stays *In progress*
+   until a release carries the fix.
+2. **In-file search does not open** (`F22`). The editor was built without
+   Monaco's find module. Fixed in `desktop/features/WorkspaceEditor.tsx`; `F22`
+   stays *In progress* until a release carries the fix.
+3. **ctrace v0.74.0 is unreadable.** It writes its own JSON instead of SARIF
+   ("Format de rapport non reconnu"). The image uses v0.85.0 and
+   `docs/releases/v6.0.0-beta.3.md` now says so; the text of the published
+   GitHub release still has to be edited by hand.
+4. **No test account for `F23` and `F24`.** They were run with a team member's
+   own account. Testers need a dedicated CoreTrace account with CTU; put its
+   access in the `CoreTrace account` row of `gen_atp.py`. A cloud run of the
+   data set was quoted 4 832 CTU and billed 3 204.
 
-Still open:
-
-4. **No Intel macOS artifact.** The x64 job targeted `macos-13`, which GitHub
-   has retired; a job pinned to a retired label queues forever instead of
-   failing, so v5.1.0 shipped without it. The matrix now uses `macos-15-intel`,
-   but that fix is not in the v5.1.0 tag. Until an Intel build ships, `F3b`
-   routes Intel Macs through Docker.
-5. **The analyser binary is Linux-only.** `bin/ctrace` is an x86-64 ELF, so on
-   macOS the app runs but cannot analyse — `F54` pins the message it shows
-   instead. A Darwin build of ctrace is the real fix; until then, run `F28`
-   to `F38` on Linux.
-6. **Third-party analysers are unreachable.** `--invoke=cppcheck` resolves to
-   the hard-coded path `/opt/homebrew/bin/cppcheck` and silently produces no
-   output. Only `ctrace_stack_analyzer` is exercised by the plan.
-7. ~~**The Docker image has not been built end to end here.**~~ It now has
-   been, from the delivered archive rather than the working copy: unzip into a
-   clean directory, run `build.sh` and `run.sh` from those files, and confirm
-   the app window on the virtual display with
-   `docker exec <container> xwininfo -root -tree -display :99`. Re-run that
-   after any change under `appendices/docker/`.
-8. **Windows is not in the plan.** The WSL detection and setup flow
-   (`main.js`) has no scenario, because the delivery targets Linux and macOS.
+When a release carries fixes 1 and 2, bump `CORETRACE_VERSION` in
+`appendices/docker/Dockerfile` and `build.sh`, re-run `F18` and `F22`, and mark
+them *Done*.

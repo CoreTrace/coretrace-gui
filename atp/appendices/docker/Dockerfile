@@ -1,9 +1,9 @@
-# CoreTrace GUI — reproducible acceptance-test environment (Linux, and macOS via
-# Docker Desktop). The image downloads the published Linux AppImage, extracts it
+# CoreTrace Desktop — reproducible acceptance-test environment for any OS with
+# Docker. The image installs the published Linux package and the ctrace analyser,
 # and serves the running application over noVNC so the tester only needs a
 # browser. No source build is required.
 #
-#   docker build -t coretrace-gui-atp .
+#   ./build.sh
 #   ./run.sh
 #   open http://localhost:6080
 #
@@ -11,14 +11,16 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# X server, VNC bridge, and the shared libraries Electron links against.
+# X server, VNC bridge and a window manager. Without a window manager the file
+# pickers never get keyboard focus, so a tester cannot type a path in them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl xvfb x11-utils x11vnc novnc websockify python3 \
+      ca-certificates curl xvfb x11-utils x11vnc novnc websockify python3 openbox \
+      dbus-x11 gnome-keyring libsecret-tools \
       libgtk-3-0t64 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
       libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
       libxrandr2 libxshmfence1 libnss3 libnspr4 libxss1 libxtst6 libnotify4 \
       libasound2t64 libsecret-1-0 libglib2.0-0t64 \
-      fonts-dejavu-core xdg-utils gnupg wget \
+      fonts-dejavu-core xdg-utils gnupg wget git \
     && rm -rf /var/lib/apt/lists/*
 
 # clang 20 is a hard runtime requirement of the analyser: it compiles the source
@@ -41,17 +43,25 @@ RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
     && rm -rf /var/lib/apt/lists/*
 
 # Version under test. Override with --build-arg to test another release.
-ARG CTRACE_GUI_VERSION=5.1.0
+ARG CORETRACE_VERSION=6.0.0-beta.3
 
-RUN curl -fL --retry 3 -o /tmp/CtraceGUI.AppImage \
-      "https://github.com/CoreTrace/coretrace-gui/releases/download/v${CTRACE_GUI_VERSION}/CtraceGUI-${CTRACE_GUI_VERSION}.AppImage" \
-    && chmod +x /tmp/CtraceGUI.AppImage \
-    && cd /opt && /tmp/CtraceGUI.AppImage --appimage-extract > /dev/null \
-    && mv squashfs-root ctrace-gui \
-    && rm /tmp/CtraceGUI.AppImage \
-    && chmod -R a+rX /opt/ctrace-gui
+# The .deb declares its own dependencies (WebKitGTK, GTK), so apt resolves them.
+RUN curl -fL --retry 3 -o /tmp/coretrace.deb \
+      "https://github.com/CoreTrace/coretrace-gui/releases/download/v${CORETRACE_VERSION}/CoreTrace_${CORETRACE_VERSION}_amd64.deb" \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/coretrace.deb \
+    && rm -rf /tmp/coretrace.deb /var/lib/apt/lists/*
 
-# Electron refuses to run its sandbox as root, so the app runs as an ordinary user.
+# Local analysis needs a ctrace binary chosen once in Paramètres; the desktop
+# ships none. The v6.0.0-beta.3 notes point to v0.74.0, but that version writes a
+# report the desktop cannot read ("Format de rapport non reconnu").
+ARG CTRACE_VERSION=0.85.0
+RUN mkdir -p /opt/coretrace \
+    && curl -fL --retry 3 "https://github.com/CoreTrace/coretrace/releases/download/v${CTRACE_VERSION}/coretrace-v${CTRACE_VERSION}-linux-amd64.tar.gz" \
+      | tar -xz --strip-components=1 -C /opt/coretrace \
+    && chmod -R a+rX /opt/coretrace
+
+# The app runs as an ordinary user, like on a tester's own machine.
 # /tmp/.X11-unix is created here because Xvfb cannot create it as a non-root user
 # and prints an alarming "ERROR" when it is missing, even though it goes on to
 # start normally — a tester should not have to judge whether that is a defect.

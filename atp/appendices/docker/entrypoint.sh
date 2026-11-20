@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts a virtual X display, exposes it over noVNC on port 6080, then launches
-# CoreTrace GUI inside it.
+# CoreTrace Desktop inside it.
 set -e
 
 SCREEN_SIZE="${SCREEN_SIZE:-1600x1000x24}"
@@ -14,23 +14,20 @@ for _ in $(seq 1 50); do
   sleep 0.2
 done
 
+openbox &
 x11vnc -display :99 -forever -shared -nopw -quiet -rfbport 5900 &
 websockify --web=/usr/share/novnc 6080 localhost:5900 &
 
-echo "CoreTrace GUI is starting. Open http://localhost:6080/ in a browser (it connects on its own)."
+echo "CoreTrace is starting. Open http://localhost:6080/ in a browser (it connects on its own)."
 
-# AppRun resolves the app as "$APPDIR/ctrace-gui" and only detects APPDIR when it
-# runs from a mounted AppImage. This one is extracted, so set it explicitly —
-# otherwise AppRun looks for "/ctrace-gui" and exits 127. Going through AppRun
-# rather than the binary keeps the LD_LIBRARY_PATH and XDG setup it performs.
-export APPDIR=/opt/ctrace-gui
+# There is no GPU in the container: make WebKitGTK render in software instead of
+# opening a blank window.
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+export LIBGL_ALWAYS_SOFTWARE=1
 
-# The app only disables hardware acceleration via CTRACE_DISABLE_GPU (see
-# src/main.js) — the --disable-gpu Chromium flag alone doesn't stop it from
-# initializing the GPU process, which aborts (SIGTRAP) with no /dev/dri here.
-export CTRACE_DISABLE_GPU=1
-
-# --no-sandbox is required because the extracted AppImage has no setuid helper.
-exec "$APPDIR/AppRun" --no-sandbox --disable-gpu "$@"
-
-kill "$XVFB_PID"
+# Signing in stores the session in the desktop keyring: give the container one,
+# unlocked with an empty password, or every sign-in is refused.
+exec dbus-run-session -- sh -c '
+  printf "\n" | gnome-keyring-daemon --unlock --components=secrets --daemonize >/dev/null
+  exec coretrace-desktop "$@"' sh "$@"
