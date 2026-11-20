@@ -36,7 +36,12 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "deb", "appimage"],
-    "resources": ["THIRD_PARTY_NOTICES.txt"],
+    "resources": {
+      "THIRD_PARTY_NOTICES.txt": "THIRD_PARTY_NOTICES.txt",
+      "../LICENSE": "LICENSE",
+      "../NOTICE": "NOTICE",
+      "licenses/LGPL-2.1.txt": "licenses/LGPL-2.1.txt"
+    },
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",

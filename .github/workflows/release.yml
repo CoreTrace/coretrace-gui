@@ -103,7 +103,7 @@ jobs:
       - name: Verify bundle icons
         run: node scripts/check-bundle-icons.cjs
       - name: Third-party notices
-        run: npm run notices
+        run: npm run notices -- --distribution
       - name: Release notes
         id: notes
         shell: bash

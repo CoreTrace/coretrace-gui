@@ -6,7 +6,7 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const root = path.resolve(__dirname, "..");
+const { packages: inventory, root } = require("./desktop-license-packages.cjs");
 const out = path.join(root, "src-tauri/THIRD_PARTY_NOTICES.txt");
 const LICENSE_FILE = /^(licen[cs]e|copying|notice|thirdpartynotices)/i;
 
@@ -18,40 +18,12 @@ function licenseTexts(dir) {
     .map((f) => fs.readFileSync(path.join(dir, f.name), "utf8").replace(/\r\n/g, "\n").trim());
 }
 
-const packages = [];
-
-// ponytail: every platform in Cargo.lock is listed (macOS crates too); over-inclusion is harmless.
-const metadata = JSON.parse(
-  execFileSync("cargo", ["metadata", "--format-version", "1", "--locked"], {
-    cwd: path.join(root, "src-tauri"),
-    maxBuffer: 256 * 1024 * 1024,
-  }),
-);
-for (const p of metadata.packages) {
-  if (p.source === null) continue; // the app itself
-  packages.push({
-    name: `${p.name} ${p.version}`,
-    license: p.license || "see license file",
-    url: p.repository || `https://crates.io/crates/${p.name}`,
-    texts: licenseTexts(path.dirname(p.manifest_path)),
-  });
-}
-
-const lock = require(path.join(root, "package-lock.json"));
-for (const [key, p] of Object.entries(lock.packages)) {
-  if (!key || p.dev || p.extraneous || p.link) continue;
-  const dir = path.join(root, key);
-  if (!fs.existsSync(dir)) throw new Error(`${key} is not installed; run npm ci first`);
-  const name = key.split("node_modules/").pop();
-  const pkg = require(path.join(dir, "package.json"));
-  const repo = typeof pkg.repository === "string" ? pkg.repository : pkg.repository?.url;
-  packages.push({
-    name: `${name} ${p.version}`,
-    license: p.license || "see license file",
-    url: repo || `https://www.npmjs.com/package/${name}`,
-    texts: licenseTexts(dir),
-  });
-}
+const packages = inventory.map((p) => ({
+  name: `${p.name} ${p.version}`,
+  license: p.license,
+  url: p.url,
+  texts: licenseTexts(p.dir),
+}));
 
 const groups = new Map();
 const missing = [];
@@ -82,6 +54,15 @@ if (missing.length) {
     "The following components ship no license file; their declared license applies:\n\n" +
       missing.map((p) => `${p.name} (${p.license}) - ${p.url}`).join("\n"),
   );
+}
+if (process.argv.includes("--distribution") && process.platform === "linux") {
+  if (fs.existsSync("/etc/debian_version")) {
+    sections.push(execFileSync("sh", [path.join(__dirname, "linux-webview-notices.sh")], {
+      encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+    }).trimEnd());
+  } else {
+    console.warn("Add the native WebView notices for your Linux distribution before shipping; see docs/gui-licenses.md.");
+  }
 }
 fs.writeFileSync(out, sections.join(`\n\n${rule}\n\n`) + "\n");
 console.log(

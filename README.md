@@ -101,3 +101,9 @@ See [migration/rollback](docs/tauri-migration.md) and
 in `src/` as reference, with its [README](docs/electron-readme.md),
 [manifest](docs/electron-package.json) and `tests/`. It is not the new runtime; recover it
 in a separate clean worktree at `807e2c9` when needed. Existing user changes are preserved.
+
+## Licenses and attribution
+
+See the [desktop GUI license inventory](docs/gui-licenses.md) for platform linkage,
+installer contents, attribution and corresponding-source obligations. Regenerate the
+[CycloneDX SBOM](docs/gui-sbom.cdx.json) with `npm run sbom`.
