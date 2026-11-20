@@ -2,19 +2,12 @@
 
 Debt has no single measure. We track four proxy indicators, chosen because they can be
 computed automatically, each answers a specific question, and together they cover both
-kinds of debt and the effect of AI. `indicators.py` computes them for a repository. Run it from the repository root:
-
-```sh
-python3 indicators.py --since 2026-09-01
-```
-
-`--since` is the start of the period, for instance the start of the sprint; it defaults to
-90 days ago. The PR and MTTR lines need the GitHub CLI, logged in (`gh auth login`).
+kinds of debt and the effect of AI. Each is computed from the source given in the table.
 
 |#|Indicator|Question|Calculation|Source|Target|
 |-|-|-|-|-|-|
 |1|**Measured debt**: findings by severity, debt days, days / 1000 lines|How much debt do we have, and where?|Sum of finding costs (§ below)|`debt-baseline.json` and its git history|Decreasing from one sprint to the next; 0 critical|
-|2|**Mean time to remediate a vulnerability (MTTR)**|Do we react fast enough to security debt?|Mean and median of (closed − opened) for closed `security-debt` issues|GitHub issues|Within the policy deadlines (critical 7 d, high 30 d)|
+|2|**Mean time to remediate a vulnerability (MTTR)**|Do we react fast enough to security debt?|Mean and median of (closed − opened) for closed `security-debt` issues, per severity label; open issues past their deadline|GitHub issues|Within the policy deadlines (critical 7 d, major 30 d, minor 90 d); none overdue|
 |3|**Share of AI-assisted PRs**|What share of the change flow comes from AI?|Merged PRs labelled `ai-assisted` / merged PRs; commits with `Assisted-by` / commits|PR labels, commit trailers|No target: used to read indicators 1 and 4|
 |4|**Debt added vs. debt repaid**|Is repayment keeping pace?|Successive increases and decreases of baseline debt, in days|Git history of `debt-baseline.json`|Repaid / added ratio > 1|
 

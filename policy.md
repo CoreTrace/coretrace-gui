@@ -21,9 +21,9 @@ pace and **track** the trend.
 ## 2. Debt register
 
 * Any known debt not fixed right away is a **GitHub issue** in the relevant repository,
-created with the "Debt" form (`.github/ISSUE_TEMPLATE/debt.yml`).
-* Labels: `tech-debt` or `security-debt`, plus a severity `severity:critical`,
-`severity:high`, `severity:medium` or `severity:low`.
+created with its debt issue form: the organisation's "Debt" form, or the repository's own.
+* Labels: `tech-debt` or `security-debt`, plus a severity: `severity/critical`,
+`severity/major` or `severity/minor`.
 * Each issue gives: the location, the impact, an effort estimate and, if one exists, the
 finding's identifier in the baseline.
 * A `TODO` in the code carries its issue number: `TODO(#123): ...`. A `TODO` without an
@@ -47,15 +47,18 @@ No PR is merged without:
 
 1. a **green quality gate**: the "Debt baseline", "Security scan" and "Tests for new code"
 jobs;
-2. **one human approval**, from someone other than the author;
+2. **one human approval** from someone other than the author, for every `ai-assisted`
+pull request and every pull request from a contributor. A maintainer's own pull request
+without AI assistance merges once the gate is green;
 3. approval from a **code owner** if the PR touches `AGENTS.md`, `CLAUDE.md`, CI,
 `debt-baseline.json`, the pre-commit configuration or the licence files.
 
 Setting to apply on `main` in each repository (Settings → Branches, or an organisation
 ruleset):
 
-* Require a pull request before merging, 1 approval, *Require review from Code Owners*,
-*Dismiss stale approvals when new commits are pushed*.
+* Require a pull request before merging, *Require review from Code Owners*, *Dismiss stale
+approvals when new commits are pushed*. A branch rule cannot depend on a label: reviewers
+enforce the approval of point 2.
 * Require status checks to pass: `gate / Debt baseline`, `gate / Security scan`,
 `gate / Tests for new code`, plus the existing build checks.
 * Do not allow bypassing the above settings, including for administrators.
@@ -73,9 +76,8 @@ frequently modified files (code we touch often costs the most).
 |Severity|Deadline|
 |-|-|
 |Critical (CVSS ≥ 9)|7 days; out-of-cycle fix released if needed|
-|High (CVSS 7 to 8.9)|30 days|
-|Medium|90 days|
-|Low|At the next change to the affected file|
+|Major (CVSS 7 to 8.9)|30 days|
+|Minor (CVSS < 7)|90 days, or at the next change to the affected file if sooner|
 
   These deadlines complement those in `SECURITY.md` for externally reported
 vulnerabilities.
@@ -93,16 +95,7 @@ Sometimes adding debt is the right call (urgent fix, prototype). In that case, t
 
 A critical vulnerability is not accepted: it is fixed.
 
-## 7. Tracking
-
-* Every sprint: `indicators.py` is run on each demonstrated repository; the output is
-presented at the sprint review.
-* Every quarter: review of this policy, the thresholds (complexity, length, costs in
-minutes) and the list of banned functions, based on the indicators.
-* Before each release: scans are rerun, because a CVE published since the last run can
-make unchanged code vulnerable.
-
-## 8. Roles
+## 7. Roles
 
 |Role|Responsibilities|
 |-|-|
@@ -110,6 +103,3 @@ make unchanged code vulnerable.
 |Reviewer|Reviews the code as human code; checks tests, security, licences.|
 |Code owners (`@CoreTrace/maintainers`)|Approve changes to rules, CI and baseline; maintain the register.|
 |Security lead|Triages `security-debt` issues, tracks the § 5 deadlines.|
-
-
-
