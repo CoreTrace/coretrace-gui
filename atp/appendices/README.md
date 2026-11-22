@@ -2,7 +2,7 @@
 
 Everything a tester needs to run the test plan without help from the team.
 No compilation is required: the tests run against the **published package** of
-release **v6.0.0-beta.3**. The interface is in French; the test plan quotes its
+release **v6.0.0-beta.4**. The interface is in French; the test plan quotes its
 labels as displayed.
 
 ```
@@ -29,7 +29,7 @@ appendices/
 
 | Item | Link |
 |---|---|
-| Release under test (v6.0.0-beta.3) | https://github.com/CoreTrace/coretrace-gui/releases/tag/v6.0.0-beta.3 |
+| Release under test (v6.0.0-beta.4) | https://github.com/CoreTrace/coretrace-gui/releases/tag/v6.0.0-beta.4 |
 | Analyser installed in the image (ctrace v0.85.0) | https://github.com/CoreTrace/coretrace/releases/tag/v0.85.0 |
 | Source code | https://github.com/CoreTrace/coretrace-gui |
 
