@@ -43,7 +43,7 @@ RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
     && rm -rf /var/lib/apt/lists/*
 
 # Version under test. Override with --build-arg to test another release.
-ARG CORETRACE_VERSION=6.0.0-beta.3
+ARG CORETRACE_VERSION=6.0.0-beta.4
 
 # The .deb declares its own dependencies (WebKitGTK, GTK), so apt resolves them.
 RUN curl -fL --retry 3 -o /tmp/coretrace.deb \

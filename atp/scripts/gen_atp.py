@@ -12,7 +12,7 @@ OUT = Path(__file__).resolve().parent.parent / "CoreTrace-GUI_ATP.xlsx"
 TEMPLATE = sys.argv[1] if len(sys.argv) > 1 else OUT
 
 ACCESS = [
-    ("Release under test", "https://github.com/CoreTrace/coretrace-gui/releases/tag/v6.0.0-beta.3 (CoreTrace Desktop v6.0.0-beta.3)"),
+    ("Release under test", "https://github.com/CoreTrace/coretrace-gui/releases/tag/v6.0.0-beta.4 (CoreTrace Desktop v6.0.0-beta.4)"),
     ("Docker test environment", "appendices/docker/ in the appendices ZIP: run ./build.sh then ./run.sh, then open http://localhost:6080/"),
     ("Test data set", "appendices/datasets/ in the appendices ZIP (expected results: datasets/MANIFEST.md)"),
     ("Tester instructions", "appendices/README.md in the appendices ZIP"),
@@ -36,8 +36,8 @@ DATASETS = [
      "2 warnings - StackBufferOverflow on 'tab' (size 8) line 10, UninitializedLocalRead line 12"),
     ("DS07 - unsupported input", "DS07_invalid.txt",
      "0 result, status 'Terminée avec avertissements', the output quotes 'Unsupported input file type'"),
-    ("CoreTrace account", "TO BE PROVIDED by the CoreTrace team",
-     "Needed for F23 and F24 only. A cloud analysis of the data set returns 24 results and is billed about 3 200 CTU."),
+    ("CoreTrace account", "Use your own Google account to sign in to CoreTrace.",
+     "Needed for F23 and F24 only. F23 is free. F24 requires enough CTU for the quote shown before launch. The reference run returned 24 results and used 3 204 CTU."),
 ]
 
 GETTING_STARTED = [
@@ -51,7 +51,7 @@ GETTING_STARTED = [
 ]
 
 CRIT, SEC, UI = "Critical feature", "Secondary function", "User interface"
-DONE, WIP = "Done", "In progress"
+DONE = "Done"
 
 RUN = "2. Click the red 'Analyser' button above the editor, then 'Sur cette machine'\n3. In the dialog 'Analyser ce fichier local ?', click 'Lancer ctrace'\n4. Wait for the 'Analyses' page to show the result (up to 60 s)"
 
@@ -60,13 +60,13 @@ S = [
  "Bring the test environment up from the published package, with no build step.",
  "Linux with default Docker UID mapping, macOS or Windows with Docker installed and running, 3 GB of free disk space, an internet connection. On Windows, run the scripts from WSL or Git Bash.",
  "1. Unzip the appendices archive\n2. cd appendices/docker\n3. Run ./build.sh (about 5 min the first time)\n4. Run ./run.sh\n5. Open http://localhost:6080/ in a browser (it connects on its own)",
- "The build ends with 'Image built: coretrace-gui-atp (CoreTrace Desktop 6.0.0-beta.3)'. The browser shows a window titled 'CoreTrace'. Its left menu lists 'Nouvelle analyse', 'Accueil', 'Analyses', 'Dépôts', 'Espace de code' and 'Paramètres'. The home page reads 'Bonjour. Que souhaitez-vous analyser ?' and the bottom-right corner reads 'Aucun dossier ouvert'.",
+ "The build ends with 'Image built: coretrace-gui-atp (CoreTrace Desktop 6.0.0-beta.4)'. The browser shows a window titled 'CoreTrace'. Its left menu lists 'Nouvelle analyse', 'Accueil', 'Analyses', 'Dépôts', 'Espace de code' and 'Paramètres'. The home page reads 'Bonjour. Que souhaitez-vous analyser ?' and the bottom-right corner reads 'Aucun dossier ouvert'.",
  DONE),
 ("F2", "Installed version and licence", SEC,
  "Check which version is running and under which licence.",
  "The application is running (F1).",
  "1. Click 'Paramètres' in the left menu\n2. Scroll to the bottom of the page, to the 'À propos' panel",
- "The panel reads 'CoreTrace 6.0.0-beta.3' and 'Distribué sous licence Apache 2.0', and offers a 'Licences open source' button.",
+ "The panel reads 'CoreTrace 6.0.0-beta.4' and 'Distribué sous licence Apache 2.0', and offers a 'Licences open source' button.",
  DONE),
 ("F3", "Open a folder", CRIT,
  "Load the test data set into the code workspace.",
@@ -162,8 +162,8 @@ S = [
  "Analyse every source file of the open folder in one run.",
  "ctrace is selected (F9) and the workspace is open.",
  "1. Click 'Nouvelle analyse' at the top of the left menu\n2. Read the dialog 'Analyser workspace ?'\n3. Click 'Analyser workspace'\n4. Wait for the result (up to 2 min)",
- "The dialog names the open folder (/home/tester/workspace). The run reports '6 fichier(s) analysé(s) sur 6' (DS01 to DS06; the .txt and .md files are not source files). The findings of all six files are listed together: 7 results, namely the ones of F10, F12, F14 and F15. Known anomaly in v6.0.0-beta.3: the page shows 'Résultats 0' although the unfolded 'Sortie de ctrace' contains the findings; corrected in the source code after this release. Report what you observe.",
- WIP),
+ "The dialog names the open folder (/home/tester/workspace). The run reports '6 fichier(s) analysé(s) sur 6' (DS01 to DS06; the .txt and .md files are not source files). The findings of all six files are listed together: 7 results, namely the ones of F10, F12, F14 and F15.",
+ DONE),
 ("F19", "Sign-in dialog", SEC,
  "Start the connection to a CoreTrace account with a device code.",
  "The application is running with an internet connection. No account is needed for this scenario.",
@@ -186,8 +186,8 @@ S = [
  "Find a word in the open file.",
  "The workspace is open (F3). Same keyboard advice as F21.",
  "1. Click DS01_stack_overflow.c in the file tree\n2. Click inside the editor\n3. Press Ctrl+F\n4. Type buf",
- "A search box opens at the top right of the editor, every occurrence of 'buf' is highlighted and the box shows the number of matches. Known anomaly in v6.0.0-beta.3: no search box opens, although the editor's start page advertises 'Ctrl/Cmd + F : rechercher'; corrected in the source code after this release. Report what you observe.",
- WIP),
+ "A search box opens at the top right of the editor, every occurrence of 'buf' is highlighted and the box shows the number of matches.",
+ DONE),
 ("F23", "Sign in to CoreTrace", CRIT,
  "Connect the application to a CoreTrace account.",
  "The application is running with an internet connection. A CoreTrace account (see 'CoreTrace account' in the Info & Access tab).",
@@ -248,7 +248,7 @@ ds_end = r - 1
 note = ds_end + 2
 info.cell(row=note, column=1, value="Notes").font = Font(bold=True, size=12)
 NOTES = [
-    "Version under test: CoreTrace Desktop v6.0.0-beta.3, installed from its published Linux package. The interface is in French; the plan quotes its labels as displayed.",
+    "Version under test: CoreTrace Desktop v6.0.0-beta.4, installed from its published Linux package. The interface is in French; the plan quotes its labels as displayed.",
     "The whole plan runs in the Docker image in appendices/docker, on Linux with default Docker UID mapping, macOS or Windows. No scenario depends on the tester's operating system.",
     "Local analysis uses ctrace v0.85.0, installed in the image at /opt/coretrace/bin/ctrace, with clang 20. Do not use ctrace v0.74.0: the application cannot read the report that version writes ('Format de rapport non reconnu').",
     "Only the stack analyser built into ctrace runs. cppcheck, tscancode, ikos and flawfinder are not installed in the image; the application lists them as missing (scenario F9).",

@@ -3,7 +3,7 @@
 # On Apple Silicon the amd64 platform is forced because the published Linux build
 # is x86-64 only; expect the emulated app to be noticeably slower.
 set -e
-VERSION="${CORETRACE_VERSION:-6.0.0-beta.3}"
+VERSION="${CORETRACE_VERSION:-6.0.0-beta.4}"
 PLATFORM_FLAG=""
 if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
   PLATFORM_FLAG="--platform linux/amd64"
