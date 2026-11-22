@@ -18,8 +18,6 @@ openbox &
 x11vnc -display :99 -forever -shared -nopw -quiet -rfbport 5900 &
 websockify --web=/usr/share/novnc 6080 localhost:5900 &
 
-echo "CoreTrace is starting. Open http://localhost:6080/ in a browser (it connects on its own)."
-
 # There is no GPU in the container: make WebKitGTK render in software instead of
 # opening a blank window.
 export WEBKIT_DISABLE_COMPOSITING_MODE=1
