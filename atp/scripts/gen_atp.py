@@ -41,7 +41,7 @@ DATASETS = [
 ]
 
 GETTING_STARTED = [
-    "1. Install Docker (Docker Desktop on macOS and Windows) and start it. Nothing else is needed: the plan runs the same way on Linux, macOS and Windows.",
+    "1. Install Docker (Docker Desktop on macOS and Windows) and start it. On Linux, use Docker Engine with default UID mapping (see the appendices README).",
     "2. Download CoreTrace-GUI_ATP_appendices.zip, delivered alongside this workbook, and unzip it. It contains the Docker environment, the test data set and a README.",
     "3. In a terminal, go to appendices/docker and run ./build.sh (once, about 5 minutes), then ./run.sh. On Windows, use WSL or Git Bash.",
     "4. Open http://localhost:6080/ in a browser: the CoreTrace window appears. The test data set is already mounted at /home/tester/workspace.",
@@ -58,7 +58,7 @@ RUN = "2. Click the red 'Analyser' button above the editor, then 'Sur cette mach
 S = [
 ("F1", "Launch the application through Docker", CRIT,
  "Bring the test environment up from the published package, with no build step.",
- "Any computer (Linux, macOS or Windows) with Docker installed and running, 3 GB of free disk space, an internet connection. On Windows, run the scripts from WSL or Git Bash.",
+ "Linux with default Docker UID mapping, macOS or Windows with Docker installed and running, 3 GB of free disk space, an internet connection. On Windows, run the scripts from WSL or Git Bash.",
  "1. Unzip the appendices archive\n2. cd appendices/docker\n3. Run ./build.sh (about 5 min the first time)\n4. Run ./run.sh\n5. Open http://localhost:6080/ in a browser (it connects on its own)",
  "The build ends with 'Image built: coretrace-gui-atp (CoreTrace Desktop 6.0.0-beta.3)'. The browser shows a window titled 'CoreTrace'. Its left menu lists 'Nouvelle analyse', 'Accueil', 'Analyses', 'Dépôts', 'Espace de code' and 'Paramètres'. The home page reads 'Bonjour. Que souhaitez-vous analyser ?' and the bottom-right corner reads 'Aucun dossier ouvert'.",
  DONE),
@@ -149,7 +149,7 @@ S = [
 ("F16", "Unsupported input file", CRIT,
  "Never present a file that could not be analysed as clean.",
  "ctrace is selected (F9) and the workspace is open.",
- "1. In 'Espace de code', open DS07_invalid.txt\n" + RUN + "\n5. Click 'Sortie de ctrace' to unfold the raw output",
+ "1. In 'Espace de code', open DS07_invalid.txt\n" + RUN + "\n5. Read 'Sortie de ctrace' (click to expand it if it is collapsed)",
  "The status reads 'Terminée avec avertissements' and a banner states 'Un ou plusieurs outils n'ont pas pu terminer l'analyse.' The page shows 'Résultats 0'. The unfolded output quotes the analyser: 'Unsupported input file type' and 'Failed to analyze'. The application does not hang and stays usable.",
  DONE),
 ("F17", "Jump from a finding to the code", CRIT,
@@ -179,7 +179,7 @@ S = [
 ("F21", "Keyboard shortcuts: save and quick open", UI,
  "Save a file and open another one without the mouse.",
  "The workspace is open (F3). Click once inside the application so the keyboard goes to it. If your browser keeps a shortcut for itself, open the noVNC panel on the left edge of the page, click 'Show extra keys', click 'Ctrl', press the letter, then click 'Ctrl' again.",
- "1. Click DS04_infeasible_path.c in the file tree\n2. Click at the end of the last line and type: // key\n3. Press Ctrl+S\n4. Press Ctrl+P\n5. Type DS01 and press Enter",
+ "1. Click DS04_infeasible_path.c in the file tree\n2. Click at the end of the last line and type: // key\n3. Press Ctrl+S\n4. Press Ctrl+P\n5. Press Tab if the close button has focus, then type DS01 in 'Nom ou chemin…' and press Enter",
  "After step 2 the 'Enregistrer' button is active. After step 3 it is greyed out again without having been clicked. After step 4 a dialog 'Ouvrir un fichier' opens with a field 'Nom ou chemin…' and lists the files of the folder. After step 5 the dialog closes and DS01_stack_overflow.c is open in the editor.",
  DONE),
 ("F22", "Search in a file", UI,
@@ -249,10 +249,10 @@ note = ds_end + 2
 info.cell(row=note, column=1, value="Notes").font = Font(bold=True, size=12)
 NOTES = [
     "Version under test: CoreTrace Desktop v6.0.0-beta.3, installed from its published Linux package. The interface is in French; the plan quotes its labels as displayed.",
-    "The whole plan runs in the Docker image in appendices/docker, on any computer with Docker (Linux, macOS, Windows). No scenario depends on the tester's operating system.",
+    "The whole plan runs in the Docker image in appendices/docker, on Linux with default Docker UID mapping, macOS or Windows. No scenario depends on the tester's operating system.",
     "Local analysis uses ctrace v0.85.0, installed in the image at /opt/coretrace/bin/ctrace, with clang 20. Do not use ctrace v0.74.0: the application cannot read the report that version writes ('Format de rapport non reconnu').",
     "Only the stack analyser built into ctrace runs. cppcheck, tscancode, ikos and flawfinder are not installed in the image; the application lists them as missing (scenario F9).",
-    "F23 and F24 need a CoreTrace account and spend its CTU; every other scenario runs without an account. Out of scope: connected repositories, organisation dashboards and automatic updates.",
+    "F23 and F24 require a CoreTrace account. Without one, record both as account required. Only a confirmed cloud run in F24 spends CTU. Out of scope: connected repositories, organisation dashboards and automatic updates.",
     "A scenario is validated when every expected result is obtained with no blocking or critical anomaly. Report anything else in the Feedback column of the test plan.",
 ]
 for i, line in enumerate(NOTES):

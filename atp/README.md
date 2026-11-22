@@ -41,6 +41,22 @@ so `./build.sh` was refused outright. `make_appendices_zip.py` normalises line
 endings, sets 0755 on scripts, and marks entries as Unix-created so `unzip`
 honours the mode at all.
 
+## Acceptance run on 2026-11-22
+
+Tested the published v6.0.0-beta.3 Linux package and ctrace v0.85.0 from the
+appendices ZIP on Docker Desktop for macOS (amd64 container, UID 501).
+The run used a fresh dataset and a signed-out session.
+
+| Scenarios | Result | Observed |
+|---|---|---|
+| F1–F9 | PASS | noVNC connected, version and licence matched, edits persisted on the host, discard and refresh worked, and the app prompted for and accepted ctrace. |
+| F10–F16 | PASS | DS01–DS07 returned 1, 0, 2, 0, 2, 2 and 0 findings. Recursion showed an error and a note. The unsupported file showed the tool failure. |
+| F17 | PASS | Clicking the DS01 finding opened the editor on line 12. |
+| F18 | FAIL | The app analysed 6 of 6 files and displayed 0 of the expected 7 findings. The raw output contained findings. |
+| F19–F21 | PASS | The device-code dialog opened and could be dismissed. Public cloning worked while signed out. Ctrl+S saved to disk. Ctrl+P, Tab, DS01 and Enter opened the file. |
+| F22 | FAIL | Ctrl+F left focus in the editor. Typing `buf` edited the source. |
+| F23–F24 | Account required (expected) | Sign-in waited for external approval. Cloud analysis was disabled while signed out. No job was submitted or billed. |
+
 ## Known gaps to close before the next test cycle
 
 Found while running the plan against v6.0.0-beta.3 in Docker:

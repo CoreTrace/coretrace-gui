@@ -22,6 +22,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check ATP tester image selection
+        if: runner.os == 'Linux'
+        run: sh atp/scripts/test_tester_image.sh
       - uses: actions/setup-node@v4
         with:
           node-version: "22.19.0"

@@ -12,7 +12,8 @@ appendices/
 │   ├── Dockerfile
 │   ├── entrypoint.sh
 │   ├── build.sh
-│   └── run.sh
+│   ├── run.sh
+│   └── tester.sh
 └── datasets/            ← C/C++ corpus with known, verified expected results
     ├── MANIFEST.md      ← the expected result of every file
     ├── DS01_stack_overflow.c
@@ -47,7 +48,16 @@ cd appendices/docker
 ./run.sh              # mounts ../datasets at /home/tester/workspace
 ```
 
-Then open <http://localhost:6080/>. The page connects on its own — there is no
+On Linux, use Docker Engine with its default UID mapping. Rootless Docker and
+daemons configured with `userns-remap` translate file owners on bind mounts,
+so the tester cannot write the host-owned dataset with its default permissions.
+
+Build and run as the user who owns the extracted dataset. If you override
+`TESTER_UID`, set it to the same value for both commands. Each UID gets its
+own image and container. If another tester is using port 6080, run
+`ATP_PORT=6081 ./run.sh` and open the address it prints.
+
+By default, open <http://localhost:6080/>. The page connects on its own — there is no
 Connect button to find — and shows the CoreTrace window. Inside the app, the
 test data set is at `/home/tester/workspace`.
 
@@ -69,7 +79,8 @@ The container prints a lot at startup — xkbcomp keysym warnings,
 not stop the application. Judge the container by these instead:
 
 ```sh
-docker exec coretrace-gui-atp xwininfo -root -tree -display :99 | grep '"CoreTrace"'
+# Use the container name and port printed by run.sh (example for UID 1000).
+docker exec coretrace-gui-atp-1000 xwininfo -root -tree -display :99 | grep '"CoreTrace"'
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:6080/
 ```
 
