@@ -21,6 +21,7 @@ type CloseHandler = (event: {
 }) => void | Promise<void>;
 let closeHandler: CloseHandler | undefined;
 const destroy = vi.fn(() => Promise.resolve());
+const saveDrafts = vi.fn<() => Promise<void>>();
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
@@ -37,11 +38,15 @@ vi.mock("./features/WorkspaceEditor", () => ({
   WorkspaceEditor: forwardRef(function FakeEditor(
     props: {
       dirtyChanged: (dirty: boolean) => void;
-      run: (path: string) => void;
+      run: (path?: string) => void;
     },
     ref: React.Ref<{ open: () => Promise<void> }>,
   ) {
-    useImperativeHandle(ref, () => ({ open: vi.fn() }));
+    useImperativeHandle(ref, () => ({
+      open: vi.fn(),
+      saveDrafts,
+      hasDrafts: () => false,
+    }));
     return (
       <>
         <button onClick={() => props.dirtyChanged(true)}>
@@ -72,6 +77,10 @@ vi.mock("./bridge", () => ({
     closeWorkspace: vi.fn(),
     cancelLocal: vi.fn(),
     localHistory: vi.fn(),
+    analyserStatus: vi.fn(),
+    installAnalyser: vi.fn(),
+    analyseLocalFolder: vi.fn(),
+    probeTools: vi.fn(),
   },
   errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
@@ -86,6 +95,7 @@ beforeAll(() => {
 });
 beforeEach(() => {
   vi.resetAllMocks();
+  saveDrafts.mockResolvedValue(undefined);
   vi.mocked(desktop.status).mockResolvedValue({
     signedIn: false,
     baseUrl: "https://api.coretrace.fr/v1",
@@ -94,6 +104,22 @@ beforeEach(() => {
   vi.mocked(desktop.restoreSession).mockRejectedValue(new Error("no session"));
   vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "idle" });
   vi.mocked(desktop.localHistory).mockResolvedValue([]);
+  vi.mocked(desktop.analyserStatus).mockResolvedValue({
+    available: { version: "v0.85.0", bytes: 96_946_015 },
+    path: null,
+    installedVersion: null,
+    received: null,
+  });
+  vi.mocked(desktop.probeTools).mockResolvedValue([]);
+  vi.mocked(desktop.analyseLocalFolder).mockResolvedValue({
+    runId: "1",
+    exitCode: 0,
+    report: null,
+    warnings: [],
+    stdout: "",
+    stderr: "",
+    cancelled: false,
+  });
   vi.mocked(desktop.closeWorkspace).mockResolvedValue([]);
   vi.mocked(desktop.cancelLocal).mockResolvedValue();
   closeHandler = undefined;
@@ -260,7 +286,48 @@ it("blocks a folder switch while an operation is already running, without asking
   expect(desktop.chooseWorkspace).toHaveBeenCalledTimes(2);
 });
 
-it("sends a local run to Settings, with a reason, when no ctrace executable is chosen", async () => {
+it("discloses the first download before consent then runs the selected folder", async () => {
+  const user = userEvent.setup();
+  render(
+    <ConfirmProvider>
+      <App />
+    </ConfirmProvider>,
+  );
+  vi.mocked(desktop.chooseWorkspace).mockResolvedValueOnce(workspaceA);
+  vi.mocked(desktop.installAnalyser).mockResolvedValueOnce(
+    "/app/analyser/bin/ctrace",
+  );
+  await user.click(
+    await screen.findByRole("button", { name: /Nouvelle analyse/ }),
+  );
+  const dialog = await screen.findByRole("dialog", {
+    name: "Analyser alpha ?",
+  });
+  expect(
+    await within(dialog).findByText(
+      /doit télécharger son analyseur officiel.*v0.85.0.*97 Mo/,
+    ),
+  ).toBeDefined();
+  expect(desktop.installAnalyser).not.toHaveBeenCalled();
+  expect(desktop.analyseLocalFolder).not.toHaveBeenCalled();
+  await user.click(
+    within(dialog).getByRole("button", {
+      name: "Télécharger et analyser le dossier",
+    }),
+  );
+  await waitFor(() =>
+    expect(desktop.analyseLocalFolder).toHaveBeenCalledWith("w1"),
+  );
+  expect(desktop.installAnalyser).toHaveBeenCalledWith("v0.85.0");
+});
+
+it("uses an existing analyser without updating it for a new run", async () => {
+  vi.mocked(desktop.analyserStatus).mockResolvedValue({
+    available: { version: "v0.85.0", bytes: 96_946_015 },
+    path: "/app/analyser/bin/ctrace",
+    installedVersion: "v0.84.0",
+    received: null,
+  });
   const user = userEvent.setup();
   render(
     <ConfirmProvider>
@@ -268,15 +335,46 @@ it("sends a local run to Settings, with a reason, when no ctrace executable is c
     </ConfirmProvider>,
   );
   await openWorkspaceA(user);
-
-  await user.click(screen.getByText("Lancer l’analyse sur ce fichier"));
-
-  expect(
-    await screen.findByText(
-      "Sélectionnez le programme ctrace avant de lancer une analyse locale.",
-    ),
-  ).toBeDefined();
-  expect(screen.getByText("Paramètres").closest("button")?.className).toBe(
-    "active",
+  await user.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Analyser alpha ?",
+  });
+  await user.click(
+    within(dialog).getByRole("button", { name: "Analyser le dossier" }),
   );
+  await waitFor(() =>
+    expect(desktop.analyseLocalFolder).toHaveBeenCalledWith("w1"),
+  );
+  expect(desktop.installAnalyser).not.toHaveBeenCalled();
+});
+
+it("keeps the launch dialog and stops the run when saving fails", async () => {
+  vi.mocked(desktop.analyserStatus).mockResolvedValue({
+    available: null,
+    path: "/usr/local/bin/ctrace",
+    installedVersion: null,
+    received: null,
+  });
+  saveDrafts.mockRejectedValueOnce(new Error("Conflit d’enregistrement"));
+  const user = userEvent.setup();
+  render(
+    <ConfirmProvider>
+      <App />
+    </ConfirmProvider>,
+  );
+  await openWorkspaceA(user);
+  await user.click(screen.getByText("Modifier le fichier"));
+  await user.click(screen.getByRole("button", { name: /Nouvelle analyse/ }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Analyser alpha ?",
+  });
+  await user.click(
+    await within(dialog).findByRole("button", {
+      name: "Enregistrer et analyser le dossier",
+    }),
+  );
+  expect(
+    await within(dialog).findByText("Conflit d’enregistrement"),
+  ).toBeDefined();
+  expect(desktop.analyseLocalFolder).not.toHaveBeenCalled();
 });

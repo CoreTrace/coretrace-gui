@@ -13,9 +13,20 @@ export function Login({
 }) {
   const [code, setCode] = useState<DeviceCode | null>(null);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const [remaining, setRemaining] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const restart = () => {
+    setCode(null);
+    setError("");
+    setCopied(false);
+    setAttempt((value) => value + 1);
+  };
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
+    let clock: ReturnType<typeof setInterval>;
+    let interval = 1000;
     const poll = async () => {
       try {
         const signedIn = await desktop.pollLogin();
@@ -23,7 +34,7 @@ export function Login({
         if (signedIn) {
           await connected();
           if (!stopped) close();
-        } else timer = setTimeout(poll, 1000);
+        } else timer = setTimeout(poll, interval);
       } catch (e) {
         if (!stopped) setError(errorMessage(e));
       }
@@ -33,7 +44,22 @@ export function Login({
       .then((value) => {
         if (!stopped) {
           setCode(value);
-          timer = setTimeout(poll, value.interval * 1000);
+          interval = Math.max(1000, value.interval * 1000);
+          const deadline = Date.now() + value.expiresIn * 1000;
+          setRemaining(value.expiresIn);
+          clock = setInterval(() => {
+            const seconds = Math.max(
+              0,
+              Math.ceil((deadline - Date.now()) / 1000),
+            );
+            setRemaining(seconds);
+            if (!seconds) {
+              clearTimeout(timer);
+              clearInterval(clock);
+              setError("Le code a expiré. Demandez un nouveau code.");
+            }
+          }, 1000);
+          timer = setTimeout(poll, interval);
         }
       })
       .catch((e) => {
@@ -42,9 +68,15 @@ export function Login({
     return () => {
       stopped = true;
       clearTimeout(timer);
-      void desktop.cancelLogin().catch(() => {});
+      clearInterval(clock);
     };
-  }, []); // One native device flow per dialog; callbacks are read for this attempt.
+  }, [attempt]);
+  useEffect(
+    () => () => {
+      void desktop.cancelLogin().catch(() => {});
+    },
+    [],
+  );
   return (
     <Dialog title="Connexion à CoreTrace" close={close}>
       <p>
@@ -55,9 +87,23 @@ export function Login({
         <>
           <div className="device-code">{code.userCode}</div>
           <p className="muted">
-            Code valable {Math.ceil(code.expiresIn / 60)} minutes.
+            Code valable {Math.ceil(remaining / 60)} minutes.
           </p>
           <button
+            disabled={!remaining}
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(code.userCode)
+                .then(() => setCopied(true))
+                .catch(() =>
+                  setError("Copiez le code affiché pour continuer."),
+                );
+            }}
+          >
+            {copied ? "Code copié" : "Copier le code"}
+          </button>
+          <button
+            disabled={!remaining}
             className="primary"
             onClick={() =>
               void desktop
@@ -79,9 +125,12 @@ export function Login({
         !error && <p>Préparation de la connexion…</p>
       )}
       {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <>
+          <p role="alert" className="error">
+            {error}
+          </p>
+          <button onClick={restart}>Demander un nouveau code</button>
+        </>
       )}
     </Dialog>
   );

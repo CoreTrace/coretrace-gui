@@ -33,10 +33,11 @@ export function useCloud() {
           ? previous
           : (identity.orgs[0]?.slug ?? ""),
       );
-    } else {
-      setMe(null);
-      setOrg("");
+      return identity;
     }
+    setMe(null);
+    setOrg("");
+    return null;
   }, []);
   useEffect(() => {
     void reconnect().catch((e) => setError(errorMessage(e)));

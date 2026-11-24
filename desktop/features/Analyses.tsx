@@ -73,7 +73,7 @@ export function Findings({
   const filtered = findings.filter((f) =>
     `${f.message} ${f.rule} ${f.path}`
       .toLowerCase()
-      .includes(search.toLowerCase()),
+      .includes(search.trim().toLowerCase()),
   );
   return (
     <section>
@@ -97,6 +97,9 @@ export function Findings({
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
+        {search && (
+          <button onClick={() => setSearch("")}>Effacer le filtre</button>
+        )}
       </div>
       {loading &&
         [0, 1, 2].map((i) => (
@@ -171,7 +174,7 @@ export function Findings({
               ))}
             </div>
           ))}
-      {!filtered.length && (
+      {!loading && !filtered.length && (
         <p className="muted">
           {findings.length
             ? "Aucun résultat ne correspond au filtre."
@@ -396,6 +399,13 @@ export function Analyses({
   openFinding,
   local,
   localRunning,
+  launchBusy,
+  activity,
+  retryLocal,
+  cloudTarget,
+  cloudStartFailed,
+  retryCloudLocally,
+  openCloudResult,
   openWorkspace,
   workspaceRoot,
   workspaceName,
@@ -418,12 +428,22 @@ export function Analyses({
   openFinding: (path: string, line: number) => void;
   local: LocalResult | null;
   localRunning: boolean;
+  launchBusy?: boolean;
+  activity?: {
+    workspace: { name: string };
+    path?: string;
+    error?: string;
+  } | null;
+  retryLocal?: () => void;
+  cloudTarget?: string;
+  cloudStartFailed?: boolean;
+  retryCloudLocally?: () => void;
+  openCloudResult?: (job: string) => void;
   openWorkspace: () => void;
   /** The folder open in the editor, when there is one: what a cloud run sends. */
   workspaceRoot?: string;
   workspaceName?: string;
-  /** Starts an analysis of the open folder: cloud when possible, this machine
-      otherwise. Owned by the application, so every button does the same. */
+  /** Opens the destination picker for the active workspace. */
   newAnalysis: () => void;
   /** Local runs of the open folder, newest first. */
   localHistory: LocalRun[];
@@ -541,26 +561,63 @@ export function Analyses({
             </div>
             <button
               className="primary"
-              disabled={localRunning}
-              title={
-                cloud.me && cloud.org
-                  ? "Analyse le dossier ouvert avec vos CTU, ou sur cette machine si le cloud est indisponible"
-                  : "Analyse le dossier ouvert sur cette machine"
-              }
+              disabled={launchBusy ?? localRunning}
               onClick={newAnalysis}
             >
               <Play size={16} />
               {workspaceName ? `Analyser ${workspaceName}` : "Nouvelle analyse"}
             </button>
           </div>
-          {workspaceRoot && cloud.org && (
-            <CloudRun
-              run={cloudRun}
-              workspace={workspaceRoot}
-              org={cloud.org}
-              typical={typicalSeconds(cloud.jobs)}
-              showStart={false}
-            />
+          {activity && (localRunning || activity.error) && (
+            <section className="panel">
+              <h2>
+                Analyse sur cette machine ·{" "}
+                {activity.path ?? activity.workspace.name}
+              </h2>
+              {localRunning ? (
+                <>
+                  <p role="status">Analyse en cours…</p>
+                  <button
+                    onClick={() =>
+                      void desktop
+                        .cancelLocal()
+                        .catch((e) => notify(errorMessage(e)))
+                    }
+                  >
+                    Arrêter
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="error" role="alert">
+                    {activity.error}
+                  </p>
+                  <button onClick={retryLocal}>Réessayer</button>
+                </>
+              )}
+            </section>
+          )}
+          {(cloudTarget ||
+            (workspaceRoot && cloudRun.phase.phase === "idle")) &&
+            cloud.org && (
+              <CloudRun
+                run={cloudRun}
+                workspace={workspaceId ?? ""}
+                org={cloud.org}
+                typical={typicalSeconds(cloud.jobs)}
+                showStart={false}
+                target={cloudTarget}
+                openResult={openCloudResult}
+                retryLocally={retryCloudLocally}
+              />
+            )}
+          {cloudStartFailed && cloudRun.phase.phase !== "failed" && (
+            <section className="panel">
+              <p role="alert">L’analyse cloud n’a pas démarré.</p>
+              <button onClick={retryCloudLocally} disabled={!retryCloudLocally}>
+                Réessayer sur cette machine
+              </button>
+            </section>
           )}
           {(initialRepository || rerun) && (
             <section className="panel">
@@ -661,11 +718,13 @@ export function Analyses({
                 >
                   {local.cancelled
                     ? "Annulée"
-                    : local.warnings?.length
-                      ? "Terminée avec avertissements"
-                      : local.exitCode === 0
-                        ? "Terminée"
-                        : "Échouée"}
+                    : localReport.error || !local.report
+                      ? "Rapport indisponible"
+                      : local.warnings?.length
+                        ? "Terminée avec avertissements"
+                        : local.exitCode === 0
+                          ? "Terminée"
+                          : "Échouée"}
                 </span>
                 {(local.warnings?.length || local.exitCode !== 0) &&
                   (cloud.me ? (
@@ -684,6 +743,11 @@ export function Analyses({
                     </button>
                   ))}
               </div>
+              {activity && (
+                <p className="muted">
+                  {activity.path ?? activity.workspace.name}
+                </p>
+              )}
               {local.warnings?.map((warning) => (
                 <p className="notice" role="alert" key={warning}>
                   {warning}
@@ -709,6 +773,9 @@ export function Analyses({
               )}
               <details open={!!local.warnings?.length}>
                 <summary>Sortie de ctrace</summary>
+                {!local.stdout && !local.stderr && (
+                  <p>La sortie n’est pas disponible pour cette analyse.</p>
+                )}
                 <pre>
                   {local.stdout}
                   {"\n"}

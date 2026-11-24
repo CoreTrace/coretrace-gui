@@ -1,5 +1,6 @@
 use crate::cloud::{Cloud, Session};
 use crate::pack::{pack, Packed};
+use crate::workspace::{root, WorkspaceState};
 use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
@@ -149,17 +150,34 @@ pub(crate) async fn upload(
         ));
     }
 
-    let bytes = tokio::fs::read(&packed.path)
+    let put_url = url::Url::parse(&put_url).map_err(|_| "Adresse d’envoi invalide.")?;
+    let loopback = matches!(
+        put_url.host_str(),
+        Some("127.0.0.1" | "[::1]" | "localhost")
+    );
+    let secure_transport = put_url.scheme() == "https" || (put_url.scheme() == "http" && loopback);
+    if !secure_transport
+        || put_url.host_str().is_none()
+        || !put_url.username().is_empty()
+        || put_url.password().is_some()
+        || put_url.fragment().is_some()
+    {
+        return Err(
+            "L’adresse d’envoi doit utiliser HTTPS et ne contenir aucun identifiant.".into(),
+        );
+    }
+    let archive = tokio::fs::File::open(&packed.path)
         .await
         .map_err(|e| format!("Cannot read the archive: {e}"))?;
     let response = session
         .http()
-        .put(&put_url)
+        .put(put_url)
         .header("Content-Type", "application/zstd")
-        .body(bytes)
+        .header("Content-Length", packed.size)
+        .body(reqwest::Body::from(archive))
         .send()
         .await
-        .map_err(|e| format!("The upload did not complete: {e}"))?;
+        .map_err(|e| format!("The upload did not complete: {}", e.without_url()))?;
     if !response.status().is_success() {
         return Err(format!(
             "The upload was refused (HTTP {}).",
@@ -375,13 +393,15 @@ pub(crate) async fn confirm(
 pub async fn cloud_run_start(
     cloud: tauri::State<'_, Cloud>,
     run: tauri::State<'_, RunState>,
-    root: String,
+    workspace: tauri::State<'_, WorkspaceState>,
+    workspace_id: String,
     org: String,
     tools: Vec<String>,
 ) -> Result<(), String> {
+    let folder = root(&workspace, &workspace_id)?;
     let _running = run.begin()?;
     let mut session = cloud.0.lock().await;
-    start(&run, &mut session, PathBuf::from(root), &org, tools).await
+    start(&run, &mut session, folder, &org, tools).await
 }
 
 #[tauri::command]

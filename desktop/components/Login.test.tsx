@@ -61,9 +61,6 @@ it("opens the browser to the link the code was actually issued for", async () =>
 });
 
 it("keeps polling until the platform confirms, then hands off and closes", async () => {
-  // Every poll after the first is a flat second apart, regardless of the
-  // interval the platform issued — fake time so the test does not spend
-  // two real seconds proving that.
   vi.useFakeTimers();
   try {
     vi.mocked(desktop.login).mockResolvedValue(code);
@@ -75,7 +72,7 @@ it("keeps polling until the platform confirms, then hands off and closes", async
     const close = vi.fn();
     render(<Login close={close} connected={connected} />);
 
-    await vi.advanceTimersByTimeAsync(10); // the first poll, at the issued interval
+    await vi.advanceTimersByTimeAsync(1000);
     expect(desktop.pollLogin).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1000);
     expect(desktop.pollLogin).toHaveBeenCalledTimes(2);
@@ -103,8 +100,11 @@ it("surfaces a polling failure without pretending sign-in is still happening", a
     new Error("Sign-in code expired; start again"),
   );
   render(<Login close={vi.fn()} connected={vi.fn()} />);
-  const alert = await screen.findByRole("alert");
+  const alert = await screen.findByRole("alert", {}, { timeout: 2000 });
   expect(alert.textContent).toContain("Sign-in code expired; start again");
+  expect(
+    screen.getByRole("button", { name: "Demander un nouveau code" }),
+  ).toBeDefined();
 });
 
 it("gives up the native device flow as soon as the dialog goes away", async () => {

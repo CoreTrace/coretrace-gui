@@ -35,6 +35,7 @@ function pngSize(file) {
   return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) };
 }
 
+assert.ok(icons.some((icon) => /\.icns$/i.test(icon)), "bundle.icon needs an ICNS for macOS");
 const squares = [];
 for (const icon of icons) {
   const file = path.resolve(tauriDir, icon);
@@ -42,7 +43,14 @@ for (const icon of icons) {
     fs.existsSync(file),
     `bundle.icon lists ${icon}, which does not exist`,
   );
-  if (path.extname(file).toLowerCase() !== ".png") continue;
+  const extension = path.extname(file).toLowerCase();
+  if (extension === ".icns") {
+    const icon = fs.readFileSync(file);
+    assert.ok(icon.length >= 16, `Invalid macOS icon: ${file}`);
+    assert.equal(icon.toString("ascii", 0, 4), "icns", `Invalid macOS icon: ${file}`);
+    assert.equal(icon.readUInt32BE(4), icon.length, `Invalid ICNS size: ${file}`);
+  }
+  if (extension !== ".png") continue;
   const { width, height } = pngSize(file);
   if (width === height) squares.push(`${icon} (${width}x${height})`);
 }

@@ -115,20 +115,6 @@ export function Dashboard({
           </button>
         )}
       </div>
-      {!cloud.me && (
-        <div className="connection-banner">
-          <div>
-            <strong>Retrouvez votre espace CoreTrace</strong>
-            <p>
-              Connectez-vous pour accéder aux organisations, aux quotas et aux
-              analyses cloud.
-            </p>
-          </div>
-          <button onClick={login}>
-            Se connecter <ArrowRight size={15} />
-          </button>
-        </div>
-      )}
       {cloud.me && (
         <>
           <div className="section-heading">
@@ -212,7 +198,9 @@ export function Dashboard({
                 <Sparkles size={23} />
               </span>
               <strong>Lancer une analyse</strong>
-              <span>Choisissez un dossier, puis analysez-le.</span>
+              <span>
+                Analysez un dossier sur cette machine, sans compte CoreTrace.
+              </span>
               <ArrowRight size={18} />
             </button>
           </div>
@@ -227,6 +215,20 @@ export function Dashboard({
           </div>
           <ArrowRight size={18} />
         </button>
+      )}
+      {!cloud.me && (
+        <div className="connection-banner">
+          <div>
+            <strong>Retrouvez votre espace CoreTrace</strong>
+            <p>
+              Connectez-vous pour accéder aux organisations, aux quotas et aux
+              analyses cloud.
+            </p>
+          </div>
+          <button onClick={login}>
+            Se connecter <ArrowRight size={15} />
+          </button>
+        </div>
       )}
       <div className="section-heading">
         <div>

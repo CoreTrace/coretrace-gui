@@ -1,3 +1,4 @@
+mod analyser;
 mod analysis;
 mod cloud;
 mod cloud_run;
@@ -18,6 +19,7 @@ pub fn run() {
         })
         .manage(workspace::WorkspaceState::default())
         .manage(analysis::AnalysisState::default())
+        .manage(analyser::Installer::default())
         .manage(cloud::Cloud::new().expect("invalid CoreTrace platform configuration"))
         .manage(cloud_run::RunState::default())
         .invoke_handler(tauri::generate_handler![
@@ -31,6 +33,9 @@ pub fn run() {
             workspace::save_file,
             github::clone_repository,
             github::clone_location,
+            analyser::analyser_status,
+            analyser::install_analyser,
+            analyser::cancel_analyser_install,
             analysis::choose_analyser,
             analysis::analysis_options,
             analysis::choose_analysis_file,

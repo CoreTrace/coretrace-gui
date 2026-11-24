@@ -100,7 +100,7 @@ it("shows incomplete execution even when ctrace exits successfully", () => {
     cancelled: false,
     warnings: ["Outil indisponible"],
   });
-  expect(screen.getByText("Terminée avec avertissements")).toBeTruthy();
+  expect(screen.getByText("Rapport indisponible")).toBeTruthy();
   expect(screen.getByRole("alert").textContent).toContain("Outil indisponible");
   expect(
     screen.getByText("Sortie de ctrace").parentElement?.hasAttribute("open"),
