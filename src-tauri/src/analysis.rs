@@ -17,10 +17,10 @@ use tokio::{
 
 #[derive(Default)]
 pub struct AnalysisState {
-    executable: Mutex<Option<PathBuf>>,
+    pub(crate) executable: Mutex<Option<PathBuf>>,
     options: Mutex<AnalysisOptions>,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
-    running: AtomicBool,
+    pub(crate) running: AtomicBool,
     /// Set when the reader stops a run. A folder is many child processes in
     /// turn, and stopping one of them is not stopping the analysis.
     stopped: AtomicBool,
@@ -151,6 +151,7 @@ pub async fn probe_tools() -> Vec<ToolStatus> {
         let mut command = Command::new(program);
         command
             .args(args)
+            .kill_on_drop(true)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
         #[cfg(windows)]
@@ -352,25 +353,31 @@ pub fn adopt_analyser(state: &AnalysisState, path: PathBuf) -> Result<String, St
         return Err("Choose an installed ctrace executable".into());
     }
     let display = tool_path(&path).display().to_string();
-    *state.executable.lock().map_err(|e| e.to_string())? = Some(path);
+    let mut executable = state.executable.lock().map_err(|e| e.to_string())?;
     let mut options = state.options.lock().map_err(|e| e.to_string())?;
-    if options.config.is_none() {
-        let selected = PathBuf::from(&display);
-        let candidates = [
-            selected
-                .parent()
-                .map(|parent| parent.join("config/tool-config.json")),
-            selected
-                .parent()
-                .and_then(Path::parent)
-                .map(|parent| parent.join("config/tool-config.json")),
-        ];
-        options.config = candidates
-            .into_iter()
-            .flatten()
-            .find_map(|candidate| candidate.canonicalize().ok());
+    if options.config.is_none()
+        || options.config == executable.as_deref().and_then(distribution_config)
+    {
+        options.config = distribution_config(&path);
     }
+    *executable = Some(path);
     Ok(display)
+}
+
+fn distribution_config(path: &Path) -> Option<PathBuf> {
+    let path = tool_path(path);
+    let parent = path.parent()?;
+    parent
+        .join("config/tool-config.json")
+        .canonicalize()
+        .ok()
+        .or_else(|| {
+            parent
+                .parent()?
+                .join("config/tool-config.json")
+                .canonicalize()
+                .ok()
+        })
 }
 async fn capture(mut reader: impl AsyncRead + Unpin) -> String {
     let mut out = Vec::new();
@@ -600,13 +607,16 @@ fn source_files(root: &Path) -> Vec<PathBuf> {
 fn merge_reports(reports: &[String]) -> Option<String> {
     let mut findings = Vec::new();
     let mut runs = Vec::new();
+    let mut parsed = false;
     for report in reports {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(report) else {
             continue;
         };
         if let Some(list) = value["findings"].as_array() {
+            parsed = true;
             findings.extend(list.iter().cloned());
         } else if let Some(list) = value["runs"].as_array() {
+            parsed = true;
             // SARIF results keep their own shape: the interface reads them as
             // runs, and found nothing when they were filed under "findings".
             runs.extend(
@@ -616,8 +626,7 @@ fn merge_reports(reports: &[String]) -> Option<String> {
             );
         }
     }
-    (!findings.is_empty() || !runs.is_empty())
-        .then(|| serde_json::json!({ "findings": findings, "runs": runs }).to_string())
+    parsed.then(|| serde_json::json!({ "findings": findings, "runs": runs }).to_string())
 }
 
 /// Analyses every source file in the open folder, one after another.
@@ -651,6 +660,7 @@ pub async fn analyse_local_folder(
         return Err("An analysis is already running".into());
     }
     let _running = Running(&state);
+    state.stopped.store(false, Ordering::Release);
     let options = state.options.lock().map_err(|e| e.to_string())?.clone();
     let started_at = crate::settings::now_unix();
 
@@ -670,13 +680,21 @@ pub async fn analyse_local_folder(
             let mut active = state.cancel.lock().map_err(|e| e.to_string())?;
             *active = Some(sender);
         }
-        let result = run_analysis(&executable, &root, file, &options, receiver).await?;
-        analysed += 1;
+        let run = run_analysis(&executable, &root, file, &options, receiver).await;
         let name = file
             .strip_prefix(&root)
             .unwrap_or(file)
             .display()
             .to_string();
+        let result = match run {
+            Ok(result) => result,
+            Err(reason) => {
+                warnings.push(format!("{name} : {reason}"));
+                exit_code = Some(1);
+                continue;
+            }
+        };
+        analysed += 1;
         if !result.stdout.is_empty() {
             output.push_str(&format!("=== {name} ===\n{}\n", result.stdout));
         }
@@ -700,10 +718,12 @@ pub async fn analyse_local_folder(
     }
 
     let cancelled = state.stopped.load(Ordering::Acquire);
-    warnings.insert(
-        0,
-        format!("{analysed} fichier(s) analysé(s) sur {}.", files.len()),
-    );
+    if analysed < files.len() {
+        warnings.insert(
+            0,
+            format!("{analysed} fichier(s) analysé(s) sur {}.", files.len()),
+        );
+    }
     let view = ResultView {
         run_id: String::new(),
         exit_code,
@@ -717,7 +737,7 @@ pub async fn analyse_local_folder(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let history = view.as_history(started_at, label, files.len());
+    let history = view.as_history(started_at, label, analysed);
     let mut view = view;
     view.run_id = history.id.clone();
     crate::settings::remember_local_run(&app, &root, history);
@@ -728,6 +748,9 @@ pub async fn analyse_local_folder(
 pub async fn cancel_local(state: tauri::State<'_, AnalysisState>) -> Result<(), String> {
     // Recorded before the current child is stopped: a folder analysis reads it
     // between files and would otherwise start the next one.
+    if !state.running.load(Ordering::Acquire) {
+        return Ok(());
+    }
     state.stopped.store(true, Ordering::Release);
     if let Some(sender) = state.cancel.lock().map_err(|e| e.to_string())?.take() {
         let _ = sender.send(());
@@ -744,6 +767,16 @@ pub async fn cancel_local(state: tauri::State<'_, AnalysisState>) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_empty_sarif_result_is_still_a_readable_folder_report() {
+        let empty = r#"{"version":"2.1.0","runs":[]}"#.to_owned();
+        assert_eq!(
+            merge_reports(&[empty]).unwrap(),
+            r#"{"findings":[],"runs":[]}"#
+        );
+        assert!(merge_reports(&["invalid".into()]).is_none());
+    }
+
     use super::*;
     #[test]
     fn discovers_only_a_database_that_contains_the_active_file() {
@@ -919,9 +952,9 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&merged).unwrap();
         assert_eq!(value["findings"].as_array().unwrap().len(), 2);
         assert_eq!(value["runs"][0]["results"][0]["message"]["text"], "two");
-        assert!(merge_reports(&[r#"{"runs":[{"results":[]}]}"#.into()]).is_none());
-        // Nothing to report is not a report.
-        assert!(merge_reports(&[r#"{"findings":[]}"#.into()]).is_none());
+        assert!(merge_reports(&[r#"{"unsupported":[]}"#.into()]).is_none());
+        // Empty diagnostics count as a readable report.
+        assert!(merge_reports(&[r#"{"findings":[]}"#.into()]).is_some());
         assert!(merge_reports(&[]).is_none());
     }
 

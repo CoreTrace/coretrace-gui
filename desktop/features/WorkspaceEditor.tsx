@@ -14,7 +14,6 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import {
   ChevronDown,
   ChevronRight,
-  CloudUpload,
   FileCode2,
   Folder,
   FolderOpen,
@@ -25,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { desktop, errorMessage } from "../bridge";
+import { isLocalSource } from "../launch";
 import { Dialog, useConfirm } from "../components/Dialog";
 import type { Document, FileEntry, Workspace } from "../types";
 
@@ -36,13 +36,13 @@ interface Tab extends Document {
 }
 export interface EditorHandle {
   open: (path: string, line?: number) => Promise<void>;
+  hasDrafts: (path?: string) => boolean;
+  saveDrafts: (path?: string) => Promise<void>;
 }
 interface Props {
   workspace: Workspace;
   dirtyChanged: (dirty: boolean) => void;
-  run: (path: string) => void;
-  /** Sends the whole workspace to the platform; absent when signed out. */
-  runInCloud?: () => void;
+  run: (path?: string) => void;
   /** Every folder open now, so the explorer shows them all at once. */
   workspaces?: Workspace[];
   /** Opens a file living in another open folder. */
@@ -177,7 +177,6 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
       openIn,
       dirtyChanged,
       run,
-      runInCloud,
       busy,
       notify,
       restore,
@@ -192,11 +191,10 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     // the others off the screen.
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
     const [saving, setSaving] = useState(false);
-    // The analyse menu, closed on every choice so it never covers the editor.
-    const [menuOpen, setMenuOpen] = useState(false);
     // Finding a file by name. The listing is fetched the first time it is
     // asked for and kept for the life of this folder.
     const [quickOpen, setQuickOpen] = useState(false);
+    const [indexError, setIndexError] = useState("");
     const [allFiles, setAllFiles] = useState<string[] | null>(null);
     const [query, setQuery] = useState("");
     const [cursor, setCursor] = useState(0);
@@ -237,16 +235,24 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
     const openQuick = () => {
       setQuery("");
       setCursor(0);
+      setIndexError("");
       setQuickOpen(true);
-      if (allFiles === null) {
-        void desktop
-          .allFiles(workspace.id)
-          .then((files) => {
-            if (alive.current) setAllFiles(files);
-          })
-          .catch((e) => notify(errorMessage(e)));
-      }
     };
+    useEffect(() => {
+      if (!quickOpen || allFiles !== null || indexError) return;
+      let current = true;
+      void desktop
+        .allFiles(workspace.id)
+        .then((files) => {
+          if (current) setAllFiles(files);
+        })
+        .catch((e) => {
+          if (current) setIndexError(errorMessage(e));
+        });
+      return () => {
+        current = false;
+      };
+    }, [quickOpen, allFiles, indexError, refresh, workspace.id]);
     const openQuickRef = useRef(openQuick);
     openQuickRef.current = openQuick;
     useEffect(() => {
@@ -311,7 +317,7 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
         if (active === path) reveal(line);
       }
     };
-    useImperativeHandle(ref, () => ({ open }));
+
     // Reopen what was open in this folder. The content comes from disk, so a
     // file changed elsewhere since is the file that appears.
     const restored = useRef(false);
@@ -392,11 +398,9 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
       if (active === path)
         setActive(tabs.find((t) => t.path !== path)?.path ?? "");
     };
-    // Analysing reads the files on disk, so unsaved work would be analysed as
-    // it was. Rather than refuse until the reader saves, save for them.
-    const saveAll = async () => {
+    const saveDrafts = async (path?: string) => {
       for (const t of tabs) {
-        if (t.content === t.draft) continue;
+        if ((path && t.path !== path) || t.content === t.draft) continue;
         const result = await desktop.save(
           workspace.id,
           t.path,
@@ -413,25 +417,12 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
         );
       }
     };
-    const analyseHere = async () => {
-      if (!tab) return;
-      try {
-        if (dirty) await saveAll();
-      } catch (e) {
-        notify(errorMessage(e));
-        return;
-      }
-      run(tab.path);
-    };
-    const analyseInCloud = async () => {
-      try {
-        if (dirty) await saveAll();
-      } catch (e) {
-        notify(errorMessage(e));
-        return;
-      }
-      runInCloud?.();
-    };
+    useImperativeHandle(ref, () => ({
+      open,
+      hasDrafts: (path) =>
+        tabs.some((t) => (!path || t.path === path) && t.content !== t.draft),
+      saveDrafts,
+    }));
     return (
       <div className="ide" ref={rootRef}>
         <aside className="file-explorer">
@@ -463,7 +454,11 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                   <button
                     className="icon"
                     aria-label="Actualiser les fichiers"
-                    onClick={() => setRefresh((n) => n + 1)}
+                    onClick={() => {
+                      setAllFiles(null);
+                      setIndexError("");
+                      setRefresh((n) => n + 1);
+                    }}
                   >
                     <RefreshCw size={14} />
                   </button>
@@ -487,6 +482,18 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
           ))}
         </aside>
         <section className="editor-area">
+          <div className="editor-toolbar">
+            <span title={workspace.path}>{workspace.name}</span>
+            <button
+              className="primary"
+              disabled={busy || saving}
+              onClick={() =>
+                run(tab && isLocalSource(tab.path) ? tab.path : undefined)
+              }
+            >
+              <Play size={14} /> Analyser
+            </button>
+          </div>
           <div
             className="editor-tabs"
             role="tablist"
@@ -499,7 +506,29 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
               >
                 <button
                   role="tab"
+                  tabIndex={t.path === active ? 0 : -1}
                   aria-selected={t.path === active}
+                  onKeyDown={(event) => {
+                    const index = tabs.findIndex(
+                      (item) => item.path === t.path,
+                    );
+                    const next =
+                      event.key === "ArrowRight"
+                        ? (index + 1) % tabs.length
+                        : event.key === "ArrowLeft"
+                          ? (index + tabs.length - 1) % tabs.length
+                          : event.key === "Home"
+                            ? 0
+                            : event.key === "End"
+                              ? tabs.length - 1
+                              : -1;
+                    if (next < 0) return;
+                    event.preventDefault();
+                    setActive(tabs[next].path);
+                    rootRef.current
+                      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+                      [next]?.focus();
+                  }}
                   title={t.path}
                   onClick={() => setActive(t.path)}
                 >
@@ -531,63 +560,6 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                     <Save size={14} />
                     {saving ? "Enregistrement…" : "Enregistrer"}
                   </button>
-                  <div className="menu-anchor">
-                    <button
-                      className="primary"
-                      disabled={busy}
-                      aria-haspopup="menu"
-                      aria-expanded={menuOpen}
-                      title="Choisissez où analyser"
-                      onClick={() => setMenuOpen((open) => !open)}
-                    >
-                      <Play size={14} />
-                      Analyser
-                      <ChevronDown size={13} />
-                    </button>
-                    {menuOpen && (
-                      <div className="menu" role="menu">
-                        <button
-                          role="menuitem"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            void analyseHere();
-                          }}
-                        >
-                          <Play size={14} />
-                          <span>
-                            <strong>
-                              {dirty
-                                ? "Enregistrer et analyser ici"
-                                : "Sur cette machine"}
-                            </strong>
-                            <small>Ce fichier, avec le ctrace installé</small>
-                          </span>
-                        </button>
-                        <button
-                          role="menuitem"
-                          disabled={!runInCloud}
-                          onClick={() => {
-                            setMenuOpen(false);
-                            void analyseInCloud();
-                          }}
-                        >
-                          <CloudUpload size={14} />
-                          <span>
-                            <strong>
-                              {dirty
-                                ? "Enregistrer et analyser dans le cloud"
-                                : "Dans le cloud"}
-                            </strong>
-                            <small>
-                              {runInCloud
-                                ? "Le dossier ouvert, avec vos CTU"
-                                : "Connectez-vous pour analyser dans le cloud"}
-                            </small>
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
               <Editor
@@ -659,10 +631,32 @@ export const WorkspaceEditor = forwardRef<EditorHandle, Props>(
                   }
                 }}
               />
+              {query && (
+                <button
+                  onClick={() => {
+                    setQuery("");
+                    setCursor(0);
+                    rootRef.current
+                      ?.querySelector<HTMLInputElement>(
+                        '[aria-label="Nom du fichier"]',
+                      )
+                      ?.focus();
+                  }}
+                >
+                  Effacer
+                </button>
+              )}
             </label>
             <div className="quick-open" role="listbox" aria-label="Fichiers">
-              {allFiles === null ? (
-                <p className="muted small">Lecture du dossier…</p>
+              {indexError ? (
+                <p role="alert">
+                  {indexError}{" "}
+                  <button onClick={() => setIndexError("")}>Réessayer</button>
+                </p>
+              ) : allFiles === null ? (
+                <p role="status" className="muted small">
+                  Lecture du dossier…
+                </p>
               ) : matches.length === 0 ? (
                 <p className="muted small">Aucun fichier ne correspond.</p>
               ) : (

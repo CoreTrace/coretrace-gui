@@ -348,7 +348,7 @@ small,
   color: var(--text);
 }
 .breadcrumbs > span {
-  color: var(--text-faint);
+  color: var(--muted);
 }
 .org-picker {
   flex-direction: row;
@@ -1661,4 +1661,29 @@ dialog textarea {
   color: inherit;
   padding: 8px 10px;
   font: inherit;
+}
+
+.launch-options {
+  display: grid;
+  gap: 12px;
+}
+
+.launch-options > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.launch-options h3 {
+  margin: 0;
+}
+
+.launch-options .inline {
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+progress {
+  max-width: 100%;
+  accent-color: var(--accent);
 }

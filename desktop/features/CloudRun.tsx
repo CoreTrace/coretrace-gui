@@ -25,6 +25,9 @@ export function CloudRun({
   org,
   typical,
   showStart = true,
+  target,
+  openResult,
+  retryLocally,
 }: {
   run: CloudRunModel;
   workspace: string;
@@ -36,6 +39,9 @@ export function CloudRun({
       one button for every kind of analysis, this panel only reports progress
       and stays out of sight until there is some. */
   showStart?: boolean;
+  target?: string;
+  openResult?: (job: string) => void;
+  retryLocally?: () => void;
 }) {
   const { phase, seconds, busy } = run;
   const startRun = () => void run.start(workspace, org);
@@ -48,7 +54,7 @@ export function CloudRun({
 
   return (
     <section className="panel">
-      <h2>Analyser dans le cloud</h2>
+      <h2>Analyse dans le cloud{target ? ` · ${target}` : ""}</h2>
       {showStart && (
         <p className="muted">
           Le dossier ouvert est envoyé à la plateforme et analysé avec vos CTU.
@@ -76,8 +82,14 @@ export function CloudRun({
       {phase.phase === "quoted" && (
         <p role="status">
           <Cloud size={14} /> {phase.ctu.toLocaleString("fr-FR")} CTU pour cette
-          analyse. Rien n’a encore été débité : acceptez ou refusez depuis la
-          notification.
+          analyse. Rien n’a encore été débité.
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() => void run.approve(org)}
+          >
+            Confirmer le devis
+          </button>
         </p>
       )}
 
@@ -95,12 +107,20 @@ export function CloudRun({
       )}
       {phase.phase === "done" && (
         <p role="status">
-          Analyse terminée. Ouvrez les résultats depuis la notification.
+          Analyse terminée.
+          {openResult && (
+            <button onClick={() => openResult(phase.job)}>
+              Voir le rapport
+            </button>
+          )}
         </p>
       )}
       {phase.phase === "failed" && (
         <p role="alert" className="error">
           {phase.reason}
+          {retryLocally && (
+            <button onClick={retryLocally}>Réessayer sur cette machine</button>
+          )}
         </p>
       )}
       {phase.phase === "cancelled" && (

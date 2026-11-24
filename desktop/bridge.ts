@@ -18,6 +18,13 @@ export interface AnalysisOptions {
   config: string | null;
   compileCommands: string | null;
 }
+export interface AnalyserStatus {
+  available: { version: string; bytes: number } | null;
+  installedVersion: string | null;
+  path: string | null;
+  received: number | null;
+  prerequisite?: string | null;
+}
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!native)
     return Promise.reject(
@@ -30,8 +37,8 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 export const desktop = {
   chooseWorkspace: () => call<Workspace | null>("choose_workspace"),
   /** Starts a cloud run on the open folder; it stops at the quote. */
-  startCloudRun: (root: string, org: string, tools: string[] = []) =>
-    call<void>("cloud_run_start", { root, org, tools }),
+  startCloudRun: (workspaceId: string, org: string, tools: string[] = []) =>
+    call<void>("cloud_run_start", { workspaceId, org, tools }),
   cloudRunStatus: () => call<CloudPhase>("cloud_run_status"),
   /** Approves the quote. This is the call that spends CTU. */
   confirmCloudRun: (org: string) => call<void>("cloud_run_confirm", { org }),
@@ -60,6 +67,10 @@ export const desktop = {
     content: string,
     revision: string,
   ) => call<Document>("save_file", { workspaceId, path, content, revision }),
+  analyserStatus: () => call<AnalyserStatus>("analyser_status"),
+  installAnalyser: (version: string) =>
+    call<string>("install_analyser", { version }),
+  cancelAnalyserInstall: () => call<void>("cancel_analyser_install"),
   chooseAnalyser: () => call<string | null>("choose_analyser"),
   analysisOptions: () => call<AnalysisOptions>("analysis_options"),
   chooseAnalysisFile: (kind: keyof AnalysisOptions, clear = false) =>

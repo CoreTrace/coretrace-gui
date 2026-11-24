@@ -40,9 +40,15 @@ production credentials are embedded in the preview.
   Follow progress, cancel, inspect verified reports and open findings in the matching
   workspace. Retrying an uncertain submission keeps its idempotency key until inputs
   change or submission succeeds. Local edits are not uploaded by this workflow.
-- **Local analysis:** Select your installed native `ctrace` executable in Settings,
-  with its analysis tools installed. Open a source file or a folder and run static
-  analysis. SARIF findings, stdout/stderr and cancellation are available.
+- **Local analysis:** Open a C/C++ folder and choose **Analyser** in the code
+  workspace. On supported systems the first local run offers to download the
+  official CoreTrace analyser and shows the version and size before it starts.
+  Managed downloads cover Linux x64 (glibc 2.34+) and Apple Silicon (macOS 14+).
+  You can also choose an installed native `ctrace` executable in Settings.
+  Linux needs the system C library headers (for example `libc6-dev` on Ubuntu).
+  The analyser runs locally and the installed version works offline. Desktop
+  and analyser updates each require approval before downloading or installing.
+  SARIF findings, stdout/stderr and cancellation are available.
   Settings also accepts a tool configuration (`--config`) and the project's
   `compile_commands.json` (`--compile-commands`). The packaged configuration is
   selected automatically next to a CoreTrace distribution. With a configuration, its tool
@@ -92,7 +98,8 @@ tags build and publish installers and signed update artifacts to GitHub Releases
   navigation. Terminal, debugger, LSP, extensions, Git commit/push UI, WSL bridging and
   local LLM integrations are not included. Local analysis can run on the active
   file or open folder. Cloud analysis can run on a connected GitHub commit or
-  upload the open folder after you confirm the CTU quote.
+  on an open folder you choose to upload. The CTU quote requires your approval
+  before the analysis starts.
 
 See the [migration and rollback guide](docs/tauri-migration.md) for the Electron
 archive and the [original validation report](docs/desktop-validation.md).

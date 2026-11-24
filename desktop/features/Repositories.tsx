@@ -24,14 +24,24 @@ export function Repositories({
   const [limit, setLimit] = useState(PAGE);
   // Which repositories are already on this machine: their card can say
   // "open" instead of promising a download that will not happen.
-  const [cloned, setCloned] = useState<string[]>([]);
+  const [cloned, setCloned] = useState<string[] | null>(null);
+  const [inventoryError, setInventoryError] = useState("");
+  const [inventoryAttempt, setInventoryAttempt] = useState(0);
   useEffect(() => {
     if (!native) return;
+    let current = true;
     void desktop
       .clonedRepositories()
-      .then(setCloned)
-      .catch(() => setCloned([]));
-  }, []);
+      .then((repos) => {
+        if (current) setCloned(repos);
+      })
+      .catch((e) => {
+        if (current) setInventoryError(errorMessage(e));
+      });
+    return () => {
+      current = false;
+    };
+  }, [inventoryAttempt]);
   const needle = search.trim().toLowerCase();
   const matching = needle
     ? cloud.repositories.filter((r) =>
@@ -72,6 +82,21 @@ export function Repositories({
           Gérer les connexions <ArrowUpRight size={14} />
         </button>
       </div>
+      {native && inventoryError ? (
+        <p role="alert">
+          Impossible de vérifier les copies locales.{" "}
+          <button
+            onClick={() => {
+              setInventoryError("");
+              setInventoryAttempt((n) => n + 1);
+            }}
+          >
+            Réessayer
+          </button>
+        </p>
+      ) : native && cloned === null && cloud.repositories.length > 0 ? (
+        <p role="status">Vérification des copies locales…</p>
+      ) : null}
       {cloud.repositories.length > 0 && (
         <label className="search">
           <Search size={15} />
@@ -91,6 +116,19 @@ export function Repositories({
           </span>
         </label>
       )}
+      {search && (
+        <button
+          onClick={() => {
+            setSearch("");
+            setLimit(PAGE);
+          }}
+        >
+          Effacer la recherche
+        </button>
+      )}
+      {cloud.repositories.length && !matching.length ? (
+        <p role="status">Aucun dépôt ne correspond à la recherche.</p>
+      ) : null}
       {cloud.repositories.length ? (
         <>
           <div className="repository-grid">
@@ -109,15 +147,17 @@ export function Repositories({
                 <footer>
                   <button
                     title={
-                      cloned.includes(repo.full_name)
+                      cloned?.includes(repo.full_name)
                         ? "Déjà cloné sur cette machine"
-                        : "Télécharge une copie sur cette machine, puis l’ouvre"
+                        : "Ouvre une copie existante ou clone le dépôt sur cette machine"
                     }
                     onClick={() => clone(repo.full_name)}
                   >
-                    {cloned.includes(repo.full_name)
+                    {cloned?.includes(repo.full_name)
                       ? "Ouvrir"
-                      : "Cloner et ouvrir"}
+                      : cloned
+                        ? "Cloner et ouvrir"
+                        : "Ouvrir ou cloner"}
                   </button>
                   {repo.enabled ? (
                     <button className="primary" onClick={() => analyse(repo)}>

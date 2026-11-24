@@ -3,6 +3,23 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_SOURCE_BYTES: u64 = 512 * 1024 * 1024;
+const ARCHIVE_LIMIT: &str =
+    "Le dossier dépasse la taille maximale d’envoi. Choisissez un dossier plus petit.";
+
+fn excluded_file(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name.starts_with('.')
+        || matches!(
+            name.as_str(),
+            "id_rsa" | "id_ed25519" | "id_ecdsa" | "credentials.json" | "secrets.json"
+        )
+        || [".key", ".pem", ".p12", ".pfx"]
+            .iter()
+            .any(|suffix| name.ends_with(suffix))
+}
+
 /// What packing produced. The platform is told the digest and the size before
 /// the bytes are sent, so both must describe exactly the file on disk.
 pub struct Packed {
@@ -40,6 +57,9 @@ struct HashingWriter<W: Write> {
 
 impl<W: Write> Write for HashingWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.written.saturating_add(buf.len() as u64) > MAX_ARCHIVE_BYTES {
+            return Err(std::io::Error::other(ARCHIVE_LIMIT));
+        }
         let n = self.inner.write(buf)?;
         self.hasher.update(&buf[..n]);
         self.written += n as u64;
@@ -69,6 +89,7 @@ pub fn pack(
     };
     let encoder = zstd::Encoder::new(writer, 3).map_err(|e| e.to_string())?;
     let mut builder = tar::Builder::new(encoder);
+    builder.follow_symlinks(false);
     let mut files = 0usize;
     let mut bytes = 0u64;
     let mut folders = vec![root.to_path_buf()];
@@ -95,16 +116,25 @@ pub fn pack(
                 }
                 let name = entry.file_name();
                 let name = name.to_string_lossy();
+                if name.starts_with('.') {
+                    continue;
+                }
                 if kind.is_dir() {
                     if !excluded(&name) {
                         folders.push(path);
                     }
                     continue;
                 }
+                if !kind.is_file() || excluded_file(&name) {
+                    continue;
+                }
                 let Ok(relative) = path.strip_prefix(root) else {
                     continue;
                 };
                 let added = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                if bytes.saturating_add(added) > MAX_SOURCE_BYTES {
+                    return Err(ARCHIVE_LIMIT.into());
+                }
                 builder
                     .append_path_with_name(&path, relative)
                     .map_err(|e| format!("Cannot add {}: {e}", relative.display()))?;
@@ -181,6 +211,8 @@ mod tests {
         std::fs::create_dir_all(root.join(".git")).unwrap();
         std::fs::write(root.join(".git/config"), b"noise").unwrap();
 
+        std::fs::write(root.join(".env"), b"fixture").unwrap();
+        std::fs::write(root.join("credentials.json"), b"fixture").unwrap();
         let out = dir.path().join("archive.tar.zst");
         let packed = pack(&root, &out, &AtomicBool::new(false), &|_, _| {}).unwrap();
 

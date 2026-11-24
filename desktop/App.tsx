@@ -17,9 +17,10 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { desktop, errorMessage, native } from "./bridge";
+import { desktop, errorMessage, native, type AnalyserStatus } from "./bridge";
 import { Dialog, useConfirm } from "./components/Dialog";
-import { launchAnalysis } from "./launch";
+import { isLocalSource } from "./launch";
+import { AnalysisLaunch, type LaunchTarget } from "./features/AnalysisLaunch";
 import { describe, running, useCloudRun } from "./useCloudRun";
 import { Login } from "./components/Login";
 import { Dashboard } from "./features/Dashboard";
@@ -35,6 +36,7 @@ import type {
   LocalRun,
   Page,
   Repository,
+  ToolStatus,
   Workspace,
 } from "./types";
 const WorkspaceEditor = lazy(() =>
@@ -87,7 +89,8 @@ export default function App() {
       })
       .catch(() => {
         // A session that cannot be restored is a first run, not a failure.
-      });
+      })
+      .finally(() => setRestoring(false));
   }, []);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -109,11 +112,66 @@ export default function App() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [draftRepo, setDraftRepo] = useState<Repository | null>(null);
   const [analyser, setAnalyser] = useState("");
+  const [restoring, setRestoring] = useState(native);
+  const [analyserInfo, setAnalyserInfo] = useState<AnalyserStatus | null>(null);
+  const [localTools, setLocalTools] = useState<ToolStatus[]>([]);
+  const [analyserError, setAnalyserError] = useState("");
+  const [launch, setLaunch] = useState<LaunchTarget | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [launchError, setLaunchError] = useState("");
+  const [localActivity, setLocalActivity] = useState<{
+    workspace: Workspace;
+    path?: string;
+    error?: string;
+  } | null>(null);
+  const [cloudTarget, setCloudTarget] = useState<{
+    workspace: Workspace;
+    org: string;
+  } | null>(null);
+  const visibleCloudTarget =
+    cloudTarget?.org === cloud.org ? cloudTarget.workspace : undefined;
+  const [cloudStartFailed, setCloudStartFailed] = useState(false);
+  const refreshAnalyser = async () => {
+    try {
+      setAnalyserInfo(await desktop.analyserStatus());
+      setAnalyserError("");
+    } catch (e) {
+      setAnalyserError(errorMessage(e));
+    }
+  };
+  useEffect(() => {
+    if (!native || restoring) return;
+    void refreshAnalyser();
+    if (!installing) return;
+    const timer = setInterval(() => void refreshAnalyser(), 300);
+    return () => clearInterval(timer);
+  }, [analyser, restoring, installing]);
+  useEffect(() => {
+    if (!native || !launch) return;
+    let current = true;
+    void desktop
+      .probeTools()
+      .then((tools) => {
+        if (current) setLocalTools(tools);
+      })
+      .catch(() => {
+        if (current) setLocalTools([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [launch]);
   const [local, setLocal] = useState<LocalResult | null>(null);
   const [localRunning, setLocalRunning] = useState(false);
   // What ran on this machine in the open folder, newest first. Reloaded when
   // the folder changes and when a run finishes, which are the times it moves.
-  const [localHistory, setLocalHistory] = useState<LocalRun[]>([]);
+  const [history, setHistory] = useState<{
+    workspace: string;
+    runs: LocalRun[];
+  } | null>(null);
+  const localHistory =
+    history?.workspace === workspace?.id ? (history?.runs ?? []) : [];
   // Runs reported this session, on top of what the history remembers.
   const [reportedNow, setReportedNow] = useState<Set<string>>(new Set());
   const reportedRuns = new Set([
@@ -122,17 +180,17 @@ export default function App() {
   ]);
   useEffect(() => {
     if (!native || !workspace) {
-      setLocalHistory([]);
+      setHistory(null);
       return;
     }
     let live = true;
     void desktop
       .localHistory(workspace.id)
       .then((runs) => {
-        if (live) setLocalHistory(runs);
+        if (live) setHistory({ workspace: workspace.id, runs });
       })
       .catch(() => {
-        if (live) setLocalHistory([]);
+        if (live) setHistory(null);
       });
     return () => {
       live = false;
@@ -177,16 +235,17 @@ export default function App() {
       .then(async ({ getCurrentWindow }) => {
         const window = getCurrentWindow();
         const off = await window.onCloseRequested(async (event) => {
-          if (!dirty && !localRunning) return;
+          if (!dirty && !localRunning && !installing && !preparing) return;
           event.preventDefault();
           if (
             await confirm(
               "Fermer CoreTrace ?",
-              `${dirty ? "Des modifications ne sont pas enregistrées. " : ""}${localRunning ? "Une analyse locale est en cours. " : ""}Voulez-vous quitter ?`,
+              `${installing ? "Le téléchargement de l’analyseur est en cours. " : ""}${dirty ? "Des modifications ne sont pas enregistrées. " : ""}${localRunning ? "Une analyse locale est en cours. " : ""}Voulez-vous quitter ?`,
               "Quitter",
             )
           ) {
             try {
+              if (installing) await desktop.cancelAnalyserInstall();
               if (localRunning) await desktop.cancelLocal();
               await window.destroy();
             } catch (e) {
@@ -202,9 +261,9 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [dirty, localRunning, confirm]);
+  }, [dirty, localRunning, installing, preparing, confirm]);
   const canSwitch = async () => {
-    if (busy || localRunning) {
+    if (busy || localRunning || installing || preparing || restoring) {
       setMessage(
         "Attendez la fin de l’opération en cours avant de changer de dossier.",
       );
@@ -238,6 +297,7 @@ export default function App() {
     setWorkspace(next);
     activeWorkspace.current = next.id;
     setDirty(false);
+    setLocal(null);
   };
   const closeFolder = async (id: string) => {
     if (id === workspace?.id && !(await canSwitch())) return;
@@ -261,7 +321,9 @@ export default function App() {
     if (!(await canSwitch())) return;
     setBusy("Ouverture du dossier…");
     try {
-      activate(await desktop.chooseWorkspace());
+      const next = await desktop.chooseWorkspace();
+      activate(next);
+      return next;
     } catch (e) {
       setMessage(errorMessage(e));
     } finally {
@@ -281,97 +343,88 @@ export default function App() {
       setBusy("");
     }
   };
-  const runLocal = async (path: string) => {
-    if (!workspace || localRunning) return;
-    if (!analyser) {
-      setPage("settings");
-      setMessage(
-        "Sélectionnez le programme ctrace avant de lancer une analyse locale.",
-      );
-      return;
-    }
-    if (
-      !(await confirm(
-        "Analyser ce fichier local ?",
-        `${path} sera analysé avec le programme ctrace sélectionné et ses outils installés.`,
-        "Lancer ctrace",
-      ))
-    )
-      return;
-    setLocalRunning(true);
-    setLocal(null);
-    setPage("analyses");
-    const ran = workspace.id;
+  const analysisBusy =
+    restoring ||
+    !!busy ||
+    localRunning ||
+    installing ||
+    preparing ||
+    cloudRun.busy ||
+    running(cloudRun.phase) ||
+    cloudRun.phase.phase === "quoted";
+  const newAnalysis = async (file?: string) => {
+    if (analysisBusy) return;
+    const target = workspace ?? (await openFolder());
+    if (!target) return;
+    setLaunchError("");
+    setLocalTools([]);
+    const activeFile = file ?? openTabs.current[target.id]?.active;
+    setLaunch({
+      workspace: target,
+      file: activeFile && isLocalSource(activeFile) ? activeFile : undefined,
+    });
+    void refreshAnalyser();
+  };
+  const managedInstall = async (version: string) => {
+    setInstalling(true);
     try {
-      const result = await desktop.analyseLocal(ran, path);
-      // An analysis takes seconds; the reader may have moved to another folder
-      // since, and its result is not theirs.
-      if (activeWorkspace.current === ran) setLocal(result);
-    } catch (e) {
-      setMessage(errorMessage(e));
+      const path = await desktop.installAnalyser(version);
+      setAnalyser(path);
+      return path;
     } finally {
-      setLocalRunning(false);
+      setInstalling(false);
     }
   };
-  /** Analyses the whole open folder locally: what a cloud run does to a
-      workspace, done on this machine when the cloud is not available. */
-  const runLocalFolder = async () => {
-    if (!workspace || localRunning) return;
-    if (!analyser) {
-      setPage("settings");
-      setMessage(
-        "Sélectionnez le programme ctrace avant de lancer une analyse locale.",
-      );
-      return;
-    }
-    setLocalRunning(true);
-    setLocal(null);
-    setPage("analyses");
-    const ran = workspace.id;
+  const runAnalysis = async (mode: "local" | "cloud", path?: string) => {
+    if (!launch || analysisBusy) return;
+    const target = launch.workspace;
+    const org = cloud.org;
+    setPreparing(true);
+    setLaunchError("");
     try {
-      const result = await desktop.analyseLocalFolder(ran);
-      if (activeWorkspace.current === ran) setLocal(result);
-    } catch (e) {
-      setMessage(errorMessage(e));
-    } finally {
-      setLocalRunning(false);
-    }
-  };
-  // One entry point, owned here so the sidebar, the home page and the
-  // analyses page all do the same thing when they say "Nouvelle analyse".
-  const [starting, setStarting] = useState(false);
-  const newAnalysis = async (askFirst = false) => {
-    if (!workspace) {
-      await openFolder();
-      return;
-    }
-    // From the sidebar nothing on screen names the folder, so the button
-    // would act on one the reader may not have in mind. Ask, naming it, and
-    // offer the other thing "new" can mean.
-    if (askFirst) {
-      const answer = await confirm(
-        `Analyser ${workspace.name} ?`,
-        `Le dossier ouvert (${workspace.path}) sera analysé avec vos CTU si possible, sinon sur cette machine.`,
-        `Analyser ${workspace.name}`,
-        "Ouvrir un autre dossier",
-      );
-      if (answer === "alternative") {
-        await openFolder();
+      if (mode === "local" && !analyserInfo?.path) {
+        if (!analyserInfo?.available) return;
+        const installed = await managedInstall(analyserInfo.available.version);
+        if (!installed) return;
+      }
+      await editor.current?.saveDrafts(path);
+      setSelectedJob(null);
+      setDraftRepo(null);
+      setLaunch(null);
+      setPage("analyses");
+      if (mode === "cloud") {
+        setCloudTarget({ workspace: target, org });
+        setCloudStartFailed(false);
+        if (!(await cloudRun.start(target.id, org))) setCloudStartFailed(true);
         return;
       }
-      if (!answer) return;
-    }
-    setStarting(true);
-    try {
-      await launchAnalysis({
-        workspace: workspace.path,
-        org: cloud.me ? cloud.org : "",
-        startCloud: cloudRun.start,
-        runLocal: runLocalFolder,
-        notify: setMessage,
-      });
+      setLocalRunning(true);
+      setLocalActivity({ workspace: target, path });
+      setLocal(null);
+      try {
+        const result = path
+          ? await desktop.analyseLocal(target.id, path)
+          : await desktop.analyseLocalFolder(target.id);
+        if (activeWorkspace.current === target.id) setLocal(result);
+      } catch (e) {
+        setLocalActivity({ workspace: target, path, error: errorMessage(e) });
+      } finally {
+        setLocalRunning(false);
+      }
+    } catch (e) {
+      setLaunchError(errorMessage(e));
+      void refreshAnalyser();
     } finally {
-      setStarting(false);
+      setPreparing(false);
+    }
+  };
+  const chooseLocalAnalyser = async () => {
+    try {
+      const path = await desktop.chooseAnalyser();
+      if (path) setAnalyser(path);
+      await refreshAnalyser();
+    } catch (e) {
+      setLaunchError(errorMessage(e));
     }
   };
   const openFinding = (path: string, line: number) => {
@@ -395,6 +448,14 @@ export default function App() {
     if (orgRef.current !== cloud.org) return;
     setSelectedJob(job);
     setPage("analyses");
+  };
+  const openCloudResult = async (job: string) => {
+    try {
+      selectJob(await desktop.readCloud<Job>("job", cloud.org, job));
+      setFinishedJob("");
+    } catch (e) {
+      setMessage(errorMessage(e));
+    }
   };
   const analyseRepo = (repo: Repository) => {
     setDraftRepo(repo);
@@ -425,8 +486,8 @@ export default function App() {
         </div>
         <button
           className="new-analysis"
-          disabled={starting || localRunning || running(cloudRun.phase)}
-          onClick={() => void newAnalysis(true)}
+          disabled={analysisBusy}
+          onClick={() => void newAnalysis()}
         >
           <Plus size={17} />
           <span>Nouvelle analyse</span>
@@ -535,6 +596,11 @@ export default function App() {
                 <Building2 size={14} />
                 <select
                   aria-label="Organisation active"
+                  disabled={
+                    cloudRun.busy ||
+                    running(cloudRun.phase) ||
+                    cloudRun.phase.phase === "quoted"
+                  }
                   value={cloud.org}
                   onChange={(e) => {
                     setSelectedJob(null);
@@ -624,6 +690,21 @@ export default function App() {
               openFinding={openFinding}
               local={local}
               localRunning={localRunning}
+              launchBusy={analysisBusy}
+              activity={
+                localActivity?.workspace.id === workspace?.id
+                  ? localActivity
+                  : null
+              }
+              retryLocal={() => void newAnalysis(localActivity?.path)}
+              cloudTarget={visibleCloudTarget?.name}
+              cloudStartFailed={!!visibleCloudTarget && cloudStartFailed}
+              retryCloudLocally={
+                visibleCloudTarget && visibleCloudTarget.id === workspace?.id
+                  ? () => void newAnalysis()
+                  : undefined
+              }
+              openCloudResult={(job) => void openCloudResult(job)}
               workspaceRoot={workspace?.path}
               newAnalysis={() => void newAnalysis()}
               workspaceName={workspace?.name}
@@ -635,7 +716,9 @@ export default function App() {
                 setReportedNow((old) => new Set([...old, id]))
               }
               login={() => setLogin(true)}
-              showLocalRun={(run) =>
+              showLocalRun={(run) => {
+                if (!workspace) return;
+                setLocalActivity({ workspace, path: run.label });
                 // The output was not kept; the report and its verdict were.
                 setLocal({
                   runId: run.id,
@@ -645,8 +728,8 @@ export default function App() {
                   report: run.report,
                   cancelled: run.cancelled,
                   warnings: run.warnings,
-                })
-              }
+                });
+              }}
               openWorkspace={() =>
                 workspace ? setPage("workspace") : void openFolder()
               }
@@ -657,6 +740,9 @@ export default function App() {
               cloud={cloud}
               analyser={analyser}
               setAnalyser={setAnalyser}
+              analyserInfo={analyserInfo}
+              installing={installing || localRunning || preparing}
+              installAnalyser={managedInstall}
               login={() => setLogin(true)}
               notify={setMessage}
             />
@@ -687,13 +773,8 @@ export default function App() {
                     openTabs.current[workspace.id] = { paths, active };
                   }}
                   dirtyChanged={setDirty}
-                  run={(path) => void runLocal(path)}
-                  runInCloud={
-                    cloud.org && workspace
-                      ? () => void cloudRun.start(workspace.path, cloud.org)
-                      : undefined
-                  }
-                  busy={localRunning || running(cloudRun.phase)}
+                  run={(path) => void newAnalysis(path)}
+                  busy={analysisBusy}
                   notify={setMessage}
                 />
               </Suspense>
@@ -770,62 +851,53 @@ export default function App() {
       </div>
       {/* A quote is a decision, not news: nothing is spent until it is taken,
           so it is offered wherever the reader happens to be. */}
-      {cloudRun.phase.phase === "quoted" && (
-        <div className="toast decision" role="alert">
-          <span>
-            <strong>
-              {cloudRun.phase.ctu.toLocaleString("fr-FR")} CTU seront débités
-            </strong>
-            <small>Rien n’a encore été débité pour cette analyse.</small>
-          </span>
-          <button
-            className="primary"
-            disabled={cloudRun.busy}
-            onClick={() => void cloudRun.approve(cloud.org)}
-          >
-            Lancer l’analyse
-          </button>
-          <button
-            disabled={cloudRun.busy}
-            onClick={() => void cloudRun.cancel(cloud.org)}
-          >
-            Refuser
-          </button>
-        </div>
-      )}
-      {finishedJob && (
-        <div className="toast decision" role="status">
-          <span>
-            <strong>Analyse terminée</strong>
-            <small>Ses résultats sont prêts.</small>
-          </span>
-          <button
-            className="primary"
-            onClick={() => {
-              const job = finishedJob;
-              setFinishedJob("");
-              void (async () => {
-                try {
-                  selectJob(
-                    await desktop.readCloud<Job>("job", cloud.org, job),
-                  );
-                } catch (e) {
-                  setMessage(errorMessage(e));
-                }
-              })();
-            }}
-          >
-            Voir les résultats
-          </button>
-          <button
-            className="icon"
-            aria-label="Fermer la notification"
-            onClick={() => setFinishedJob("")}
-          >
-            <X size={17} />
-          </button>
-        </div>
-      )}
+      {cloudRun.phase.phase === "quoted" &&
+        (page !== "analyses" || selectedJob) && (
+          <div className="toast decision" role="alert">
+            <span>
+              <strong>
+                {cloudRun.phase.ctu.toLocaleString("fr-FR")} CTU seront débités
+              </strong>
+              <small>Rien n’a encore été débité pour cette analyse.</small>
+            </span>
+            <button
+              className="primary"
+              disabled={cloudRun.busy}
+              onClick={() => void cloudRun.approve(cloud.org)}
+            >
+              Lancer l’analyse
+            </button>
+            <button
+              disabled={cloudRun.busy}
+              onClick={() => void cloudRun.cancel(cloud.org)}
+            >
+              Refuser
+            </button>
+          </div>
+        )}
+      {finishedJob &&
+        visibleCloudTarget &&
+        (page !== "analyses" || selectedJob) && (
+          <div className="toast decision" role="status">
+            <span>
+              <strong>Analyse terminée</strong>
+              <small>Ses résultats sont prêts.</small>
+            </span>
+            <button
+              className="primary"
+              onClick={() => void openCloudResult(finishedJob)}
+            >
+              Voir les résultats
+            </button>
+            <button
+              className="icon"
+              aria-label="Fermer la notification"
+              onClick={() => setFinishedJob("")}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        )}
       {message && (
         <div
           className="toast"
@@ -844,7 +916,47 @@ export default function App() {
         </div>
       )}
       {login && (
-        <Login close={() => setLogin(false)} connected={cloud.reconnect} />
+        <Login
+          close={() => setLogin(false)}
+          connected={async () => {
+            await cloud.reconnect();
+          }}
+        />
+      )}
+      {launch && (
+        <AnalysisLaunch
+          launch={launch}
+          analyserInfo={analyserInfo}
+          analyserError={analyserError}
+          localTools={localTools}
+          installing={installing}
+          preparing={preparing}
+          dirty={dirty}
+          fileDirty={!!(launch.file && editor.current?.hasDrafts(launch.file))}
+          org={cloud.me ? cloud.org : undefined}
+          launchError={launchError}
+          runAnalysis={runAnalysis}
+          refreshAnalyser={refreshAnalyser}
+          chooseLocalAnalyser={chooseLocalAnalyser}
+          cancelInstall={() =>
+            void desktop
+              .cancelAnalyserInstall()
+              .catch((e) => setLaunchError(errorMessage(e)))
+          }
+          close={() => {
+            if (!preparing) setLaunch(null);
+          }}
+          chooseFolder={() => {
+            setLaunch(null);
+            void openFolder().then((target) => {
+              if (target) {
+                setLaunchError("");
+                setLocalTools([]);
+                setLaunch({ workspace: target });
+              }
+            });
+          }}
+        />
       )}
       {clone !== null && (
         <Dialog

@@ -7,7 +7,14 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, errorMessage, native, type AnalysisOptions } from "../bridge";
+import {
+  desktop,
+  errorMessage,
+  native,
+  type AnalysisOptions,
+  type AnalyserStatus,
+} from "../bridge";
+import { downloadSize } from "../launch";
 import type { CloudModel } from "../useCloud";
 import { roleLabel } from "../model";
 import type { Member, ToolStatus } from "../types";
@@ -16,15 +23,22 @@ export function Settings({
   cloud,
   analyser,
   setAnalyser,
+  analyserInfo,
+  installing,
+  installAnalyser,
   login,
   notify,
 }: {
   cloud: CloudModel;
   analyser: string;
   setAnalyser: (value: string) => void;
+  analyserInfo?: AnalyserStatus | null;
+  installing?: boolean;
+  installAnalyser?: (version: string) => Promise<string>;
   login: () => void;
   notify: (message: string) => void;
 }) {
+  const [installError, setInstallError] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [connectingGitHub, setConnectingGitHub] = useState(false);
   const [cloneLocation, setCloneLocation] = useState("");
@@ -42,9 +56,13 @@ export function Settings({
       await desktop.connectGitHub();
       for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        await cloud.reconnect();
-        if (cloud.me?.identities?.includes("https://github.com")) break;
+        const identity = await cloud.reconnect();
+        if (identity?.identities?.includes("https://github.com")) return;
+        if (!identity) return;
       }
+      notify(
+        "La connexion GitHub n’a pas été confirmée. Vérifiez votre navigateur puis réessayez.",
+      );
     } catch (e) {
       notify(errorMessage(e));
     } finally {
@@ -194,14 +212,18 @@ export function Settings({
           <h2>Analyseur local</h2>
         </div>
         <p>
-          Sélectionnez le programme <code>ctrace</code> installé sur votre
-          machine. Les outils qu’il appelle doivent également être installés.
+          {analyserInfo?.installedVersion
+            ? `Analyseur officiel géré par CoreTrace · ${analyserInfo.installedVersion}`
+            : analyser
+              ? "Analyseur choisi manuellement."
+              : "Pour analyser sur cette machine, CoreTrace doit télécharger son analyseur officiel ou utiliser un exécutable déjà installé."}
         </p>
         <div className="setting-row">
           <code className="path-value">
             {analyser || "Aucun exécutable sélectionné"}
           </code>
           <button
+            disabled={installing}
             onClick={() =>
               void desktop
                 .chooseAnalyser()
@@ -220,6 +242,60 @@ export function Settings({
         <p className="muted small">
           Le choix est conservé d’une session à l’autre.
         </p>
+        {analyserInfo?.available &&
+          (!analyserInfo.path ||
+            (analyserInfo.installedVersion &&
+              analyserInfo.installedVersion !==
+                analyserInfo.available.version)) && (
+            <div className="setting-row">
+              <span>
+                Version officielle {analyserInfo.available.version} ·{" "}
+                {downloadSize(analyserInfo.available.bytes)} · Aucun redémarrage
+              </span>
+              <button
+                disabled={installing}
+                onClick={() => {
+                  setInstallError("");
+                  void installAnalyser?.(analyserInfo.available!.version)
+                    .then(() => desktop.analysisOptions())
+                    .then(setOptions)
+                    .catch((e) => setInstallError(errorMessage(e)));
+                }}
+              >
+                {analyserInfo.path
+                  ? "Mettre à jour"
+                  : "Télécharger l’analyseur"}
+              </button>
+            </div>
+          )}
+        {analyserInfo &&
+          analyserInfo.received !== null &&
+          analyserInfo.available && (
+            <div className="setting-row">
+              <progress
+                aria-label="Téléchargement de l’analyseur"
+                value={analyserInfo.received}
+                max={analyserInfo.available.bytes}
+              />
+              <button
+                onClick={() =>
+                  void desktop
+                    .cancelAnalyserInstall()
+                    .catch((e) => setInstallError(errorMessage(e)))
+                }
+              >
+                Annuler le téléchargement
+              </button>
+            </div>
+          )}
+        {analyserInfo?.prerequisite && (
+          <p role="alert">{analyserInfo.prerequisite}</p>
+        )}
+        {installError && (
+          <p className="error" role="alert">
+            {installError}
+          </p>
+        )}
         {tools && (
           <p className="muted small tool-probe" role="status">
             {tools.map((tool) => (

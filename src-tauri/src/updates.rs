@@ -22,12 +22,12 @@ async fn offer(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
     app.dialog()
         .message(format!(
             "CoreTrace {} est disponible (version installée : {}).\n\n\
-             Installer maintenant ? L’application redémarrera.",
+             Télécharger et installer cette mise à jour ? L’application redémarrera.",
             update.version, update.current_version
         ))
         .title("Mise à jour disponible")
         .buttons(MessageDialogButtons::OkCancelCustom(
-            "Installer".into(),
+            "Mettre à jour".into(),
             "Plus tard".into(),
         ))
         .show(move |ok| {

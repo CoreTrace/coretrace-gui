@@ -43,6 +43,9 @@ jobs:
         run: node scripts/check-desktop-version.cjs
       - name: Verify bundle icons
         run: node scripts/check-bundle-icons.cjs
+      - name: Decode the macOS bundle icon
+        if: runner.os == 'macOS'
+        run: iconutil -c iconset -o "$RUNNER_TEMP/CoreTrace.iconset" assets/ctrace.icns
       - run: npm run check
       - run: npm run format:check
       - name: Show what Prettier would change
@@ -105,6 +108,12 @@ jobs:
         run: node scripts/check-desktop-version.cjs
       - name: Verify bundle icons
         run: node scripts/check-bundle-icons.cjs
+      - name: Decode the macOS bundle icon
+        if: runner.os == 'macOS'
+        run: iconutil -c iconset -o "$RUNNER_TEMP/CoreTrace.iconset" assets/ctrace.icns
+      - name: Verify the official analyser installs and runs
+        if: runner.os == 'Linux' || (runner.os == 'macOS' && runner.arch == 'ARM64')
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked official_release_installs_and_produces_sarif -- --ignored
       - name: Third-party notices
         run: npm run notices
       - name: Release notes

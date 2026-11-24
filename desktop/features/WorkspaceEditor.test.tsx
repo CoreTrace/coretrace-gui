@@ -222,11 +222,7 @@ it("opens a file by name with Ctrl+P", async () => {
   );
 });
 
-it("saves before analysing instead of refusing until the reader does", async () => {
-  vi.mocked(desktop.save).mockResolvedValue({
-    content: "edited",
-    revision: "r2",
-  });
+it("offers folder analysis before a file is opened", async () => {
   const run = vi.fn();
   render(
     <ConfirmProvider>
@@ -239,20 +235,9 @@ it("saves before analysing instead of refusing until the reader does", async () 
       />
     </ConfirmProvider>,
   );
-  await userEvent.click(await screen.findByRole("button", { name: "main.ts" }));
-  const buffer = await screen.findByRole("textbox", { name: "Editor buffer" });
-  fireEvent.change(buffer, { target: { value: "edited" } });
-  const analyse = screen.getByRole("button", { name: /^Analyser/ });
-  expect(analyse.hasAttribute("disabled")).toBe(false);
-  await userEvent.click(analyse);
   await userEvent.click(
-    screen.getByRole("menuitem", { name: /Enregistrer et analyser ici/ }),
+    await screen.findByRole("button", { name: "Analyser" }),
   );
-  await waitFor(() => expect(run).toHaveBeenCalledWith("main.ts"));
-  expect(desktop.save).toHaveBeenCalledWith(
-    "workspace-1",
-    "main.ts",
-    "edited",
-    "revision-1",
-  );
+  expect(run).toHaveBeenCalledWith(undefined);
+  expect(desktop.read).not.toHaveBeenCalled();
 });

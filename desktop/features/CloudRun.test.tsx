@@ -38,9 +38,7 @@ function show(onFinished = vi.fn()) {
   return onFinished;
 }
 
-it("shows the cost and leaves the decision to the notice", async () => {
-  // The platform quotes the run and parks it. The panel says what it costs;
-  // the one place to accept or refuse is the notice, so nothing here spends.
+it("shows the cost and waits for explicit approval in the run panel", async () => {
   vi.mocked(desktop.cloudRunStatus).mockResolvedValue({
     phase: "quoted",
     job: "job-1",
@@ -49,8 +47,10 @@ it("shows the cost and leaves the decision to the notice", async () => {
   });
   show();
   const price = await screen.findByText(/4\s?000 CTU/);
-  expect(price.textContent).toContain("notification");
-  expect(screen.queryByRole("button", { name: /Lancer/ })).toBeNull();
+  expect(price.textContent).toContain("Rien n’a encore été débité");
+  expect(
+    screen.getByRole("button", { name: "Confirmer le devis" }),
+  ).toBeDefined();
   expect(desktop.confirmCloudRun).not.toHaveBeenCalled();
 });
 
