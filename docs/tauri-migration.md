@@ -16,13 +16,16 @@ Cloud actions that spend CTU require an explicit user action.
 
 ## Migration and rollback
 
-Base: `807e2c9`. The Electron source and tests remain as migration reference; its package
-manifest is saved alongside this document. Tauri uses `desktop/` and `src-tauri/`, its own
-application identifier and OS credential entry. Existing Electron settings and encrypted
+The [pre-Tauri commit](https://github.com/CoreTrace/coretrace-gui/tree/56a6ecf6dee7e15aa1eb9d4a91c8a01383c8020b)
+contains the Electron source, tests, assets and dependency lockfile. Tauri uses
+`desktop/` and `src-tauri/`, a new application identifier and its own OS credential
+entry. Existing Electron settings and encrypted
 credentials are not rewritten or implicitly imported. Sign in once in the new application.
-Rollback by checking out the base revision in a separate clean worktree and installing its
-dependencies. Never reset over user changes. The pre-existing `native/` directory and ATP
-archive modification belong to the user and are excluded from migration commits.
+To run the old app, check it out in a separate worktree and follow its README.
+
+```sh
+git worktree add --detach ../coretrace-electron 56a6ecf6dee7e15aa1eb9d4a91c8a01383c8020b
+```
 
 ## Stages
 
@@ -31,8 +34,8 @@ archive modification belong to the user and are excluded from migration commits.
 3. Desktop UI, dashboards, IDE and analysis flows.
 4. Regression checks, desktop build, CI and operating documentation.
 
-The previous terminal, WSL manager, local LLM integrations, extension experiments and
-Electron updater are not part of the requested replacement. They remain in the old source.
+The pre-Tauri commit also contains the Electron terminal, WSL manager, local LLM
+integrations and updater.
 No production deployment, paid analysis or GitHub publication is performed during validation.
 
 References: https://v2.tauri.app/start/frontend/vite/ and

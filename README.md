@@ -41,9 +41,8 @@ production credentials are embedded in the preview.
   workspace. Retrying an uncertain submission keeps its idempotency key until inputs
   change or submission succeeds. Local edits are not uploaded by this workflow.
 - **Local analysis:** Select your installed native `ctrace` executable in Settings,
-  with its analysis tools installed. Open a source file, save it and run static analysis.
-  SARIF findings, stdout/stderr and cancellation are available. The existing Linux
-  `bin/ctrace` cannot run directly on Windows.
+  with its analysis tools installed. Open a source file or a folder and run static
+  analysis. SARIF findings, stdout/stderr and cancellation are available.
   Settings also accepts a tool configuration (`--config`) and the project's
   `compile_commands.json` (`--compile-commands`). The packaged configuration is
   selected automatically next to a CoreTrace distribution. With a configuration, its tool
@@ -74,9 +73,8 @@ npm run dist
 ```
 
 Windows executable: `src-tauri/target/release/coretrace-desktop.exe`.
-`npm run dist` builds installers. Builds are unsigned; the CI validates Windows,
-macOS and Linux and retains tag installers as artifacts. No automatic publication,
-signing or replacement update service is configured by this migration.
+`npm run dist` builds installers. CI validates Windows, macOS and Linux. Version
+tags build and publish installers and signed update artifacts to GitHub Releases.
 
 ## Architecture and current boundaries
 
@@ -92,12 +90,9 @@ signing or replacement update service is configured by this migration.
   before retrying. Workspace tabs and the analyser choice last for the session.
 - The IDE includes exploration, syntax colouring, tabs, search, editing and findings
   navigation. Terminal, debugger, LSP, extensions, Git commit/push UI, WSL bridging and
-  local LLM integrations are not included. Local analysis targets the active source
-  file; cloud analysis targets connected GitHub commits. Uploading arbitrary local
-  folders to the cloud is not implemented.
+  local LLM integrations are not included. Local analysis can run on the active
+  file or open folder. Cloud analysis can run on a connected GitHub commit or
+  upload the open folder after you confirm the CTU quote.
 
-See [migration/rollback](docs/tauri-migration.md) and
-[validation evidence](docs/desktop-validation.md). The old Electron implementation stays
-in `src/` as reference, with its [README](docs/electron-readme.md),
-[manifest](docs/electron-package.json) and `tests/`. It is not the new runtime; recover it
-in a separate clean worktree at `807e2c9` when needed. Existing user changes are preserved.
+See the [migration and rollback guide](docs/tauri-migration.md) for the Electron
+archive and the [original validation report](docs/desktop-validation.md).

@@ -37,7 +37,6 @@ npm run dev    # browser preview: no filesystem, Git or account actions
 | `desktop/` | React and TypeScript interface, typed native bridge, and its tests (`*.test.ts`, `*.test.tsx`) |
 | `src-tauri/src/` | Rust services: workspace, GitHub, cloud account and API, local analysis |
 | `desktop/platform-schema.d.ts` | Generated from the cloud platform's API contract: do not edit it by hand |
-| `src/`, `tests/` | The old Electron implementation, kept as a reference: do not change it |
 
 The interface is in French: write new labels and messages in French.
 
