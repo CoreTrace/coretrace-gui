@@ -155,7 +155,8 @@ pub(crate) async fn upload(
         put_url.host_str(),
         Some("127.0.0.1" | "[::1]" | "localhost")
     );
-    if (!matches!(put_url.scheme(), "https") && !(put_url.scheme() == "http" && loopback))
+    let secure_transport = put_url.scheme() == "https" || (put_url.scheme() == "http" && loopback);
+    if !secure_transport
         || put_url.host_str().is_none()
         || !put_url.username().is_empty()
         || put_url.password().is_some()
