@@ -375,6 +375,7 @@ pub async fn cloud_read(
     let path = match resource.as_str() {
         "me" => "/me".into(),
         "tools" => "/tools".into(),
+        "plans" => "/plans".into(),
         "jobs" => "/jobs?limit=200".into(),
         "limits" => format!("{}/limits", org_path()?),
         "organisation" => org_path()?,

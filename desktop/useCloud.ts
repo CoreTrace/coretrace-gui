@@ -1,18 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { desktop, errorMessage } from "./bridge";
-import type { Installation, Job, Limits, Me, Repository, Tool } from "./types";
+import type {
+  Installation,
+  Job,
+  Limits,
+  Me,
+  Plan,
+  Repository,
+  Tool,
+} from "./types";
 
 interface Data {
   limits: Limits | null;
   jobs: Job[];
   repositories: Repository[];
   tools: Tool[];
+  /** Every plan, cheapest first, to say which one unlocks a tool. */
+  plans: Plan[];
 }
 const empty = (): Data => ({
   limits: null,
   jobs: [],
   repositories: [],
   tools: [],
+  plans: [],
 });
 export function useCloud() {
   const [me, setMe] = useState<Me | null>(null);
@@ -76,9 +87,12 @@ export function useCloud() {
             return repos.flat();
           }),
         desktop.readCloud<Tool[]>("tools", org),
+        // Plans only name what a locked tool needs; without them the tool is
+        // still shown as locked, so their absence is not worth an error.
+        desktop.readCloud<Plan[]>("plans").catch((): Plan[] => []),
       ] as const);
       if (current !== epoch.current) return;
-      const [limits, jobs, repositories, tools] = results;
+      const [limits, jobs, repositories, tools, plans] = results;
       setData({
         limits: limits.status === "fulfilled" ? limits.value : null,
         jobs:
@@ -90,6 +104,7 @@ export function useCloud() {
         repositories:
           repositories.status === "fulfilled" ? repositories.value : [],
         tools: tools.status === "fulfilled" ? tools.value : [],
+        plans: plans.status === "fulfilled" ? plans.value : [],
       });
       setError(
         results

@@ -4,6 +4,7 @@ export type Me = components["schemas"]["Me"];
 export type Limits = components["schemas"]["Limits"];
 export type Job = components["schemas"]["Job"];
 export type Tool = components["schemas"]["Tool"];
+export type Plan = components["schemas"]["Plan"];
 export type Installation = components["schemas"]["ScmInstallation"];
 export type Repository = components["schemas"]["ScmRepo"] & {
   installation: string;

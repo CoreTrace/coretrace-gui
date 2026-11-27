@@ -375,7 +375,11 @@ export default function App() {
       setInstalling(false);
     }
   };
-  const runAnalysis = async (mode: "local" | "cloud", path?: string) => {
+  const runAnalysis = async (
+    mode: "local" | "cloud",
+    path?: string,
+    tools: string[] = [],
+  ) => {
     if (!launch || analysisBusy) return;
     const target = launch.workspace;
     const org = cloud.org;
@@ -395,7 +399,8 @@ export default function App() {
       if (mode === "cloud") {
         setCloudTarget({ workspace: target, org });
         setCloudStartFailed(false);
-        if (!(await cloudRun.start(target.id, org))) setCloudStartFailed(true);
+        if (!(await cloudRun.start(target.id, org, tools)))
+          setCloudStartFailed(true);
         return;
       }
       setLocalRunning(true);
@@ -934,6 +939,8 @@ export default function App() {
           dirty={dirty}
           fileDirty={!!(launch.file && editor.current?.hasDrafts(launch.file))}
           org={cloud.me ? cloud.org : undefined}
+          cloudTools={cloud.me ? cloud.tools : []}
+          cloudPlans={cloud.plans}
           launchError={launchError}
           runAnalysis={runAnalysis}
           refreshAnalyser={refreshAnalyser}

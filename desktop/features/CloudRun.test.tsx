@@ -25,16 +25,18 @@ afterEach(() => {
 function Harness({
   onFinished,
   workspace = "C:/work/app",
+  tools,
 }: {
   onFinished: (job: string) => void;
   workspace?: string;
+  tools?: string[];
 }) {
   const run = useCloudRun({ notify: vi.fn(), onFinished });
-  return <CloudRun run={run} workspace={workspace} org="alpha" />;
+  return <CloudRun run={run} workspace={workspace} org="alpha" tools={tools} />;
 }
 
-function show(onFinished = vi.fn()) {
-  render(<Harness onFinished={onFinished} />);
+function show(onFinished = vi.fn(), tools?: string[]) {
+  render(<Harness onFinished={onFinished} tools={tools} />);
   return onFinished;
 }
 
@@ -89,7 +91,24 @@ it("offers the run when nothing is happening", async () => {
   await userEvent.click(
     await screen.findByRole("button", { name: /Analyser dans le cloud/ }),
   );
-  expect(desktop.startCloudRun).toHaveBeenCalledWith("C:/work/app", "alpha");
+  // No selection sends no tools, so the platform chooses them as it always has.
+  expect(desktop.startCloudRun).toHaveBeenCalledWith(
+    "C:/work/app",
+    "alpha",
+    [],
+  );
+});
+
+it("runs exactly the tools the reader chose", async () => {
+  vi.mocked(desktop.cloudRunStatus).mockResolvedValue({ phase: "idle" });
+  show(vi.fn(), ["ctrace", "python-analyzer-pro"]);
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Analyser dans le cloud/ }),
+  );
+  expect(desktop.startCloudRun).toHaveBeenCalledWith("C:/work/app", "alpha", [
+    "ctrace",
+    "python-analyzer-pro",
+  ]);
 });
 
 it("opens the results once when the run finishes", async () => {
