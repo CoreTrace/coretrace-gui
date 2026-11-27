@@ -23,6 +23,7 @@ export function CloudRun({
   run,
   workspace,
   org,
+  tools,
   typical,
   showStart = true,
   target,
@@ -32,6 +33,8 @@ export function CloudRun({
   run: CloudRunModel;
   workspace: string;
   org: string;
+  /** The tools to run; absent or empty lets the platform choose them. */
+  tools?: string[];
   /** Seconds a cloud analysis usually takes here, measured from finished jobs.
       Undefined when too few have run to say anything. */
   typical?: number;
@@ -44,7 +47,7 @@ export function CloudRun({
   retryLocally?: () => void;
 }) {
   const { phase, seconds, busy } = run;
-  const startRun = () => void run.start(workspace, org);
+  const startRun = () => void run.start(workspace, org, tools);
   const stop = () => void run.cancel(org);
 
   // Nothing has happened and this panel cannot start anything: showing an

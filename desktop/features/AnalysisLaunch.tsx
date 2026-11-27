@@ -1,7 +1,8 @@
 import type { AnalyserStatus } from "../bridge";
 import { Dialog } from "../components/Dialog";
 import { downloadSize } from "../launch";
-import type { ToolStatus, Workspace } from "../types";
+import type { Plan, Tool, ToolStatus, Workspace } from "../types";
+import { CloudToolPicker, useToolSelection } from "./CloudToolPicker";
 
 export type LaunchTarget = { workspace: Workspace; file?: string };
 
@@ -15,6 +16,8 @@ export function AnalysisLaunch({
   dirty,
   fileDirty,
   org,
+  cloudTools = [],
+  cloudPlans = [],
   launchError,
   runAnalysis,
   refreshAnalyser,
@@ -32,8 +35,16 @@ export function AnalysisLaunch({
   dirty: boolean;
   fileDirty: boolean;
   org?: string;
+  /** The organisation's catalogue, from `GET /v1/tools`. */
+  cloudTools?: Tool[];
+  /** Every plan, cheapest first, from `GET /v1/plans`. */
+  cloudPlans?: Plan[];
   launchError: string;
-  runAnalysis: (mode: "local" | "cloud", file?: string) => Promise<void>;
+  runAnalysis: (
+    mode: "local" | "cloud",
+    file?: string,
+    tools?: string[],
+  ) => Promise<void>;
   refreshAnalyser: () => Promise<void>;
   chooseLocalAnalyser: () => Promise<void>;
   cancelInstall: () => void;
@@ -42,6 +53,10 @@ export function AnalysisLaunch({
 }) {
   const localAvailable = !!(analyserInfo?.path || analyserInfo?.available);
   const localDisabled = preparing || !!analyserInfo?.prerequisite;
+  const selection = useToolSelection(launch.workspace, cloudTools);
+  // Left as it was, the platform decides, as it always has, even when nothing
+  // was preselected. Emptied by the reader, it is a run of no tools: no run.
+  const nothingChosen = selection.edited && selection.selected.length === 0;
   return (
     <Dialog title={`Analyser ${launch.workspace.name} ?`} close={close}>
       <p className="path-value">{launch.workspace.path}</p>
@@ -163,12 +178,22 @@ export function AnalysisLaunch({
             devis. Vous confirmez les CTU avant le lancement.
           </p>
           {org ? (
-            <button
-              disabled={preparing}
-              onClick={() => void runAnalysis("cloud")}
-            >
-              Envoyer le dossier et calculer le devis · {org}
-            </button>
+            <>
+              <CloudToolPicker
+                tools={cloudTools}
+                plans={cloudPlans}
+                selection={selection}
+                disabled={preparing}
+              />
+              <button
+                disabled={preparing || nothingChosen}
+                onClick={() =>
+                  void runAnalysis("cloud", undefined, selection.request)
+                }
+              >
+                Envoyer le dossier et calculer le devis · {org}
+              </button>
+            </>
           ) : (
             <p className="muted">
               Une connexion et une organisation sont nécessaires.

@@ -22,7 +22,9 @@ export type CloudRunModel = {
   busy: boolean;
   /** Each resolves to whether the platform accepted the action; the reason
       for a refusal has already been shown. */
-  start: (workspace: string, org: string) => Promise<boolean>;
+  /** `tools` names the tools to run; empty lets the platform choose them for
+      the languages it finds, as it did before the reader could pick. */
+  start: (workspace: string, org: string, tools?: string[]) => Promise<boolean>;
   approve: (org: string) => Promise<boolean>;
   cancel: (org?: string) => Promise<boolean>;
 };
@@ -111,8 +113,8 @@ export function useCloudRun({
     phase,
     seconds,
     busy,
-    start: (workspace, org) =>
-      guard(() => desktop.startCloudRun(workspace, org)),
+    start: (workspace, org, tools = []) =>
+      guard(() => desktop.startCloudRun(workspace, org, tools)),
     approve: (org) => guard(() => desktop.confirmCloudRun(org)),
     cancel: (org) => guard(() => desktop.cancelCloudRun(org)),
   };
